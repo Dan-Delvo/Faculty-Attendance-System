@@ -27,7 +27,7 @@ return new class extends Migration
             $table->unique(['biometric_id', 'log_datetime', 'log_type'], 'unique_biometric_log');
 
             // Define foreign keys
-            $table->foreign('biometric_id')->references('biometric_id')->on('faculties')->onDelete('cascade');
+            // biometric_id is NOT a formal FK - VARCHAR match to faculty.biometric_id
             $table->foreign('import_batch_id')->references('id')->on('import_batches')->onDelete('set null');
         });
     }

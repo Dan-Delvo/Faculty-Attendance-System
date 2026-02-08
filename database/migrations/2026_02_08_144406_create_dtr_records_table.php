@@ -39,7 +39,7 @@ return new class extends Migration
 
             // Foreign Keys
             $table->foreign('faculty_id')->references('id')->on('faculties')->onDelete('cascade');
-            $table->foreign('approved_by')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('approved_by')->references('id')->on('users')->onDelete('set null');
         });
     }
 

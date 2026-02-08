@@ -16,14 +16,17 @@ return new class extends Migration
             $table->id();
             $table->bigInteger('schedule_id')->unsigned();
             $table->string('day_of_week');
-            $table->timestamp('timestamp_in');
-            $table->timestamp('timestamp_out');
-            $table->string('subject_code');
-            $table->string('subject_desc');
-            $table->string('room');
+            $table->timestamp('time_in');
+            $table->timestamp('time_out');
+            $table->string('subject_code')->nullable();
+            $table->string('subject_desc')->nullable();
+            $table->string('room')->nullable();
             $table->integer('hours_required');
             $table->timestamps();
             $table->softDeletes();
+
+            // Unique key
+            $table->unique(['schedule_id', 'day_of_week', 'time_in', 'time_out'], 'unique_schedule_detail');
 
             // Foreign key constraint
             $table->foreign('schedule_id')->references('id')->on('schedules')->onDelete('cascade');

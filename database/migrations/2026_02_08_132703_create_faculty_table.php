@@ -22,14 +22,15 @@ return new class extends Migration
             $table->string('middle_name')->nullable();
             $table->string('last_name');
             $table->string('phone')->nullable();
-            $table->string('employee_type')->nullable();
+            $table->string('employment_type')->nullable();
             $table->date('date_hired')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
 
             // Define unique keys
-            $table->unique(['faculty_code', 'biometric_id', 'user_id'], 'unique_faculty_code');
+            $table->unique('user_id', 'unique_faculty_user');
+            $table->unique('faculty_code', 'unique_faculty_code');
             $table->unique('biometric_id', 'unique_biometric_id');
 
             // Define foreign key constraints

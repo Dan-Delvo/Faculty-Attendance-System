@@ -15,7 +15,7 @@ return new class extends Migration
             // Define columns
             $table->id();
             $table->unsignedBigInteger('faculty_id');
-            $table->unsignedBigInteger('schedule_detail_id');
+            $table->unsignedBigInteger('schedule_detail_id')->nullable();
             $table->unsignedBigInteger('internal_schedule_id')->nullable();
             $table->date('attendance_date');
             $table->string('day_of_week');
@@ -43,7 +43,7 @@ return new class extends Migration
 
             // Foreign Keys
             $table->foreign('faculty_id')->references('id')->on('faculties')->onDelete('cascade');
-            $table->foreign('schedule_detail_id')->references('id')->on('schedule_details')->onDelete('cascade');
+            $table->foreign('schedule_detail_id')->references('id')->on('schedule_details')->onDelete('set null');
             $table->foreign('internal_schedule_id')->references('id')->on('internal_schedules')->onDelete('set null');
         });
     }

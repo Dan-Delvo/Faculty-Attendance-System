@@ -23,6 +23,7 @@ return new class extends Migration
             $table->enum('status', ['draft','active','archived'])->default('active');
             $table->enum('schedule_type', ['fixed','flexible'])->default('flexible');
             $table->bigInteger('created_by')->unsigned()->nullable();
+            $table->text('notes')->nullable();
             $table->timestamps();
             $table->softDeletes();
 

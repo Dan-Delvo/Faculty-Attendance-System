@@ -26,6 +26,9 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
+            // Unique key
+            $table->unique(['schedule_id', 'faculty_id', 'day_of_week'], 'unique_internal_schedule');
+
             // Foreign key constraints
             $table->foreign('schedule_id')->references('id')->on('schedules')->onDelete('cascade');
             $table->foreign('faculty_id')->references('id')->on('faculties')->onDelete('cascade');
