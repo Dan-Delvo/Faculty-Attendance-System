@@ -28,7 +28,7 @@ return new class extends Migration
             $table->softDeletes();
 
             // Define foreign keys
-            $table->foreign('faculty_id')->references('id')->on('faculty')->onDelete('cascade');
+            $table->foreign('faculty_id')->references('id')->on('faculties')->onDelete('cascade');
             $table->foreign('reviewed_by')->references('id')->on('users')->onDelete('set null');
         });
     }

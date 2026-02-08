@@ -23,8 +23,8 @@ return new class extends Migration
             $table->unsignedTinyInteger('total_days_late')->default(0);
             $table->unsignedInteger('total_late_minutes')->default(0);
             $table->unsignedInteger('total_undertime_minutes')->default(0);
-            $table->unsignedDecimal('total_hours_rendered', 8, 2)->default(0);
-            $table->unsignedDecimal('total_hours_required', 8, 2)->default(0);
+            $table->decimal('total_hours_rendered', 8, 2)->default(0);
+            $table->decimal('total_hours_required', 8, 2)->default(0);
             $table->string('status')->default('pending');
             $table->timestamp('finalized_at')->nullable();
             $table->unsignedBigInteger('approved_by')->nullable();
@@ -38,7 +38,7 @@ return new class extends Migration
             $table->unique(['faculty_id', 'month', 'year']);
 
             // Foreign Keys
-            $table->foreign('faculty_id')->references('id')->on('faculty')->onDelete('cascade');
+            $table->foreign('faculty_id')->references('id')->on('faculties')->onDelete('cascade');
             $table->foreign('approved_by')->references('id')->on('users')->onDelete('cascade');
         });
     }

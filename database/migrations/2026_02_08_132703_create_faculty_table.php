@@ -28,13 +28,13 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            // Define unique key
+            // Define unique keys
             $table->unique(['faculty_code', 'biometric_id', 'user_id'], 'unique_faculty_code');
+            $table->unique('biometric_id', 'unique_biometric_id');
 
             // Define foreign key constraints
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('department_id')->references('id')->on('departments')->onDelete('restrict');
-            $table->foreign('biometric_id')->references('biometric_id')->on('biometric_devices')->onDelete('set null');
         });
     }
 
@@ -43,6 +43,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('faculty');
+        Schema::dropIfExists('faculties');
     }
 };
