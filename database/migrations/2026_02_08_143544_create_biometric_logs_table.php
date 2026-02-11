@@ -29,6 +29,7 @@ return new class extends Migration
             // Define foreign keys
             // biometric_id is NOT a formal FK - VARCHAR match to faculty.biometric_id
             $table->foreign('import_batch_id')->references('id')->on('import_batches')->onDelete('set null');
+            $table->foreign('biometric_id')->references('biometric_id')->on('faculties')->onDelete('cascade');
         });
     }
 
