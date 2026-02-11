@@ -36,7 +36,6 @@ return new class extends Migration
             // Define foreign key constraints
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('department_id')->references('id')->on('departments')->onDelete('restrict');
-            $table->foreign('biometric_id')->references('biometric_id')->on('biometric_logs')->onDelete('cascade');
         });
     }
 
