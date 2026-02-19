@@ -21,8 +21,8 @@ return new class extends Migration
             $table->unsignedTinyInteger('total_days_present')->default(0);
             $table->unsignedTinyInteger('total_days_absent')->default(0);
             $table->unsignedTinyInteger('total_days_late')->default(0);
-            $table->unsignedInteger('total_late_minutes')->default(0);
-            $table->unsignedInteger('total_undertime_minutes')->default(0);
+            $table->integer('total_late_minutes')->default(0);
+            $table->integer('total_undertime_minutes')->default(0);
             $table->decimal('total_hours_rendered', 8, 2)->default(0);
             $table->decimal('total_hours_required', 8, 2)->default(0);
             $table->string('status')->default('pending');
