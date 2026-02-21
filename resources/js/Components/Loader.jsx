@@ -23,8 +23,8 @@ export default function Loader() {
     if (!isLoading) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-800 bg-opacity-50 backdrop-blur-sm">
-            <Mosaic color="#E10600" size="medium" text="Loading..." textColor="#E10600" />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/70 dark:bg-gray-900/70 backdrop-blur-md transition-all duration-300">
+            <Mosaic color="#cc2127" size="medium" text="Please wait..." textColor="#cc2127" />
         </div>
     );
 }
