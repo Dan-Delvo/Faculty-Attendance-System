@@ -12,10 +12,14 @@ export default function AuthenticatedLayout({ header, children }) {
 
     // Determine the correct dashboard route based on user role
     const isFaculty = roles.includes('faculty');
-    const dashboardRoute = isFaculty ? 'faculty.dashboard' : 'dashboard';
-    const dashboardActive = isFaculty
-        ? route().current('faculty.dashboard')
-        : route().current('dashboard');
+    const isAdmin = roles.includes('super_admin') || roles.includes('admin') || roles.includes('hr_staff');
+    const dashboardRoute = isAdmin ? 'admin.dashboard' : (isFaculty ? 'faculty.dashboard' : 'dashboard');
+    const logoutRoute = isAdmin ? 'admin.logout' : 'logout';
+    const dashboardActive = isAdmin
+        ? route().current('admin.dashboard')
+        : (isFaculty
+            ? route().current('faculty.dashboard')
+            : route().current('dashboard'));
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -58,6 +62,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                             active={route().current('faculty.biometric-logs')}
                                         >
                                             Biometric Logs
+                                        </NavLink>
+                                    </>
+                                )}
+
+                                {isAdmin && (
+                                    <>
+                                        <NavLink
+                                            href={route('admin.schedules.index')}
+                                            active={route().current('admin.schedules.*')}
+                                        >
+                                            Schedules
                                         </NavLink>
                                     </>
                                 )}
@@ -109,7 +124,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         </Dropdown.Link>
                                         <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
                                         <Dropdown.Link
-                                            href={route('logout')}
+                                            href={route(logoutRoute)}
                                             method="post"
                                             as="button"
                                             className="font-medium text-red-600 dark:text-red-400 focus:text-red-800 dark:focus:text-red-300"
@@ -196,6 +211,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                 </ResponsiveNavLink>
                             </>
                         )}
+
+                        {isAdmin && (
+                            <>
+                                <ResponsiveNavLink
+                                    href={route('admin.schedules.index')}
+                                    active={route().current('admin.schedules.*')}
+                                >
+                                    Schedules
+                                </ResponsiveNavLink>
+                            </>
+                        )}
                     </div>
 
                     <div className="border-t border-gray-200 dark:border-gray-800 pb-1 pt-4 bg-gray-50 dark:bg-gray-800/50">
@@ -219,7 +245,7 @@ export default function AuthenticatedLayout({ header, children }) {
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
                                 method="post"
-                                href={route('logout')}
+                                href={route(logoutRoute)}
                                 as="button"
                                 className="!text-red-600 dark:!text-red-400 hover:!bg-red-50 dark:hover:!bg-red-900/20"
                             >
