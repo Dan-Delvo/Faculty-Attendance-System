@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Http\Request;
 
 class Schedule extends Model
 {
@@ -57,5 +59,135 @@ class Schedule extends Model
     public function internalSchedules(): HasMany
     {
         return $this->hasMany(InternalSchedule::class);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Admin Query Methods (static)                                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Get filtered, paginated schedules for the admin schedule management page.
+     *
+     * Applies search, status, type, semester, academic year, and department filters.
+     */
+    public static function getFilteredSchedules(Request $request): array
+    {
+        $perPage = (int) $request->query('per_page', 10);
+        $page    = (int) $request->query('page', 1);
+        $search  = $request->query('search', '');
+        $status  = $request->query('status', '');
+        $type    = $request->query('type', '');
+        $semester = $request->query('semester', '');
+        $academicYear = $request->query('academic_year', '');
+        $department   = $request->query('department', '');
+
+        $query = static::with(['faculty.department', 'scheduleDetails', 'createdBy'])
+            ->orderBy('created_at', 'desc');
+
+        // Search
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('schedule_code', 'like', "%{$search}%")
+                  ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhereHas('faculty', function ($fq) use ($search) {
+                      $fq->where('first_name', 'like', "%{$search}%")
+                         ->orWhere('last_name', 'like', "%{$search}%")
+                         ->orWhere('faculty_code', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Status filter
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        // Schedule type filter
+        if ($type) {
+            $query->where('schedule_type', $type);
+        }
+
+        // Semester filter
+        if ($semester) {
+            $query->where('semester', (int) $semester);
+        }
+
+        // Academic year filter
+        if ($academicYear) {
+            $query->where('academic_year', (int) $academicYear);
+        }
+
+        // Department filter
+        if ($department) {
+            $query->whereHas('faculty', function ($q) use ($department) {
+                $q->where('department_id', (int) $department);
+            });
+        }
+
+        $total = $query->count();
+        $items = $query->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+
+        $formatted = $items->map(function (Schedule $schedule) {
+            return [
+                'id'             => $schedule->id,
+                'schedule_code'  => $schedule->schedule_code,
+                'faculty_id'     => $schedule->faculty_id,
+                'faculty_name'   => $schedule->faculty?->full_name ?? 'N/A',
+                'department'     => $schedule->faculty?->department?->name ?? 'N/A',
+                'academic_year'  => $schedule->academic_year,
+                'semester'       => $schedule->semester,
+                'effective_from' => $schedule->effective_from?->format('Y-m-d'),
+                'effective_until' => $schedule->effective_until?->format('Y-m-d'),
+                'status'         => $schedule->status,
+                'schedule_type'  => $schedule->schedule_type,
+                'notes'          => $schedule->notes,
+                'created_by'     => $schedule->createdBy?->email ?? 'System',
+                'details'        => $schedule->scheduleDetails->map(function (ScheduleDetail $d) {
+                    return [
+                        'id'             => $d->id,
+                        'day_of_week'    => $d->day_of_week,
+                        'time_in'        => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out'       => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code'   => $d->subject_code,
+                        'subject_desc'   => $d->subject_desc,
+                        'room'           => $d->room,
+                        'hours_required' => $d->hours_required,
+                    ];
+                })->toArray(),
+                'created_at'     => $schedule->created_at?->format('M d, Y'),
+            ];
+        })->toArray();
+
+        return [
+            'data'         => $formatted,
+            'total'        => $total,
+            'per_page'     => $perPage,
+            'current_page' => $page,
+            'last_page'    => (int) ceil($total / $perPage),
+        ];
+    }
+
+    /**
+     * Get search suggestions for the AJAX autocomplete.
+     */
+    public static function getSearchSuggestions(string $query): array
+    {
+        $schedules = static::with('faculty')
+            ->where('schedule_code', 'like', "%{$query}%")
+            ->orWhereHas('faculty', function ($q) use ($query) {
+                $q->where('first_name', 'like', "%{$query}%")
+                  ->orWhere('last_name', 'like', "%{$query}%")
+                  ->orWhere('faculty_code', 'like', "%{$query}%");
+            })
+            ->limit(8)
+            ->get();
+
+        return $schedules->map(fn(Schedule $s) => [
+            'id'    => $s->id,
+            'label' => "{$s->schedule_code} — {$s->faculty?->full_name}",
+            'code'  => $s->schedule_code,
+        ])->toArray();
     }
 }

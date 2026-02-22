@@ -509,4 +509,225 @@ class Faculty extends Model
             ];
         })->values()->toArray();
     }
+
+    /* ------------------------------------------------------------------ */
+    /*  Admin Dashboard Query Methods (static)                            */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Get admin dashboard stat cards: total faculty, timed-in today,
+     * timed-out today, and average hours this month.
+     */
+    public static function getAdminDashboardStats(): array
+    {
+        $now = Carbon::now();
+        $today = $now->toDateString();
+
+        $totalFaculty = static::where('is_active', true)->count();
+
+        // Faculty who have checked IN today (latest log = IN)
+        $timedInCount = static::countTimedInToday();
+        $timedOutCount = $totalFaculty - $timedInCount;
+
+        // Average hours rendered this month across all faculty
+        $avgHours = AttendanceRecord::whereMonth('attendance_date', $now->month)
+            ->whereYear('attendance_date', $now->year)
+            ->avg('total_hours_rendered');
+
+        // Compare with last month
+        $lastMonthAvg = AttendanceRecord::whereMonth('attendance_date', $now->copy()->subMonth()->month)
+            ->whereYear('attendance_date', $now->copy()->subMonth()->year)
+            ->avg('total_hours_rendered');
+
+        $diff = round(($avgHours ?? 0) - ($lastMonthAvg ?? 0), 1);
+        $prefix = $diff >= 0 ? '+' : '';
+
+        return [
+            [
+                'label' => 'Total Faculty',
+                'value' => (string) $totalFaculty,
+                'unit'  => '',
+                'change' => $totalFaculty > 0 ? 'Active members' : 'No faculty yet',
+                'changeType' => 'neutral',
+                'icon' => 'users',
+            ],
+            [
+                'label' => 'Currently Timed In',
+                'value' => (string) $timedInCount,
+                'unit'  => '',
+                'change' => $timedInCount > 0 ? 'Faculty on campus' : 'No one timed in',
+                'changeType' => $timedInCount > 0 ? 'positive' : 'neutral',
+                'icon' => 'login',
+            ],
+            [
+                'label' => 'Currently Timed Out',
+                'value' => (string) $timedOutCount,
+                'unit'  => '',
+                'change' => $timedOutCount > 0 ? 'Off campus' : 'All timed in',
+                'changeType' => 'neutral',
+                'icon' => 'logout',
+            ],
+            [
+                'label' => 'Avg Hours / Month',
+                'value' => (string) round($avgHours ?? 0, 1),
+                'unit'  => 'hrs',
+                'change' => "{$prefix}{$diff} from last month",
+                'changeType' => $diff >= 0 ? 'positive' : 'negative',
+                'icon' => 'chart',
+            ],
+        ];
+    }
+
+    /**
+     * Count how many faculty are currently timed in today
+     * (their latest biometric log today is type IN).
+     */
+    public static function countTimedInToday(): int
+    {
+        $today = Carbon::today();
+
+        return static::where('is_active', true)
+            ->whereHas('biometricLogs', function ($q) use ($today) {
+                $q->whereDate('log_datetime', $today);
+            })
+            ->get()
+            ->filter(function (Faculty $faculty) use ($today) {
+                $latestLog = $faculty->biometricLogs()
+                    ->whereDate('log_datetime', $today)
+                    ->orderBy('log_datetime', 'desc')
+                    ->first();
+
+                return $latestLog && strtoupper($latestLog->log_type) === 'IN';
+            })
+            ->count();
+    }
+
+    /**
+     * Get list of faculty currently timed-in today.
+     */
+    public static function getCurrentlyTimedIn(): array
+    {
+        $today = Carbon::today();
+
+        return static::where('is_active', true)
+            ->with('department')
+            ->whereHas('biometricLogs', function ($q) use ($today) {
+                $q->whereDate('log_datetime', $today);
+            })
+            ->get()
+            ->filter(function (Faculty $faculty) use ($today) {
+                $latestLog = $faculty->biometricLogs()
+                    ->whereDate('log_datetime', $today)
+                    ->orderBy('log_datetime', 'desc')
+                    ->first();
+
+                return $latestLog && strtoupper($latestLog->log_type) === 'IN';
+            })
+            ->map(function (Faculty $faculty) use ($today) {
+                $latestLog = $faculty->biometricLogs()
+                    ->whereDate('log_datetime', $today)
+                    ->orderBy('log_datetime', 'desc')
+                    ->first();
+
+                return [
+                    'id'         => $faculty->id,
+                    'name'       => $faculty->full_name,
+                    'department' => $faculty->department?->name ?? 'N/A',
+                    'timedInAt'  => $latestLog ? Carbon::parse($latestLog->log_datetime)->format('h:i A') : '--:--',
+                ];
+            })
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Get list of faculty currently timed-out (not IN) today.
+     */
+    public static function getCurrentlyTimedOut(): array
+    {
+        $today = Carbon::today();
+
+        $allActive = static::where('is_active', true)
+            ->with('department')
+            ->get();
+
+        return $allActive->filter(function (Faculty $faculty) use ($today) {
+            $latestLog = $faculty->biometricLogs()
+                ->whereDate('log_datetime', $today)
+                ->orderBy('log_datetime', 'desc')
+                ->first();
+
+            // Not timed-in if no log today OR latest log is OUT
+            return !$latestLog || strtoupper($latestLog->log_type) !== 'IN';
+        })
+        ->map(function (Faculty $faculty) use ($today) {
+            $latestLog = $faculty->biometricLogs()
+                ->whereDate('log_datetime', $today)
+                ->orderBy('log_datetime', 'desc')
+                ->first();
+
+            return [
+                'id'          => $faculty->id,
+                'name'        => $faculty->full_name,
+                'department'  => $faculty->department?->name ?? 'N/A',
+                'lastActivity' => $latestLog
+                    ? Carbon::parse($latestLog->log_datetime)->format('h:i A')
+                    : 'No activity',
+            ];
+        })
+        ->values()
+        ->toArray();
+    }
+
+    /**
+     * Get the weekly timed-in graph data (Monday to Friday of current week).
+     *
+     * Returns an array of { day, shortDay, count } for each weekday.
+     */
+    public static function getWeeklyTimedInGraph(): array
+    {
+        $now = Carbon::now();
+        $startOfWeek = $now->copy()->startOfWeek(Carbon::MONDAY);
+
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        $graph = [];
+
+        foreach ($days as $index => $day) {
+            $date = $startOfWeek->copy()->addDays($index);
+
+            // Count distinct faculty who had at least one IN log on this day
+            $count = BiometricLog::where('log_type', 'IN')
+                ->whereDate('log_datetime', $date)
+                ->distinct('biometric_id')
+                ->count('biometric_id');
+
+            $graph[] = [
+                'day'      => $day,
+                'shortDay' => substr($day, 0, 3),
+                'count'    => $count,
+                'date'     => $date->format('M d'),
+                'isToday'  => $date->isToday(),
+            ];
+        }
+
+        return $graph;
+    }
+
+    /**
+     * Get active faculty list for dropdowns (ID, name, department).
+     */
+    public static function getActiveFacultyList(): array
+    {
+        return static::where('is_active', true)
+            ->with('department')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(fn(Faculty $f) => [
+                'id'         => $f->id,
+                'name'       => $f->full_name,
+                'department' => $f->department?->name ?? 'N/A',
+            ])
+            ->toArray();
+    }
 }
