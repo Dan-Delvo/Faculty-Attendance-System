@@ -6,7 +6,16 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const user = usePage().props.auth.user;
+    const { auth } = usePage().props;
+    const user = auth.user;
+    const roles = auth.roles ?? [];
+
+    // Determine the correct dashboard route based on user role
+    const isFaculty = roles.includes('faculty');
+    const dashboardRoute = isFaculty ? 'faculty.dashboard' : 'dashboard';
+    const dashboardActive = isFaculty
+        ? route().current('faculty.dashboard')
+        : route().current('dashboard');
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -30,8 +39,8 @@ export default function AuthenticatedLayout({ header, children }) {
                             {/* Desktop Links */}
                             <div className="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex h-16 items-center">
                                 <NavLink
-                                    href={route('dashboard')}
-                                    active={route().current('dashboard')}
+                                    href={route(dashboardRoute)}
+                                    active={dashboardActive}
                                 >
                                     Dashboard
                                 </NavLink>
@@ -148,8 +157,8 @@ export default function AuthenticatedLayout({ header, children }) {
                 >
                     <div className="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink
-                            href={route('dashboard')}
-                            active={route().current('dashboard')}
+                            href={route(dashboardRoute)}
+                            active={dashboardActive}
                         >
                             Dashboard
                         </ResponsiveNavLink>
