@@ -175,11 +175,13 @@ class Schedule extends Model
     public static function getSearchSuggestions(string $query): array
     {
         $schedules = static::with('faculty')
-            ->where('schedule_code', 'like', "%{$query}%")
-            ->orWhereHas('faculty', function ($q) use ($query) {
-                $q->where('first_name', 'like', "%{$query}%")
-                  ->orWhere('last_name', 'like', "%{$query}%")
-                  ->orWhere('faculty_code', 'like', "%{$query}%");
+            ->where(function ($q) use ($query) {
+                $q->where('schedule_code', 'like', "%{$query}%")
+                  ->orWhereHas('faculty', function ($q2) use ($query) {
+                      $q2->where('first_name', 'like', "%{$query}%")
+                         ->orWhere('last_name', 'like', "%{$query}%")
+                         ->orWhere('faculty_code', 'like', "%{$query}%");
+                  });
             })
             ->limit(8)
             ->get();
