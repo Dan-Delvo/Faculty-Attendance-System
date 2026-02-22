@@ -8,8 +8,19 @@ class Controller
 {
     public function extract_enums(string $table, string $column): array
     {
-        $type = DB::select(DB::raw("SHOW COLUMNS FROM {$table} WHERE Field = '{$column}'"))[0]->Type;
+        if (!preg_match('/^\w+$/', $table) || !preg_match('/^\w+$/', $column)) {
+            throw new \InvalidArgumentException('Invalid table or column name.');
+        }
 
+        $safeTable = '`' . str_replace('`', '``', $table) . '`';
+
+        $result = DB::select("SHOW COLUMNS FROM {$safeTable} WHERE Field = ?", [$column]);
+
+        if (empty($result)) {
+            return [];
+        }
+
+        $type = $result[0]->Type;
         preg_match('/^enum\((.*)\)$/', $type, $matches);
 
         if (!isset($matches[1])) {
