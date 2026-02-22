@@ -29,7 +29,7 @@ export default function AuthenticatedLayout({ header, children }) {
                         <div className="flex items-center">
                             {/* Brand Logo */}
                             <div className="flex shrink-0 items-center">
-                                <Link href="/" className="transition-transform hover:scale-105 active:scale-95">
+                                <Link href={route(dashboardRoute)} className="transition-transform hover:scale-105 active:scale-95">
                                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] shadow-lg shadow-red-900/20">
                                         <ApplicationLogo className="h-6 w-6 text-white fill-white" />
                                     </div>
@@ -44,6 +44,23 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Dashboard
                                 </NavLink>
+
+                                {isFaculty && (
+                                    <>
+                                        <NavLink
+                                            href={route('faculty.schedule')}
+                                            active={route().current('faculty.schedule')}
+                                        >
+                                            Schedule
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('faculty.biometric-logs')}
+                                            active={route().current('faculty.biometric-logs')}
+                                        >
+                                            Biometric Logs
+                                        </NavLink>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -162,6 +179,23 @@ export default function AuthenticatedLayout({ header, children }) {
                         >
                             Dashboard
                         </ResponsiveNavLink>
+
+                        {isFaculty && (
+                            <>
+                                <ResponsiveNavLink
+                                    href={route('faculty.schedule')}
+                                    active={route().current('faculty.schedule')}
+                                >
+                                    Schedule
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('faculty.biometric-logs')}
+                                    active={route().current('faculty.biometric-logs')}
+                                >
+                                    Biometric Logs
+                                </ResponsiveNavLink>
+                            </>
+                        )}
                     </div>
 
                     <div className="border-t border-gray-200 dark:border-gray-800 pb-1 pt-4 bg-gray-50 dark:bg-gray-800/50">

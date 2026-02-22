@@ -1,6 +1,10 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import Pagination from '@/Components/Pagination';
+import ScrollToTop from '@/Components/ScrollToTop';
+import Dropdown from '@/Components/Dropdown';
+import { Head, Link, usePage, router } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import {
     AreaChart,
     Area,
@@ -212,14 +216,40 @@ function ChartTooltip({ active, payload, label }) {
 /* ──────────────────────────────────────────────
    Main Faculty Dashboard page
    ────────────────────────────────────────────── */
-export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, checkInTrend, monthlyAverages, currentDate, greeting }) {
+export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, checkInTrend, monthlyAverages, currentDate, greeting, filters }) {
     const { auth } = usePage().props;
     const userName = auth.user.username ?? auth.user.email.split('@')[0];
+
+    const [selectedRange, setSelectedRange] = useState(filters?.range ?? 'Last 6 months');
+    const [isReloading, setIsReloading] = useState(false);
+
+    // Internal state for metrics that update via AJAX
+    const [trendData, setTrendData] = useState(checkInTrend);
+    const [averagesData, setAveragesData] = useState(monthlyAverages);
+
+    const handleRangeChange = async (range) => {
+        setSelectedRange(range);
+        setIsReloading(true);
+
+        try {
+            const response = await axios.get(route('faculty.api.analytics'), {
+                params: { range }
+            });
+
+            setTrendData(response.data.checkInTrend);
+            setAveragesData(response.data.monthlyAverages);
+        } catch (error) {
+            console.error('Failed to fetch analytics:', error);
+        } finally {
+            setIsReloading(false);
+        }
+    };
 
     // Biometric logs pagination
     const LOGS_PER_PAGE = 5;
     const [logPage, setLogPage] = useState(1);
     const totalLogPages = Math.ceil(biometricLogs.length / LOGS_PER_PAGE);
+
     const paginatedLogs = biometricLogs.slice(
         (logPage - 1) * LOGS_PER_PAGE,
         logPage * LOGS_PER_PAGE,
@@ -267,12 +297,32 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                                 </div>
                                 <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Average Check-In/Out Time</h3>
                             </div>
-                            <button className="flex items-center gap-1 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
-                                Last 6 months
-                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                                </svg>
-                            </button>
+
+                            <Dropdown>
+                                <Dropdown.Trigger>
+                                    <button className="flex items-center gap-1 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                                        {selectedRange}
+                                        <svg className="h-4 w-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                        </svg>
+                                    </button>
+                                </Dropdown.Trigger>
+
+                                <Dropdown.Content width="48" contentClasses="py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                    {['Last 3 months', 'Last 6 months', 'Last 12 months', 'This Year'].map((range) => (
+                                        <button
+                                            key={range}
+                                            onClick={() => handleRangeChange(range)}
+                                            className={`block w-full px-4 py-2 text-start text-sm font-medium transition-all duration-200 ${selectedRange === range
+                                                ? 'bg-red-50 text-[#7a1315] dark:bg-gray-700 dark:text-white'
+                                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                                }`}
+                                        >
+                                            {range}
+                                        </button>
+                                    ))}
+                                </Dropdown.Content>
+                            </Dropdown>
                         </div>
 
                         <p className="my-5 text-sm text-gray-500 dark:text-gray-400">
@@ -285,10 +335,10 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                                 <div>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-5xl font-bold tracking-tighter text-gray-900 dark:text-white hover:scale-105 transition-transform origin-left">
-                                            {monthlyAverages.avgCheckIn?.replace(/\s[AP]M/, '') ?? '--:--'}
+                                            {averagesData.avgCheckIn?.replace(/\s[AP]M/, '') ?? '--:--'}
                                         </span>
                                         <span className="text-xl font-bold text-gray-900 dark:text-white">
-                                            {monthlyAverages.avgCheckIn?.match(/[AP]M/)?.[0] ?? ''}
+                                            {averagesData.avgCheckIn?.match(/[AP]M/)?.[0] ?? ''}
                                         </span>
                                     </div>
                                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">Avg. Monthly Check-In Time</p>
@@ -296,10 +346,10 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                                 <div>
                                     <div className="flex items-baseline gap-1">
                                         <span className="text-5xl font-bold tracking-tighter text-gray-900 dark:text-white hover:scale-105 transition-transform origin-left">
-                                            {monthlyAverages.avgCheckOut?.replace(/\s[AP]M/, '') ?? '--:--'}
+                                            {averagesData.avgCheckOut?.replace(/\s[AP]M/, '') ?? '--:--'}
                                         </span>
                                         <span className="text-xl font-bold text-gray-900 dark:text-white">
-                                            {monthlyAverages.avgCheckOut?.match(/[AP]M/)?.[0] ?? ''}
+                                            {averagesData.avgCheckOut?.match(/[AP]M/)?.[0] ?? ''}
                                         </span>
                                     </div>
                                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">Avg. Monthly Check-Out Time</p>
@@ -310,7 +360,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                             <div className="md:col-span-3 h-44 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart
-                                        data={checkInTrend}
+                                        data={trendData}
                                         margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                                     >
                                         <defs>
@@ -543,6 +593,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                     </div>
                 )}
             </section>
+            <ScrollToTop />
         </AuthenticatedLayout>
     );
 }

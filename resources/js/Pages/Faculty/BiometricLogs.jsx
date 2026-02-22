@@ -1,4 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import Pagination from '@/Components/Pagination';
+import ScrollToTop from '@/Components/ScrollToTop';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -9,7 +11,7 @@ const STATUS_STYLES = {
 };
 
 export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
-    const LOGS_PER_PAGE = 10;
+    const [perPage, setPerPage] = useState(10);
     const [page, setPage] = useState(1);
     const [filter, setFilter] = useState('all'); // 'all' | 'check-in' | 'check-out'
 
@@ -17,15 +19,20 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
         ? biometricLogs
         : biometricLogs.filter((log) => log.type === filter);
 
-    const totalPages = Math.ceil(filteredLogs.length / LOGS_PER_PAGE);
+    const totalPages = Math.ceil(filteredLogs.length / perPage);
     const paginatedLogs = filteredLogs.slice(
-        (page - 1) * LOGS_PER_PAGE,
-        page * LOGS_PER_PAGE,
+        (page - 1) * perPage,
+        page * perPage,
     );
 
     // Reset to page 1 when filter changes
     const handleFilter = (f) => {
         setFilter(f);
+        setPage(1);
+    };
+
+    const handlePerPageChange = (size) => {
+        setPerPage(size);
         setPage(1);
     };
 
@@ -77,8 +84,8 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
                         key={tab.key}
                         onClick={() => handleFilter(tab.key)}
                         className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-200 ${filter === tab.key
-                                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-md'
-                                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-md'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                             }`}
                     >
                         {tab.label}
@@ -89,6 +96,16 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
                     {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
                 </span>
             </div>
+
+            {/* ── Top Pagination ──────────────────────── */}
+            <Pagination
+                currentPage={page}
+                totalItems={filteredLogs.length}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={handlePerPageChange}
+                className="mb-0"
+            />
 
             {/* ── Logs Table ─────────────────────────── */}
             <div className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden">
@@ -106,8 +123,8 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
                                     <div className="flex items-center gap-4">
                                         {/* Icon */}
                                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isCheckIn
-                                                ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                                : 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400'
+                                            ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                            : 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400'
                                             }`}>
                                             {isCheckIn ? (
                                                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -158,36 +175,16 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
                 )}
             </div>
 
-            {/* ── Pagination ─────────────────────────── */}
-            {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-between">
-                    <button
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        disabled={page === 1}
-                        className="inline-flex items-center gap-1 rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
-                    >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                        </svg>
-                        Previous
-                    </button>
+            {/* ── Bottom Pagination ────────────────────── */}
+            <Pagination
+                currentPage={page}
+                totalItems={filteredLogs.length}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={handlePerPageChange}
+            />
 
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Page {page} of {totalPages}
-                    </span>
-
-                    <button
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={page === totalPages}
-                        className="inline-flex items-center gap-1 rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
-                    >
-                        Next
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                        </svg>
-                    </button>
-                </div>
-            )}
+            <ScrollToTop />
         </AuthenticatedLayout>
     );
 }

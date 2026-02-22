@@ -1,4 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import Pagination from '@/Components/Pagination';
+import ScrollToTop from '@/Components/ScrollToTop';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -23,13 +25,18 @@ const DAY_COLORS = {
 export default function Schedule({ weeklySchedule, attendanceRecords, facultyName }) {
     const [activeTab, setActiveTab] = useState('schedule'); // 'schedule' | 'attendance'
     const [attPage, setAttPage] = useState(1);
-    const ATT_PER_PAGE = 8;
+    const [attPerPage, setAttPerPage] = useState(8);
 
-    const totalAttPages = Math.ceil(attendanceRecords.length / ATT_PER_PAGE);
+    const totalAttPages = Math.ceil(attendanceRecords.length / attPerPage);
     const paginatedAttendance = attendanceRecords.slice(
-        (attPage - 1) * ATT_PER_PAGE,
-        attPage * ATT_PER_PAGE,
+        (attPage - 1) * attPerPage,
+        attPage * attPerPage,
     );
+
+    const handleAttPerPageChange = (size) => {
+        setAttPerPage(size);
+        setAttPage(1);
+    };
 
     // Count total weekly hours
     const totalWeeklyHours = weeklySchedule.reduce(
@@ -96,8 +103,8 @@ export default function Schedule({ weeklySchedule, attendanceRecords, facultyNam
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
                         className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold transition-all duration-200 ${activeTab === tab.key
-                                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-md'
-                                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-md'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                             }`}
                     >
                         {tab.icon}
@@ -173,6 +180,17 @@ export default function Schedule({ weeklySchedule, attendanceRecords, facultyNam
             {/* ── Attendance Log Tab ─────────────────── */}
             {activeTab === 'attendance' && (
                 <>
+                    {/* Top Pagination */}
+                    <Pagination
+                        currentPage={attPage}
+                        totalItems={attendanceRecords.length}
+                        perPage={attPerPage}
+                        onPageChange={setAttPage}
+                        onPerPageChange={handleAttPerPageChange}
+                        perPageOptions={[5, 8, 15, 25, 50]}
+                        className="mb-0"
+                    />
+
                     <div className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden">
                         {paginatedAttendance.length > 0 ? (
                             <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
@@ -249,38 +267,19 @@ export default function Schedule({ weeklySchedule, attendanceRecords, facultyNam
                         )}
                     </div>
 
-                    {/* Pagination */}
-                    {totalAttPages > 1 && (
-                        <div className="mt-6 flex items-center justify-between">
-                            <button
-                                onClick={() => setAttPage((p) => Math.max(1, p - 1))}
-                                disabled={attPage === 1}
-                                className="inline-flex items-center gap-1 rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
-                            >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                                </svg>
-                                Previous
-                            </button>
-
-                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                Page {attPage} of {totalAttPages}
-                            </span>
-
-                            <button
-                                onClick={() => setAttPage((p) => Math.min(totalAttPages, p + 1))}
-                                disabled={attPage === totalAttPages}
-                                className="inline-flex items-center gap-1 rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700"
-                            >
-                                Next
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                                </svg>
-                            </button>
-                        </div>
-                    )}
+                    {/* Bottom Pagination */}
+                    <Pagination
+                        currentPage={attPage}
+                        totalItems={attendanceRecords.length}
+                        perPage={attPerPage}
+                        onPageChange={setAttPage}
+                        onPerPageChange={handleAttPerPageChange}
+                        perPageOptions={[5, 8, 15, 25, 50]}
+                    />
                 </>
             )}
+
+            <ScrollToTop />
         </AuthenticatedLayout>
     );
 }
