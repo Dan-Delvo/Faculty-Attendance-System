@@ -80,32 +80,37 @@ class AdminScheduleController extends Controller
             }
         }
 
-        DB::transaction(function () use ($validated, $request) {
-            $schedule = Schedule::create([
-                'faculty_id'      => $validated['faculty_id'],
-                'schedule_code'   => $validated['schedule_code'],
-                'academic_year'   => $validated['academic_year'],
-                'semester'        => $validated['semester'],
-                'effective_from'  => $validated['effective_from'],
-                'effective_until' => $validated['effective_until'],
-                'status'          => $validated['status'],
-                'schedule_type'   => $validated['schedule_type'],
-                'notes'           => $validated['notes'] ?? null,
-                'created_by'      => Auth::id(),
-            ]);
-
-            foreach ($validated['details'] as $detail) {
-                $schedule->scheduleDetails()->create([
-                    'day_of_week'    => $detail['day_of_week'],
-                    'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
-                    'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
-                    'subject_code'   => $detail['subject_code'] ?? null,
-                    'subject_desc'   => $detail['subject_desc'] ?? null,
-                    'room'           => $detail['room'] ?? null,
-                    'hours_required' => $detail['hours_required'],
+        try {
+            DB::transaction(function () use ($validated, $request) {
+                $schedule = Schedule::create([
+                    'faculty_id'      => $validated['faculty_id'],
+                    'schedule_code'   => $validated['schedule_code'],
+                    'academic_year'   => $validated['academic_year'],
+                    'semester'        => $validated['semester'],
+                    'effective_from'  => $validated['effective_from'],
+                    'effective_until' => $validated['effective_until'],
+                    'status'          => $validated['status'],
+                    'schedule_type'   => $validated['schedule_type'],
+                    'notes'           => $validated['notes'] ?? null,
+                    'created_by'      => Auth::id(),
                 ]);
-            }
-        });
+
+                foreach ($validated['details'] as $detail) {
+                    $schedule->scheduleDetails()->create([
+                        'day_of_week'    => $detail['day_of_week'],
+                        'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
+                        'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
+                        'subject_code'   => $detail['subject_code'] ?? null,
+                        'subject_desc'   => $detail['subject_desc'] ?? null,
+                        'room'           => $detail['room'] ?? null,
+                        'hours_required' => $detail['hours_required'],
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            return redirect()->route('admin.schedules.index')
+                ->with('error', 'Failed to create schedule. Please try again.');
+        }
 
         return redirect()->route('admin.schedules.index')
             ->with('success', 'Schedule created successfully.');
@@ -148,34 +153,39 @@ class AdminScheduleController extends Controller
                     ->withInput();
             }
         }
-        DB::transaction(function () use ($schedule, $validated) {
-            $schedule->update([
-                'faculty_id'      => $validated['faculty_id'],
-                'schedule_code'   => $validated['schedule_code'],
-                'academic_year'   => $validated['academic_year'],
-                'semester'        => $validated['semester'],
-                'effective_from'  => $validated['effective_from'],
-                'effective_until' => $validated['effective_until'],
-                'status'          => $validated['status'],
-                'schedule_type'   => $validated['schedule_type'],
-                'notes'           => $validated['notes'] ?? null,
-            ]);
-
-            // Delete existing details and recreate
-            $schedule->scheduleDetails()->delete();
-
-            foreach ($validated['details'] as $detail) {
-                $schedule->scheduleDetails()->create([
-                    'day_of_week'    => $detail['day_of_week'],
-                    'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
-                    'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
-                    'subject_code'   => $detail['subject_code'] ?? null,
-                    'subject_desc'   => $detail['subject_desc'] ?? null,
-                    'room'           => $detail['room'] ?? null,
-                    'hours_required' => $detail['hours_required'],
+        try {
+            DB::transaction(function () use ($schedule, $validated) {
+                $schedule->update([
+                    'faculty_id'      => $validated['faculty_id'],
+                    'schedule_code'   => $validated['schedule_code'],
+                    'academic_year'   => $validated['academic_year'],
+                    'semester'        => $validated['semester'],
+                    'effective_from'  => $validated['effective_from'],
+                    'effective_until' => $validated['effective_until'],
+                    'status'          => $validated['status'],
+                    'schedule_type'   => $validated['schedule_type'],
+                    'notes'           => $validated['notes'] ?? null,
                 ]);
-            }
-        });
+
+                // Delete existing details and recreate
+                $schedule->scheduleDetails()->delete();
+
+                foreach ($validated['details'] as $detail) {
+                    $schedule->scheduleDetails()->create([
+                        'day_of_week'    => $detail['day_of_week'],
+                        'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
+                        'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
+                        'subject_code'   => $detail['subject_code'] ?? null,
+                        'subject_desc'   => $detail['subject_desc'] ?? null,
+                        'room'           => $detail['room'] ?? null,
+                        'hours_required' => $detail['hours_required'],
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            return redirect()->route('admin.schedules.index')
+                ->with('error', 'Failed to update schedule. Please try again.');
+        }
 
         return redirect()->route('admin.schedules.index')
             ->with('success', 'Schedule updated successfully.');
@@ -186,8 +196,13 @@ class AdminScheduleController extends Controller
      */
     public function destroy(Schedule $schedule)
     {
-        $schedule->scheduleDetails()->delete();
-        $schedule->delete();
+        try {
+            $schedule->scheduleDetails()->delete();
+            $schedule->delete();
+        } catch (\Throwable $e) {
+            return redirect()->route('admin.schedules.index')
+                ->with('error', 'Failed to delete schedule. Please try again.');
+        }
 
         return redirect()->route('admin.schedules.index')
             ->with('success', 'Schedule deleted successfully.');

@@ -3,10 +3,11 @@ import Dropdown from '@/Components/Dropdown';
 import NavLink from '@/Components/NavLink';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink';
 import { Link, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const { auth } = usePage().props;
+    const { auth, flash } = usePage().props;
     const user = auth.user;
     const roles = auth.roles ?? [];
 
@@ -23,6 +24,40 @@ export default function AuthenticatedLayout({ header, children }) {
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
+
+    // ── Global flash → toast ──────────────────────────────────────────────
+    useEffect(() => {
+        if (flash?.success) toast.success(flash.success);
+        if (flash?.error)   toast.error(flash.error);
+        if (flash?.warning) toast(
+            flash.warning,
+            {
+                icon: '⚠️',
+                style: {
+                    background: '#fffbeb',
+                    color: '#92400e',
+                    border: '1px solid #fde68a',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    fontSize: '0.875rem',
+                },
+            }
+        );
+        if (flash?.info) toast(
+            flash.info,
+            {
+                icon: 'ℹ️',
+                style: {
+                    background: '#eff6ff',
+                    color: '#1e40af',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    fontSize: '0.875rem',
+                },
+            }
+        );
+    }, [flash]);
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans antialiased selection:bg-[#7a1315] selection:text-white transition-colors duration-300">
