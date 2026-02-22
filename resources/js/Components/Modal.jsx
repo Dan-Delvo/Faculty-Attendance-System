@@ -24,6 +24,8 @@ export default function Modal({
         lg: 'sm:max-w-lg',
         xl: 'sm:max-w-xl',
         '2xl': 'sm:max-w-2xl',
+        '3xl': 'sm:max-w-3xl',
+        '4xl': 'sm:max-w-4xl',
     }[maxWidth];
 
     return (
@@ -31,7 +33,7 @@ export default function Modal({
             <Dialog
                 as="div"
                 id="modal"
-                className="fixed inset-0 z-50 flex transform items-center overflow-y-auto px-4 py-6 transition-all sm:px-0"
+                className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 py-4 sm:px-6 transition-all"
                 onClose={close}
             >
                 <TransitionChild
@@ -42,7 +44,7 @@ export default function Modal({
                     leaveFrom="opacity-100"
                     leaveTo="opacity-0"
                 >
-                    <div className="absolute inset-0 bg-gray-500/75 dark:bg-gray-900/75" />
+                    <div className="fixed inset-0 bg-gray-500/75 dark:bg-gray-900/80 backdrop-blur-sm" />
                 </TransitionChild>
 
                 <TransitionChild
@@ -54,7 +56,7 @@ export default function Modal({
                     leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                 >
                     <DialogPanel
-                        className={`mb-6 transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all sm:mx-auto sm:w-full dark:bg-gray-800 border border-gray-100 dark:border-gray-700 ${maxWidthClass}`}
+                        className={`relative w-full transform flex flex-col rounded-t-2xl sm:rounded-2xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 transition-all sm:mx-auto max-h-[92dvh] sm:max-h-[88dvh] ${maxWidthClass}`}
                     >
                         {children}
                     </DialogPanel>
