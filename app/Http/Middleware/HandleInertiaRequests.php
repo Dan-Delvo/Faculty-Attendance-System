@@ -31,10 +31,13 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        // Resolve the authenticated user from either the admin or web guard
-        $user = User::findOrFail(
-            Auth::guard('admin')->check() ? Auth::guard('admin')->user()->id : Auth::guard('web')->user()->id
-        );
+        // Resolve the authenticated user from either the admin or web guard (if any)
+        $authenticatedUser = Auth::guard('admin')->user() ?? Auth::guard('web')->user();
+
+        $user = null;
+        if ($authenticatedUser) {
+            $user = User::find($authenticatedUser->id);
+        }
 
         return [
             ...parent::share($request),
