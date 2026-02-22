@@ -6,7 +6,16 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const user = usePage().props.auth.user;
+    const { auth } = usePage().props;
+    const user = auth.user;
+    const roles = auth.roles ?? [];
+
+    // Determine the correct dashboard route based on user role
+    const isFaculty = roles.includes('faculty');
+    const dashboardRoute = isFaculty ? 'faculty.dashboard' : 'dashboard';
+    const dashboardActive = isFaculty
+        ? route().current('faculty.dashboard')
+        : route().current('dashboard');
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -20,7 +29,7 @@ export default function AuthenticatedLayout({ header, children }) {
                         <div className="flex items-center">
                             {/* Brand Logo */}
                             <div className="flex shrink-0 items-center">
-                                <Link href="/" className="transition-transform hover:scale-105 active:scale-95">
+                                <Link href={route(dashboardRoute)} className="transition-transform hover:scale-105 active:scale-95">
                                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] shadow-lg shadow-red-900/20">
                                         <ApplicationLogo className="h-6 w-6 text-white fill-white" />
                                     </div>
@@ -30,11 +39,28 @@ export default function AuthenticatedLayout({ header, children }) {
                             {/* Desktop Links */}
                             <div className="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex h-16 items-center">
                                 <NavLink
-                                    href={route('dashboard')}
-                                    active={route().current('dashboard')}
+                                    href={route(dashboardRoute)}
+                                    active={dashboardActive}
                                 >
                                     Dashboard
                                 </NavLink>
+
+                                {isFaculty && (
+                                    <>
+                                        <NavLink
+                                            href={route('faculty.schedule')}
+                                            active={route().current('faculty.schedule')}
+                                        >
+                                            Schedule
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('faculty.biometric-logs')}
+                                            active={route().current('faculty.biometric-logs')}
+                                        >
+                                            Biometric Logs
+                                        </NavLink>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -148,11 +174,28 @@ export default function AuthenticatedLayout({ header, children }) {
                 >
                     <div className="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink
-                            href={route('dashboard')}
-                            active={route().current('dashboard')}
+                            href={route(dashboardRoute)}
+                            active={dashboardActive}
                         >
                             Dashboard
                         </ResponsiveNavLink>
+
+                        {isFaculty && (
+                            <>
+                                <ResponsiveNavLink
+                                    href={route('faculty.schedule')}
+                                    active={route().current('faculty.schedule')}
+                                >
+                                    Schedule
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('faculty.biometric-logs')}
+                                    active={route().current('faculty.biometric-logs')}
+                                >
+                                    Biometric Logs
+                                </ResponsiveNavLink>
+                            </>
+                        )}
                     </div>
 
                     <div className="border-t border-gray-200 dark:border-gray-800 pb-1 pt-4 bg-gray-50 dark:bg-gray-800/50">

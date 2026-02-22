@@ -33,6 +33,11 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Redirect faculty users to the faculty dashboard
+        if ($request->user()->hasRole('faculty')) {
+            return redirect()->intended(route('faculty.dashboard', absolute: false));
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
