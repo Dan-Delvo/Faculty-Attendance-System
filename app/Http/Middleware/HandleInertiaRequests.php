@@ -2,7 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -29,13 +31,20 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        // Resolve the authenticated user from either the admin or web guard
+        $user = User::findOrFail(
+            Auth::guard('admin')->check() ? Auth::guard('admin')->user()->id : Auth::guard('web')->user()->id
+        );
+
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $request->user(),
-                'roles' => $request->user()
-                    ? $request->user()->getRoleNames()->toArray()
-                    : [],
+                'user'  => $user,
+                'roles' => $user ? $user->getRoleNames()->toArray() : [],
+            ],
+            'flash' => [
+                'success' => session('success'),
+                'error'   => session('error'),
             ],
         ];
     }

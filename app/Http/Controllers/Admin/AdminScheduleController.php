@@ -1,0 +1,186 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Department;
+use App\Models\Faculty;
+use App\Models\Schedule;
+use App\Models\ScheduleDetail;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+
+class AdminScheduleController extends Controller
+{
+    /**
+     * Display the schedule management page with server-side pagination & filtering.
+     */
+    public function index(Request $request)
+    {
+        $schedules = Schedule::getFilteredSchedules($request);
+        $faculties  = Faculty::getActiveFacultyList();
+        $departments = Department::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name']);
+
+        return Inertia::render('Admin/Schedules', [
+            'schedules'   => $schedules,
+            'faculties'   => $faculties,
+            'departments' => $departments,
+            'filters'     => [
+                'search'    => $request->query('search', ''),
+                'status'    => $request->query('status', ''),
+                'type'      => $request->query('type', ''),
+                'semester'  => $request->query('semester', ''),
+                'academic_year' => $request->query('academic_year', ''),
+                'department'    => $request->query('department', ''),
+                'per_page'  => (int) $request->query('per_page', 10),
+            ],
+        ]);
+    }
+
+    /**
+     * Store a new schedule with its details.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'faculty_id'      => 'required|exists:faculties,id',
+            'schedule_code'   => 'required|string|max:100|unique:schedules,schedule_code',
+            'academic_year'   => 'required|integer|min:2020|max:2100',
+            'semester'        => 'required|integer|in:1,2,3',
+            'effective_from'  => 'required|date',
+            'effective_until' => 'required|date|after:effective_from',
+            'status'          => 'required|in:draft,active,archived',
+            'schedule_type'   => 'required|in:fixed,flexible',
+            'notes'           => 'nullable|string|max:1000',
+            'details'         => 'required|array|min:1',
+            'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'details.*.time_in'       => 'required|date_format:H:i',
+            'details.*.time_out'      => 'required|date_format:H:i|after:details.*.time_in',
+            'details.*.subject_code'  => 'nullable|string|max:50',
+            'details.*.subject_desc'  => 'nullable|string|max:255',
+            'details.*.room'          => 'nullable|string|max:100',
+            'details.*.hours_required' => 'required|integer|min:1|max:12',
+        ]);
+
+        DB::transaction(function () use ($validated, $request) {
+            $schedule = Schedule::create([
+                'faculty_id'      => $validated['faculty_id'],
+                'schedule_code'   => $validated['schedule_code'],
+                'academic_year'   => $validated['academic_year'],
+                'semester'        => $validated['semester'],
+                'effective_from'  => $validated['effective_from'],
+                'effective_until' => $validated['effective_until'],
+                'status'          => $validated['status'],
+                'schedule_type'   => $validated['schedule_type'],
+                'notes'           => $validated['notes'] ?? null,
+                'created_by'      => Auth::id(),
+            ]);
+
+            foreach ($validated['details'] as $detail) {
+                $schedule->scheduleDetails()->create([
+                    'day_of_week'    => $detail['day_of_week'],
+                    'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
+                    'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
+                    'subject_code'   => $detail['subject_code'] ?? null,
+                    'subject_desc'   => $detail['subject_desc'] ?? null,
+                    'room'           => $detail['room'] ?? null,
+                    'hours_required' => $detail['hours_required'],
+                ]);
+            }
+        });
+
+        return redirect()->route('admin.schedules.index')
+            ->with('success', 'Schedule created successfully.');
+    }
+
+    /**
+     * Update an existing schedule.
+     */
+    public function update(Request $request, Schedule $schedule)
+    {
+        $validated = $request->validate([
+            'faculty_id'      => 'required|exists:faculties,id',
+            'schedule_code'   => 'required|string|max:100|unique:schedules,schedule_code,' . $schedule->id,
+            'academic_year'   => 'required|integer|min:2020|max:2100',
+            'semester'        => 'required|integer|in:1,2,3',
+            'effective_from'  => 'required|date',
+            'effective_until' => 'required|date|after:effective_from',
+            'status'          => 'required|in:draft,active,archived',
+            'schedule_type'   => 'required|in:fixed,flexible',
+            'notes'           => 'nullable|string|max:1000',
+            'details'         => 'required|array|min:1',
+            'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'details.*.time_in'       => 'required|date_format:H:i',
+            'details.*.time_out'      => 'required|date_format:H:i|after:details.*.time_in',
+            'details.*.subject_code'  => 'nullable|string|max:50',
+            'details.*.subject_desc'  => 'nullable|string|max:255',
+            'details.*.room'          => 'nullable|string|max:100',
+            'details.*.hours_required' => 'required|integer|min:1|max:12',
+        ]);
+
+        DB::transaction(function () use ($schedule, $validated) {
+            $schedule->update([
+                'faculty_id'      => $validated['faculty_id'],
+                'schedule_code'   => $validated['schedule_code'],
+                'academic_year'   => $validated['academic_year'],
+                'semester'        => $validated['semester'],
+                'effective_from'  => $validated['effective_from'],
+                'effective_until' => $validated['effective_until'],
+                'status'          => $validated['status'],
+                'schedule_type'   => $validated['schedule_type'],
+                'notes'           => $validated['notes'] ?? null,
+            ]);
+
+            // Delete existing details and recreate
+            $schedule->scheduleDetails()->delete();
+
+            foreach ($validated['details'] as $detail) {
+                $schedule->scheduleDetails()->create([
+                    'day_of_week'    => $detail['day_of_week'],
+                    'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
+                    'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
+                    'subject_code'   => $detail['subject_code'] ?? null,
+                    'subject_desc'   => $detail['subject_desc'] ?? null,
+                    'room'           => $detail['room'] ?? null,
+                    'hours_required' => $detail['hours_required'],
+                ]);
+            }
+        });
+
+        return redirect()->route('admin.schedules.index')
+            ->with('success', 'Schedule updated successfully.');
+    }
+
+    /**
+     * Remove a schedule (soft delete).
+     */
+    public function destroy(Schedule $schedule)
+    {
+        $schedule->scheduleDetails()->delete();
+        $schedule->delete();
+
+        return redirect()->route('admin.schedules.index')
+            ->with('success', 'Schedule deleted successfully.');
+    }
+
+    /**
+     * AJAX endpoint for search suggestions.
+     */
+    public function searchSuggestions(Request $request)
+    {
+        $query = $request->query('q', '');
+
+        if (strlen($query) < 2) {
+            return response()->json([]);
+        }
+
+        $suggestions = Schedule::getSearchSuggestions($query);
+
+        return response()->json($suggestions);
+    }
+}
