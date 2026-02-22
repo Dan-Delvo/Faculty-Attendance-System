@@ -2,9 +2,10 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Pagination from '@/Components/Pagination';
 import ScrollToTop from '@/Components/ScrollToTop';
 import Modal from '@/Components/Modal';
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 /* ──────────────────────────────────────────────
    Constants
@@ -72,7 +73,6 @@ function semesterLabel(val) {
    Main Schedules Management page
    ────────────────────────────────────────────── */
 export default function SchedulesIndex({ schedules, faculties, departments, filters }) {
-    const { flash } = usePage().props;
 
     // ── Pagination & Filters ──
     const [currentPage, setCurrentPage] = useState(schedules.current_page);
@@ -113,15 +113,6 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     const [form, setForm] = useState({ ...defaultForm });
     const [errors, setErrors] = useState({});
     const [processing, setProcessing] = useState(false);
-
-    // ── Success flash ──
-    const [successMsg, setSuccessMsg] = useState(flash?.success ?? '');
-    useEffect(() => {
-        if (successMsg) {
-            const t = setTimeout(() => setSuccessMsg(''), 4000);
-            return () => clearTimeout(t);
-        }
-    }, [successMsg]);
 
     // ── Fetch with filters ──
     const fetchSchedules = useCallback(
@@ -279,6 +270,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             onError: (errs) => {
                 setErrors(errs);
                 setProcessing(false);
+                toast.error('Please fix the errors and try again.');
             },
         });
     };
@@ -295,6 +287,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             onError: (errs) => {
                 setErrors(errs);
                 setProcessing(false);
+                toast.error('Please fix the errors and try again.');
             },
         });
     };
@@ -307,7 +300,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                 setShowDeleteModal(false);
                 setProcessing(false);
             },
-            onError: () => setProcessing(false),
+            onError: () => {
+                setProcessing(false);
+                toast.error('Failed to delete the schedule. Please try again.');
+            },
         });
     };
 
@@ -359,13 +355,6 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     Add Schedule
                 </button>
             </div>
-
-            {/* ── Success Flash ─────────────────────── */}
-            {successMsg && (
-                <div className="mt-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3 text-sm font-medium text-emerald-700 dark:text-emerald-300 animate-fade-in">
-                    {successMsg}
-                </div>
-            )}
 
             {/* ── Filters Bar ────────────────────────── */}
             <div className="mt-6 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-5 shadow-sm">
