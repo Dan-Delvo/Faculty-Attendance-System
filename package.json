@@ -26,6 +26,7 @@
     },
     "dependencies": {
         "jquery": "^4.0.0",
-        "react-loading-indicators": "^1.0.1"
+        "react-loading-indicators": "^1.0.1",
+        "recharts": "^3.7.0"
     }
 }

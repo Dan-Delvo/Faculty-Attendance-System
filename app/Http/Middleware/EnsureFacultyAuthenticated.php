@@ -15,12 +15,12 @@ class EnsureFacultyAuthenticated
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! Auth::guard('web')->check()) {
+        if (!Auth::guard('web')->check()) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Unauthenticated.'], 401);
             }
 
-            return redirect()->route('faculty.login')
+            return redirect()->route('login')
                 ->withErrors(['email' => 'Please log in to access the faculty area.']);
         }
 
