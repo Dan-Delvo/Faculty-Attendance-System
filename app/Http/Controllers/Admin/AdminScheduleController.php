@@ -116,13 +116,25 @@ class AdminScheduleController extends Controller
             'details'         => 'required|array|min:1',
             'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'details.*.time_in'       => 'required|date_format:H:i',
-            'details.*.time_out'      => 'required|date_format:H:i|after:details.*.time_in',
+            'details.*.time_out'      => 'required|date_format:H:i',
             'details.*.subject_code'  => 'nullable|string|max:50',
             'details.*.subject_desc'  => 'nullable|string|max:255',
             'details.*.room'          => 'nullable|string|max:100',
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
+        foreach ($validated['details'] as $index => $detail) {
+            $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
+            $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+
+            if ($timeOut->lessThanOrEqualTo($timeIn)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_out" => 'The time out must be after the time in.',
+                    ])
+                    ->withInput();
+            }
+        }
         DB::transaction(function () use ($schedule, $validated) {
             $schedule->update([
                 'faculty_id'      => $validated['faculty_id'],
