@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Faculty extends Model
 {
@@ -579,6 +580,25 @@ class Faculty extends Model
     }
 
     /**
+     * Subquery: for a given date, return the latest biometric_log row
+     * (biometric_id, log_type, log_datetime) per faculty using MAX(id).
+     *
+     * @return \Illuminate\Database\Query\Builder
+     */
+    private static function latestLogsSubquery(\DateTimeInterface $date): \Illuminate\Database\Query\Builder
+    {
+        $latestLogIds = DB::table('biometric_logs')
+            ->selectRaw('MAX(id) as id')
+            ->whereDate('log_datetime', $date)
+            ->whereNull('deleted_at')
+            ->groupBy('biometric_id');
+
+        return DB::table('biometric_logs as bl')
+            ->select('bl.biometric_id', 'bl.log_type', 'bl.log_datetime')
+            ->whereIn('bl.id', $latestLogIds);
+    }
+
+    /**
      * Count how many faculty are currently timed in today
      * (their latest biometric log today is type IN).
      */
@@ -587,19 +607,9 @@ class Faculty extends Model
         $today = Carbon::today();
 
         return static::where('is_active', true)
-            ->whereHas('biometricLogs', function ($q) use ($today) {
-                $q->whereDate('log_datetime', $today);
-            })
-            ->get()
-            ->filter(function (Faculty $faculty) use ($today) {
-                $latestLog = $faculty->biometricLogs()
-                    ->whereDate('log_datetime', $today)
-                    ->orderBy('log_datetime', 'desc')
-                    ->first();
-
-                return $latestLog && strtoupper($latestLog->log_type) === 'IN';
-            })
-            ->count();
+            ->joinSub(static::latestLogsSubquery($today), 'latest', 'faculties.biometric_id', '=', 'latest.biometric_id')
+            ->whereRaw('UPPER(latest.log_type) = ?', ['IN'])
+            ->count('faculties.id');
     }
 
     /**
@@ -611,32 +621,16 @@ class Faculty extends Model
 
         return static::where('is_active', true)
             ->with('department')
-            ->whereHas('biometricLogs', function ($q) use ($today) {
-                $q->whereDate('log_datetime', $today);
-            })
+            ->joinSub(static::latestLogsSubquery($today), 'latest', 'faculties.biometric_id', '=', 'latest.biometric_id')
+            ->whereRaw('UPPER(latest.log_type) = ?', ['IN'])
+            ->select('faculties.*', 'latest.log_datetime as timed_in_at')
             ->get()
-            ->filter(function (Faculty $faculty) use ($today) {
-                $latestLog = $faculty->biometricLogs()
-                    ->whereDate('log_datetime', $today)
-                    ->orderBy('log_datetime', 'desc')
-                    ->first();
-
-                return $latestLog && strtoupper($latestLog->log_type) === 'IN';
-            })
-            ->map(function (Faculty $faculty) use ($today) {
-                $latestLog = $faculty->biometricLogs()
-                    ->whereDate('log_datetime', $today)
-                    ->orderBy('log_datetime', 'desc')
-                    ->first();
-
-                return [
-                    'id'         => $faculty->id,
-                    'name'       => $faculty->full_name,
-                    'department' => $faculty->department?->name ?? 'N/A',
-                    'timedInAt'  => $latestLog ? Carbon::parse($latestLog->log_datetime)->format('h:i A') : '--:--',
-                ];
-            })
-            ->values()
+            ->map(fn (Faculty $faculty) => [
+                'id'         => $faculty->id,
+                'name'       => $faculty->full_name,
+                'department' => $faculty->department?->name ?? 'N/A',
+                'timedInAt'  => Carbon::parse($faculty->timed_in_at)->format('h:i A'),
+            ])
             ->toArray();
     }
 
@@ -647,36 +641,25 @@ class Faculty extends Model
     {
         $today = Carbon::today();
 
-        $allActive = static::where('is_active', true)
+        return static::where('is_active', true)
             ->with('department')
-            ->get();
-
-        return $allActive->filter(function (Faculty $faculty) use ($today) {
-            $latestLog = $faculty->biometricLogs()
-                ->whereDate('log_datetime', $today)
-                ->orderBy('log_datetime', 'desc')
-                ->first();
-
-            // Not timed-in if no log today OR latest log is OUT
-            return !$latestLog || strtoupper($latestLog->log_type) !== 'IN';
-        })
-        ->map(function (Faculty $faculty) use ($today) {
-            $latestLog = $faculty->biometricLogs()
-                ->whereDate('log_datetime', $today)
-                ->orderBy('log_datetime', 'desc')
-                ->first();
-
-            return [
-                'id'          => $faculty->id,
-                'name'        => $faculty->full_name,
-                'department'  => $faculty->department?->name ?? 'N/A',
-                'lastActivity' => $latestLog
-                    ? Carbon::parse($latestLog->log_datetime)->format('h:i A')
+            ->leftJoinSub(static::latestLogsSubquery($today), 'latest', 'faculties.biometric_id', '=', 'latest.biometric_id')
+            ->where(function ($q) {
+                // Not timed-in if no log today OR latest log is not IN
+                $q->whereNull('latest.biometric_id')
+                  ->orWhereRaw('UPPER(latest.log_type) != ?', ['IN']);
+            })
+            ->select('faculties.*', 'latest.log_datetime as last_activity_at')
+            ->get()
+            ->map(fn (Faculty $faculty) => [
+                'id'           => $faculty->id,
+                'name'         => $faculty->full_name,
+                'department'   => $faculty->department?->name ?? 'N/A',
+                'lastActivity' => $faculty->last_activity_at
+                    ? Carbon::parse($faculty->last_activity_at)->format('h:i A')
                     : 'No activity',
-            ];
-        })
-        ->values()
-        ->toArray();
+            ])
+            ->toArray();
     }
 
     /**
