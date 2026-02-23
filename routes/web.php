@@ -1,17 +1,26 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Models\User;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    // Redirect already-authenticated users to their dashboard
+    if (Auth::guard('admin')->check()) {
+        return redirect()->route('admin.dashboard');
+    }
+
+    if (Auth::guard('web')->check()) {
+        $user = User::findOrFail(Auth::guard('web')->user()->id);
+        return redirect()->route(
+            $user->hasRole('faculty') ? 'faculty.dashboard' : 'dashboard'
+        );
+    }
+
+    return Inertia::render('Welcome');
 });
 
 Route::get('/dashboard', function () {

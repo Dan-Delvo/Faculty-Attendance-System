@@ -3,22 +3,61 @@ import Dropdown from '@/Components/Dropdown';
 import NavLink from '@/Components/NavLink';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink';
 import { Link, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const { auth } = usePage().props;
+    const { auth, flash } = usePage().props;
     const user = auth.user;
     const roles = auth.roles ?? [];
 
     // Determine the correct dashboard route based on user role
     const isFaculty = roles.includes('faculty');
-    const dashboardRoute = isFaculty ? 'faculty.dashboard' : 'dashboard';
-    const dashboardActive = isFaculty
-        ? route().current('faculty.dashboard')
-        : route().current('dashboard');
+    const isAdmin = roles.includes('super_admin') || roles.includes('admin') || roles.includes('hr_staff');
+    const dashboardRoute = isAdmin ? 'admin.dashboard' : (isFaculty ? 'faculty.dashboard' : 'dashboard');
+    const logoutRoute = isAdmin ? 'admin.logout' : 'logout';
+    const dashboardActive = isAdmin
+        ? route().current('admin.dashboard')
+        : (isFaculty
+            ? route().current('faculty.dashboard')
+            : route().current('dashboard'));
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
+
+    // ── Global flash → toast ──────────────────────────────────────────────
+    useEffect(() => {
+        if (flash?.success) toast.success(flash.success);
+        if (flash?.error)   toast.error(flash.error);
+        if (flash?.warning) toast(
+            flash.warning,
+            {
+                icon: '⚠️',
+                style: {
+                    background: '#fffbeb',
+                    color: '#92400e',
+                    border: '1px solid #fde68a',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    fontSize: '0.875rem',
+                },
+            }
+        );
+        if (flash?.info) toast(
+            flash.info,
+            {
+                icon: 'ℹ️',
+                style: {
+                    background: '#eff6ff',
+                    color: '#1e40af',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    fontSize: '0.875rem',
+                },
+            }
+        );
+    }, [flash]);
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans antialiased selection:bg-[#7a1315] selection:text-white transition-colors duration-300">
@@ -58,6 +97,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                             active={route().current('faculty.biometric-logs')}
                                         >
                                             Biometric Logs
+                                        </NavLink>
+                                    </>
+                                )}
+
+                                {isAdmin && (
+                                    <>
+                                        <NavLink
+                                            href={route('admin.schedules.index')}
+                                            active={route().current('admin.schedules.*')}
+                                        >
+                                            Schedules
                                         </NavLink>
                                     </>
                                 )}
@@ -109,7 +159,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         </Dropdown.Link>
                                         <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
                                         <Dropdown.Link
-                                            href={route('logout')}
+                                            href={route(logoutRoute)}
                                             method="post"
                                             as="button"
                                             className="font-medium text-red-600 dark:text-red-400 focus:text-red-800 dark:focus:text-red-300"
@@ -196,6 +246,17 @@ export default function AuthenticatedLayout({ header, children }) {
                                 </ResponsiveNavLink>
                             </>
                         )}
+
+                        {isAdmin && (
+                            <>
+                                <ResponsiveNavLink
+                                    href={route('admin.schedules.index')}
+                                    active={route().current('admin.schedules.*')}
+                                >
+                                    Schedules
+                                </ResponsiveNavLink>
+                            </>
+                        )}
                     </div>
 
                     <div className="border-t border-gray-200 dark:border-gray-800 pb-1 pt-4 bg-gray-50 dark:bg-gray-800/50">
@@ -219,7 +280,7 @@ export default function AuthenticatedLayout({ header, children }) {
                             </ResponsiveNavLink>
                             <ResponsiveNavLink
                                 method="post"
-                                href={route('logout')}
+                                href={route(logoutRoute)}
                                 as="button"
                                 className="!text-red-600 dark:!text-red-400 hover:!bg-red-50 dark:hover:!bg-red-900/20"
                             >
