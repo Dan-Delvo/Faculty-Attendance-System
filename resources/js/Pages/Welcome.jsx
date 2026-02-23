@@ -50,12 +50,6 @@ export default function Welcome({ auth }) {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                                 </svg>
                             </Link>
-                            <Link
-                                href={route('register')}
-                                className="w-full sm:w-auto inline-flex items-center justify-center rounded-full bg-white dark:bg-gray-800 px-8 py-4 text-sm font-bold text-gray-900 dark:text-white shadow-md border border-gray-200 dark:border-gray-700 transition-all hover:bg-gray-50 dark:hover:bg-gray-700 hover:scale-105"
-                            >
-                                Register Account
-                            </Link>
                         </>
                     )}
                 </nav>
