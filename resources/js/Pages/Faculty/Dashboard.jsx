@@ -119,59 +119,53 @@ function StatCard({ stat, index }) {
 }
 
 /* ──────────────────────────────────────────────
-   Schedule row component
+   Schedule Card component
    ────────────────────────────────────────────── */
-function ScheduleRow({ item }) {
+function ScheduleCard({ item }) {
     const isCurrent = item.status === 'ongoing';
 
     return (
         <div
-            className={`group flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border px-5 py-4 transition-all duration-300 ${isCurrent
-                ? 'border-[#7a1315]/30 bg-gradient-to-r from-[#7a1315]/5 to-transparent dark:border-[#cc2127]/30 dark:from-[#cc2127]/10 shadow-md'
-                : 'border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-800'
-                }`}
+            className={`group relative flex flex-col justify-between rounded-xl border p-5 shadow-sm hover:shadow-md transition-all duration-200 ${isCurrent ? 'border-[#7a1315]/30 bg-gradient-to-r from-[#7a1315]/5 to-transparent dark:border-[#cc2127]/30 dark:from-[#cc2127]/10' : 'border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-800 hover:border-blue-200 dark:hover:border-blue-700/50'}`}
         >
-            {/* Time block */}
-            <div className="flex shrink-0 flex-col items-center sm:items-start min-w-[110px]">
-                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                    {item.startTime}
-                </span>
-                <span className="text-xs text-gray-400 dark:text-gray-500">
-                    to {item.endTime}
-                </span>
-            </div>
-
-            {/* Vertical divider (desktop) */}
-            <div
-                className={`hidden sm:block h-10 w-px ${isCurrent
-                    ? 'bg-gradient-to-b from-[#7a1315] to-[#cc2127]'
-                    : 'bg-gray-200 dark:bg-gray-700'
-                    }`}
-            />
-
-            {/* Subject info */}
-            <div className="flex-1 min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                    {item.subject}
-                </p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                    <span>{item.code}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>{item.section}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span className="flex items-center gap-1">
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                        </svg>
-                        {item.room}
-                    </span>
+            {/* Top Section: Subject & Status */}
+            <div className="flex justify-between items-start mb-4">
+                <div className="flex gap-3">
+                    <div className={`mt-1 h-3 w-3 shrink-0 rounded-full bg-gradient-to-r ${isCurrent ? 'from-amber-400 to-amber-600' : 'from-blue-400 to-blue-600'} shadow-sm`} />
+                    <div>
+                        <h4 className="font-bold text-gray-900 dark:text-white leading-tight pr-2">
+                            {item.subject}
+                        </h4>
+                        <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                            <span>{item.code}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span>{item.section}</span>
+                        </p>
+                    </div>
+                </div>
+                <div className="shrink-0 ml-2">
+                    <StatusBadge status={item.status} />
                 </div>
             </div>
 
-            {/* Status */}
-            <div className="shrink-0">
-                <StatusBadge status={item.status} />
+            {/* Bottom Section: Time & Room */}
+            <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+                <div>
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-white">
+                        <svg className="h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        {item.startTime} - {item.endTime}
+                    </div>
+                </div>
+
+                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600/50 text-xs font-semibold text-gray-600 dark:text-gray-300 shadow-sm">
+                    <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                    </svg>
+                    {item.room}
+                </div>
             </div>
         </div>
     );
@@ -574,9 +568,9 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                 </div>
 
                 {todaySchedule.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {todaySchedule.map((item) => (
-                            <ScheduleRow key={item.id} item={item} />
+                            <ScheduleCard key={item.id} item={item} />
                         ))}
                     </div>
                 ) : (
