@@ -200,18 +200,18 @@ class Faculty extends Model
         $now = Carbon::now();
         $todayName = $now->format('l');
 
-        // Get the active schedule for this faculty
-        $activeSchedule = $this->schedules()
+        // Get the active schedules for this faculty
+        $activeSchedules = $this->schedules()
             ->where('status', 'active')
             ->where('effective_from', '<=', $now)
             ->where('effective_until', '>=', $now)
-            ->first();
+            ->pluck('id');
 
-        if (!$activeSchedule) {
+        if ($activeSchedules->isEmpty()) {
             return [];
         }
 
-        $details = ScheduleDetail::where('schedule_id', $activeSchedule->id)
+        $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
             ->where('day_of_week', $todayName)
             ->orderBy('time_in')
             ->get();
@@ -267,19 +267,32 @@ class Faculty extends Model
         }
 
         // We need the schedule to determine "on-time" vs "late" vs "early-out"
-        $activeSchedule = $this->schedules()
+        $activeSchedules = $this->schedules()
             ->where('status', 'active')
-            ->first();
+            ->pluck('id');
 
         // Build a lookup: day_of_week => [time_in, time_out] from schedule details
         $scheduleLookup = [];
-        if ($activeSchedule) {
-            $details = ScheduleDetail::where('schedule_id', $activeSchedule->id)->get();
+        if ($activeSchedules->isNotEmpty()) {
+            $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)->get();
             foreach ($details as $detail) {
-                $scheduleLookup[$detail->day_of_week] = [
-                    'time_in' => Carbon::parse($detail->time_in)->format('H:i'),
-                    'time_out' => Carbon::parse($detail->time_out)->format('H:i'),
-                ];
+                $day = $detail->day_of_week;
+                $tIn = Carbon::parse($detail->time_in)->format('H:i');
+                $tOut = Carbon::parse($detail->time_out)->format('H:i');
+
+                if (!isset($scheduleLookup[$day])) {
+                    $scheduleLookup[$day] = [
+                        'time_in' => $tIn,
+                        'time_out' => $tOut,
+                    ];
+                } else {
+                    if ($tIn < $scheduleLookup[$day]['time_in']) {
+                        $scheduleLookup[$day]['time_in'] = $tIn;
+                    }
+                    if ($tOut > $scheduleLookup[$day]['time_out']) {
+                        $scheduleLookup[$day]['time_out'] = $tOut;
+                    }
+                }
             }
         }
 
@@ -438,17 +451,17 @@ class Faculty extends Model
     {
         $now = Carbon::now();
 
-        $activeSchedule = $this->schedules()
+        $activeSchedules = $this->schedules()
             ->where('status', 'active')
             ->where('effective_from', '<=', $now)
             ->where('effective_until', '>=', $now)
-            ->first();
+            ->pluck('id');
 
-        if (!$activeSchedule) {
+        if ($activeSchedules->isEmpty()) {
             return [];
         }
 
-        $details = ScheduleDetail::where('schedule_id', $activeSchedule->id)
+        $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
             ->orderBy('time_in')
             ->get();
@@ -549,7 +562,7 @@ class Faculty extends Model
             [
                 'label' => 'Total Faculty',
                 'value' => (string) $totalFaculty,
-                'unit'  => '',
+                'unit' => '',
                 'change' => $totalFaculty > 0 ? 'Active members' : 'No faculty yet',
                 'changeType' => 'neutral',
                 'icon' => 'users',
@@ -557,7 +570,7 @@ class Faculty extends Model
             [
                 'label' => 'Currently Timed In',
                 'value' => (string) $timedInCount,
-                'unit'  => '',
+                'unit' => '',
                 'change' => $timedInCount > 0 ? 'Faculty on campus' : 'No one timed in',
                 'changeType' => $timedInCount > 0 ? 'positive' : 'neutral',
                 'icon' => 'login',
@@ -565,7 +578,7 @@ class Faculty extends Model
             [
                 'label' => 'Currently Timed Out',
                 'value' => (string) $timedOutCount,
-                'unit'  => '',
+                'unit' => '',
                 'change' => $timedOutCount > 0 ? 'Off campus' : 'All timed in',
                 'changeType' => 'neutral',
                 'icon' => 'logout',
@@ -573,7 +586,7 @@ class Faculty extends Model
             [
                 'label' => 'Avg Hours / Month',
                 'value' => (string) round($avgHours ?? 0, 1),
-                'unit'  => 'hrs',
+                'unit' => 'hrs',
                 'change' => "{$prefix}{$diff} from last month",
                 'changeType' => $diff >= 0 ? 'positive' : 'negative',
                 'icon' => 'chart',
@@ -627,11 +640,11 @@ class Faculty extends Model
             ->whereRaw('UPPER(latest.log_type) = ?', ['IN'])
             ->select('faculties.*', 'latest.log_datetime as timed_in_at')
             ->get()
-            ->map(fn (Faculty $faculty) => [
-                'id'         => $faculty->id,
-                'name'       => $faculty->full_name,
+            ->map(fn(Faculty $faculty) => [
+                'id' => $faculty->id,
+                'name' => $faculty->full_name,
                 'department' => $faculty->department?->name ?? 'N/A',
-                'timedInAt'  => Carbon::parse($faculty->timed_in_at)->format('h:i A'),
+                'timedInAt' => Carbon::parse($faculty->timed_in_at)->format('h:i A'),
             ])
             ->toArray();
     }
@@ -649,14 +662,14 @@ class Faculty extends Model
             ->where(function ($q) {
                 // Not timed-in if no log today OR latest log is not IN
                 $q->whereNull('latest.biometric_id')
-                  ->orWhereRaw('UPPER(latest.log_type) != ?', ['IN']);
+                    ->orWhereRaw('UPPER(latest.log_type) != ?', ['IN']);
             })
             ->select('faculties.*', 'latest.log_datetime as last_activity_at')
             ->get()
-            ->map(fn (Faculty $faculty) => [
-                'id'           => $faculty->id,
-                'name'         => $faculty->full_name,
-                'department'   => $faculty->department?->name ?? 'N/A',
+            ->map(fn(Faculty $faculty) => [
+                'id' => $faculty->id,
+                'name' => $faculty->full_name,
+                'department' => $faculty->department?->name ?? 'N/A',
                 'lastActivity' => $faculty->last_activity_at
                     ? Carbon::parse($faculty->last_activity_at)->format('h:i A')
                     : 'No activity',
@@ -687,11 +700,11 @@ class Faculty extends Model
                 ->count('biometric_id');
 
             $graph[] = [
-                'day'      => $day,
+                'day' => $day,
                 'shortDay' => substr($day, 0, 3),
-                'count'    => $count,
-                'date'     => $date->format('M d'),
-                'isToday'  => $date->isToday(),
+                'count' => $count,
+                'date' => $date->format('M d'),
+                'isToday' => $date->isToday(),
             ];
         }
 
@@ -709,8 +722,8 @@ class Faculty extends Model
             ->orderBy('first_name')
             ->get()
             ->map(fn(Faculty $f) => [
-                'id'         => $f->id,
-                'name'       => $f->full_name,
+                'id' => $f->id,
+                'name' => $f->full_name,
                 'department' => $f->department?->name ?? 'N/A',
             ])
             ->toArray();

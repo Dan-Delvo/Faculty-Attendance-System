@@ -111,14 +111,12 @@ class FacultyController extends Controller
         if (!$faculty) {
             return Inertia::render('Faculty/Schedule', [
                 'weeklySchedule' => [],
-                'attendanceRecords' => [],
                 'facultyName' => '',
             ]);
         }
 
         return Inertia::render('Faculty/Schedule', [
             'weeklySchedule' => $faculty->getWeeklySchedule(),
-            'attendanceRecords' => $faculty->getRecentAttendance(20),
             'facultyName' => $faculty->full_name,
         ]);
     }
