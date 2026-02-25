@@ -61,11 +61,15 @@ export default function Pagination({
     onPerPageChange,
     perPageOptions = [5, 10, 25, 50],
     className = '',
+    // Optional Date Range Filter
+    showDateRange = false,
+    dateRange = { start: '', end: '' },
+    onDateRangeChange = () => { },
 }) {
     const totalPages = Math.ceil(totalItems / perPage);
-    if (totalItems === 0) return null;
+    if (totalItems === 0 && !showDateRange) return null; // If empty and not forcing display for filter, hide. If filtering, still show so they can reset filter.
 
-    const from = (currentPage - 1) * perPage + 1;
+    const from = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
     const to = Math.min(currentPage * perPage, totalItems);
 
     const pages = buildPageRange(currentPage, totalPages);
@@ -80,29 +84,50 @@ export default function Pagination({
 
     return (
         <div className={`mt-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-4 ${className}`}>
-            {/* ── Left: Entries dropdown + info ── */}
-            <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span className="font-medium">Show</span>
-                    <select
-                        id="pagination-per-page"
-                        value={perPage}
-                        onChange={(e) => onPerPageChange(Number(e.target.value))}
-                        className="appearance-none rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-1.5 pr-7 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm outline-none focus:ring-2 focus:ring-gray-900/20 dark:focus:ring-white/20 transition-all cursor-pointer"
-                    >
-                        {perPageOptions.map((opt) => (
-                            <option key={opt} value={opt}>
-                                {opt}
-                            </option>
-                        ))}
-                    </select>
-                    <span className="font-medium">entries</span>
-                </label>
+            {/* ── Left: Entries dropdown + info + (Optional Date Range) ── */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="font-medium">Show</span>
+                        <select
+                            id="pagination-per-page"
+                            value={perPage}
+                            onChange={(e) => onPerPageChange(Number(e.target.value))}
+                            className="appearance-none rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-1.5 pr-7 text-xs font-semibold text-gray-700 dark:text-gray-200 shadow-sm outline-none focus:ring-2 focus:ring-gray-900/20 dark:focus:ring-white/20 transition-all cursor-pointer"
+                        >
+                            {perPageOptions.map((opt) => (
+                                <option key={opt} value={opt}>
+                                    {opt}
+                                </option>
+                            ))}
+                        </select>
+                        <span className="font-medium">entries</span>
+                    </label>
 
-                <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">
-                    Showing <span className="font-semibold text-gray-600 dark:text-gray-300">{from}–{to}</span> of{' '}
-                    <span className="font-semibold text-gray-600 dark:text-gray-300">{totalItems}</span>
-                </span>
+                    <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">
+                        Showing <span className="font-semibold text-gray-600 dark:text-gray-300">{from}–{to}</span> of{' '}
+                        <span className="font-semibold text-gray-600 dark:text-gray-300">{totalItems}</span>
+                    </span>
+                </div>
+
+                {/* Optional Date Range Search */}
+                {showDateRange && (
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={dateRange.start}
+                            onChange={(e) => onDateRangeChange({ ...dateRange, start: e.target.value })}
+                            className="form-input-sm !w-auto [color-scheme:light] dark:[color-scheme:dark]"
+                        />
+                        <span className="text-gray-400 dark:text-gray-500 text-xs font-bold px-1">to</span>
+                        <input
+                            type="date"
+                            value={dateRange.end}
+                            onChange={(e) => onDateRangeChange({ ...dateRange, end: e.target.value })}
+                            className="form-input-sm !w-auto [color-scheme:light] dark:[color-scheme:dark]"
+                        />
+                    </div>
+                )}
             </div>
 
             {/* ── Right: Page buttons ── */}

@@ -28,7 +28,7 @@ export default function AuthenticatedLayout({ header, children }) {
     // ── Global flash → toast ──────────────────────────────────────────────
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
-        if (flash?.error)   toast.error(flash.error);
+        if (flash?.error) toast.error(flash.error);
         if (flash?.warning) toast(
             flash.warning,
             {
@@ -97,6 +97,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                             active={route().current('faculty.biometric-logs')}
                                         >
                                             Biometric Logs
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('faculty.attendance')}
+                                            active={route().current('faculty.attendance')}
+                                        >
+                                            Attendance
                                         </NavLink>
                                     </>
                                 )}

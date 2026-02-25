@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Faculty;
+use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,7 +15,7 @@ class FacultyController extends Controller
      *
      * The controller stays thin — all data logic lives in the Faculty model.
      */
-    public function index(Request $request)
+    public function index(Request $request, AttendanceReconciliationService $service)
     {
         /** @var Faculty|null $faculty */
         $faculty = $request->user()->faculty;
@@ -24,6 +25,7 @@ class FacultyController extends Controller
             return Inertia::render('Faculty/Dashboard', [
                 'stats' => [],
                 'todaySchedule' => [],
+                'recentAttendance' => [],
                 'biometricLogs' => [],
                 'checkInTrend' => [],
                 'monthlyAverages' => ['avgCheckIn' => '--:--', 'avgCheckOut' => '--:--'],
@@ -51,9 +53,35 @@ class FacultyController extends Controller
                 break;
         }
 
+        // Fetch the 20 most recent actual attendance records
+        $recentAttendance = [];
+        $earliestLog = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
+            ->orderBy('log_datetime', 'asc')
+            ->first();
+
+        $startDate = $earliestLog ? Carbon::parse($earliestLog->log_datetime)->startOfDay() : Carbon::today()->subDays(60);
+        $endDate = Carbon::today();
+
+        for ($date = $endDate->copy(); $date->greaterThanOrEqualTo($startDate); $date->subDay()) {
+            if (count($recentAttendance) >= 20)
+                break;
+
+            $targetDate = $date->toDateString();
+            $statusData = $service->getDailyAttendanceStatus($faculty, $targetDate);
+
+            if ($statusData['status'] !== 'No Schedule') {
+                $recentAttendance[] = array_merge([
+                    'date' => Carbon::parse($targetDate)->format('M d, Y'),
+                    'raw_date' => $targetDate,
+                    'dayOfWeek' => Carbon::parse($targetDate)->format('l'),
+                ], $statusData);
+            }
+        }
+
         return Inertia::render('Faculty/Dashboard', [
             'stats' => $faculty->getDashboardStats(),
             'todaySchedule' => $faculty->getTodayScheduleDetails(),
+            'recentAttendance' => $recentAttendance,
             'biometricLogs' => $faculty->getFormattedBiometricLogs(),
             'checkInTrend' => $faculty->getCheckInTrend($months),
             'monthlyAverages' => $faculty->getMonthlyAverages(),
@@ -118,6 +146,44 @@ class FacultyController extends Controller
         return Inertia::render('Faculty/Schedule', [
             'weeklySchedule' => $faculty->getWeeklySchedule(),
             'facultyName' => $faculty->full_name,
+        ]);
+    }
+
+    /**
+     * Display the new matched attendance page.
+     * Evaluates attendance records dynamically using the service.
+     */
+    public function attendance(Request $request, AttendanceReconciliationService $service)
+    {
+        $faculty = $request->user()->faculty;
+
+        $attendanceLogs = [];
+        if ($faculty) {
+            $earliestLog = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
+                ->orderBy('log_datetime', 'asc')
+                ->first();
+
+            $startDate = $earliestLog ? Carbon::parse($earliestLog->log_datetime)->startOfDay() : Carbon::today()->subDays(30);
+            $endDate = Carbon::today();
+
+            for ($date = $endDate->copy(); $date->greaterThanOrEqualTo($startDate); $date->subDay()) {
+                $targetDate = $date->toDateString();
+
+                // Fetch status
+                $statusData = $service->getDailyAttendanceStatus($faculty, $targetDate);
+
+                if ($statusData['status'] !== 'No Schedule') {
+                    $attendanceLogs[] = array_merge([
+                        'date' => Carbon::parse($targetDate)->format('M d, Y'),
+                        'raw_date' => $targetDate,
+                        'dayOfWeek' => Carbon::parse($targetDate)->format('l'),
+                    ], $statusData);
+                }
+            }
+        }
+
+        return Inertia::render('Faculty/Attendance', [
+            'attendanceLogs' => $attendanceLogs,
         ]);
     }
 

@@ -210,12 +210,18 @@ function ChartTooltip({ active, payload, label }) {
 /* ──────────────────────────────────────────────
    Main Faculty Dashboard page
    ────────────────────────────────────────────── */
-export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, checkInTrend, monthlyAverages, currentDate, greeting, filters }) {
+export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, checkInTrend, monthlyAverages, currentDate, greeting, filters, recentAttendance }) {
     const { auth } = usePage().props;
-    const userName = auth.user.username ?? auth.user.email.split('@')[0];
+
+    //Faculty Fullname
+    const userName = auth.faculty ? `${auth.faculty.first_name} ${auth.faculty.last_name}` : 'Faculty Member';
 
     const [selectedRange, setSelectedRange] = useState(filters?.range ?? 'Last 6 months');
     const [isReloading, setIsReloading] = useState(false);
+
+    // Recent Attendance Pagination state
+    const [attendancePage, setAttendancePage] = useState(1);
+    const [attendancePerPage, setAttendancePerPage] = useState(5);
 
     // Internal state for metrics that update via AJAX
     const [trendData, setTrendData] = useState(checkInTrend);
@@ -587,6 +593,90 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                     </div>
                 )}
             </section>
+
+            {/* ── Recent Attendance Match ────────────────────── */}
+            {recentAttendance && recentAttendance.length > 0 && (
+                <section className="mt-10">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                                Recent Attendance Status
+                            </h2>
+                            <span className="hidden sm:inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                                Latest 20 matches
+                            </span>
+                        </div>
+                        <Link
+                            href={route('faculty.attendance')}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                        >
+                            View full history
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                            </svg>
+                        </Link>
+                    </div>
+
+                    <div className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-6 shadow-sm flex flex-col">
+                        <div className="flex-1 space-y-3">
+                            {recentAttendance.slice((attendancePage - 1) * attendancePerPage, attendancePage * attendancePerPage).map((log, index) => {
+                                const statusColor = log.status === 'Present' || log.status === 'On-time' ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/40 ring-emerald-600/20' :
+                                    log.status.includes('Late') ? 'text-amber-700 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/40 ring-amber-600/20' :
+                                        'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/40 ring-red-600/20';
+
+                                return (
+                                    <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 p-4 transition-colors hover:bg-gray-100/80 dark:hover:bg-gray-700/40 group">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-inner ${statusColor.split(' ring-')[0]}`}>
+                                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-bold text-gray-900 dark:text-white transition-colors group-hover:text-[#7a1315] dark:group-hover:text-red-400">
+                                                        {log.date}
+                                                    </h4>
+                                                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${statusColor}`}>
+                                                        {log.status}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    {log.dayOfWeek} • Rendered: {log.total_hours}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-6 sm:ml-auto">
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Schedule</p>
+                                                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{log.expected_time_in} - {log.expected_time_out}</p>
+                                            </div>
+                                            <div className="h-6 w-px bg-gray-200 dark:bg-gray-700/80 hidden sm:block"></div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Actual</p>
+                                                <p className={`text-xs font-bold transition-colors ${log.late_minutes > 0 || log.undertime_minutes > 0 ? 'text-amber-600 dark:text-amber-400 group-hover:text-red-500' : 'text-gray-900 dark:text-white'}`}>
+                                                    {log.actual_time_in} - {log.actual_time_out}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <Pagination
+                            currentPage={attendancePage}
+                            totalItems={recentAttendance.length}
+                            perPage={attendancePerPage}
+                            onPageChange={setAttendancePage}
+                            onPerPageChange={setAttendancePerPage}
+                            showDateRange={false}
+                            className="mt-4 pt-1"
+                        />
+                    </div>
+                </section>
+            )}
             <ScrollToTop />
         </AuthenticatedLayout>
     );

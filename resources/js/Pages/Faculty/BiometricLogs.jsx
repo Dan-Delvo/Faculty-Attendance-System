@@ -14,10 +14,31 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
     const [perPage, setPerPage] = useState(10);
     const [page, setPage] = useState(1);
     const [filter, setFilter] = useState('all'); // 'all' | 'check-in' | 'check-out'
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-    const filteredLogs = filter === 'all'
-        ? biometricLogs
-        : biometricLogs.filter((log) => log.type === filter);
+    const filteredLogs = biometricLogs.filter((log) => {
+        // Option text filter
+        if (filter !== 'all' && log.type !== filter) return false;
+
+        // Date range filter
+        if (!dateRange.start && !dateRange.end) return true;
+
+        let valid = true;
+
+        // Ensure log date string (like "Feb 23, 2026") formats successfully into timestamp
+        const logDate = new Date(log.date).getTime();
+
+        if (dateRange.start) {
+            const start = new Date(dateRange.start).getTime();
+            if (logDate < start) valid = false;
+        }
+        if (dateRange.end) {
+            const end = new Date(dateRange.end).getTime();
+            if (logDate > end) valid = false;
+        }
+
+        return valid;
+    });
 
     const totalPages = Math.ceil(filteredLogs.length / perPage);
     const paginatedLogs = filteredLogs.slice(
@@ -104,6 +125,12 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
                 perPage={perPage}
                 onPageChange={setPage}
                 onPerPageChange={handlePerPageChange}
+                showDateRange={true}
+                dateRange={dateRange}
+                onDateRangeChange={(newRange) => {
+                    setDateRange(newRange);
+                    setCurrentPage(1);
+                }}
                 className="mb-0"
             />
 
@@ -182,6 +209,13 @@ export default function BiometricLogs({ biometricLogs, monthlyAverages }) {
                 perPage={perPage}
                 onPageChange={setPage}
                 onPerPageChange={handlePerPageChange}
+                showDateRange={true}
+                dateRange={dateRange}
+                onDateRangeChange={(newRange) => {
+                    setDateRange(newRange);
+                    setCurrentPage(1);
+                }}
+                className="mb-0"
             />
 
             <ScrollToTop />
