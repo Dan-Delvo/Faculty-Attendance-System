@@ -61,15 +61,15 @@ export default function Schedule({ weeklySchedule, facultyName }) {
 
 
             {/* ── Weekly Schedule ─────────────────────── */}
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
                 {weeklySchedule.length > 0 ? (
                     weeklySchedule.map((dayData) => (
                         <div
                             key={dayData.day}
-                            className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden"
+                            className="flex flex-col h-full rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden"
                         >
                             {/* Day header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/30 dark:bg-gray-800/50">
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/30 dark:bg-gray-800/50">
                                 <div className="flex items-center gap-4">
                                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${DAY_COLORS[dayData.shortDay] ?? 'from-gray-400 to-gray-500'} text-white font-bold text-sm shadow-sm`}>
                                         {dayData.shortDay}
@@ -81,62 +81,61 @@ export default function Schedule({ weeklySchedule, facultyName }) {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 ring-1 ring-inset ring-zinc-500/10 dark:bg-zinc-400/10 dark:text-zinc-400 dark:ring-zinc-400/30">
-                                        Total: {dayData.classes.reduce((s, c) => s + c.hours, 0)} hours
-                                    </span>
-                                </div>
                             </div>
 
                             {/* Classes Cards */}
-                            <div className="p-4 sm:p-6 bg-gray-50/10 dark:bg-gray-800/20">
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {dayData.classes.map((cls) => (
-                                        <div
-                                            key={cls.id}
-                                            className="group relative flex flex-col justify-between rounded-xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-800 p-5 shadow-sm hover:shadow-md hover:border-blue-200 dark:hover:border-blue-700/50 transition-all duration-200"
-                                        >
-                                            {/* Top Section: Subject & Room */}
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex gap-3">
-                                                    <div className={`mt-1 h-3 w-3 shrink-0 rounded-full bg-gradient-to-r ${DAY_COLORS[dayData.shortDay] ?? 'from-gray-400 to-gray-500'} shadow-sm`} />
-                                                    <div>
-                                                        <h4 className="font-bold text-gray-900 dark:text-white leading-tight pr-2">
-                                                            {cls.subject}
-                                                        </h4>
-                                                        <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                                                            {cls.code}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                            </div>
-
-                                            {/* Bottom Section: Time & Duration */}
-                                            <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+                            <div className="p-4 bg-gray-50/10 dark:bg-gray-800/20 flex-1 flex flex-col gap-4">
+                                {dayData.classes.map((cls) => (
+                                    <div
+                                        key={cls.id}
+                                        className="group relative flex flex-col justify-between rounded-xl border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-800 p-4 shadow-sm hover:shadow-md hover:border-blue-200 dark:hover:border-blue-700/50 transition-all duration-200"
+                                    >
+                                        {/* Top Section: Subject & Room */}
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex gap-2.5">
+                                                <div className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-gradient-to-r ${DAY_COLORS[dayData.shortDay] ?? 'from-gray-400 to-gray-500'} shadow-sm`} />
                                                 <div>
-                                                    <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-white">
-                                                        <svg className="h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                                        </svg>
-                                                        {cls.startTime} - {cls.endTime}
-                                                    </div>
-                                                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 ml-5.5">
-                                                        {cls.hours} {cls.hours === 1 ? 'hr' : 'hrs'}
-                                                    </div>
-                                                </div>
-
-                                                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600/50 text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                                    <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-                                                    </svg>
-                                                    {cls.room}
+                                                    <h4 className="font-bold text-gray-900 dark:text-white leading-tight">
+                                                        {cls.subject}
+                                                    </h4>
+                                                    <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                        {cls.code}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
+
+                                        {/* Bottom Section: Time & Duration */}
+                                        <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700/50 flex flex-col gap-2.5">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900 dark:text-white">
+                                                    <svg className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                    </svg>
+                                                    {cls.startTime} - {cls.endTime}
+                                                </div>
+                                                <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                    {cls.hours} {cls.hours === 1 ? 'hr' : 'hrs'}
+                                                </div>
+                                            </div>
+
+                                            <div className="inline-flex w-fit items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-600/50 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                                <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                                </svg>
+                                                {cls.room}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Day Footer */}
+                            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/80 text-right">
+                                <span className="inline-flex items-center rounded-md bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600 ring-1 ring-inset ring-zinc-500/10 dark:bg-zinc-400/10 dark:text-zinc-400 dark:ring-zinc-400/30">
+                                    Total: {dayData.classes.reduce((s, c) => s + c.hours, 0)} {dayData.classes.reduce((s, c) => s + c.hours, 0) === 1 ? 'hour' : 'hours'}
+                                </span>
                             </div>
                         </div>
                     ))

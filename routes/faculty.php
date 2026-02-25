@@ -8,6 +8,7 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/api/analytics', [FacultyController::class, 'getAnalyticsData'])->name('faculty.api.analytics');
     Route::get('/faculty/biometric-logs', [FacultyController::class, 'biometricLogs'])->name('faculty.biometric-logs');
     Route::get('/faculty/schedule', [FacultyController::class, 'schedule'])->name('faculty.schedule');
+    Route::get('/faculty/attendance', [FacultyController::class, 'attendance'])->name('faculty.attendance');
 });
 
 /*
