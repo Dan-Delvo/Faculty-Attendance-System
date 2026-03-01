@@ -67,9 +67,28 @@ class AdminScheduleController extends Controller
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
+        $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
+        $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
+
         foreach ($validated['details'] as $index => $detail) {
             $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
             $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+
+            if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_in" => 'The time in must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
+
+            if ($timeOut->lessThan($minAllowedTime) || $timeOut->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_out" => 'The time out must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
 
             if ($timeOut->lessThanOrEqualTo($timeIn)) {
                 return back()
@@ -78,6 +97,13 @@ class AdminScheduleController extends Controller
                     ])
                     ->withInput();
             }
+        }
+
+        $businessRuleErrors = $this->validateScheduleBusinessRules($validated);
+        if (! empty($businessRuleErrors)) {
+            return back()
+                ->withErrors($businessRuleErrors)
+                ->withInput();
         }
 
         try {
@@ -141,9 +167,28 @@ class AdminScheduleController extends Controller
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
+        $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
+        $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
+
         foreach ($validated['details'] as $index => $detail) {
             $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
             $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+
+            if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_in" => 'The time in must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
+
+            if ($timeOut->lessThan($minAllowedTime) || $timeOut->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_out" => 'The time out must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
 
             if ($timeOut->lessThanOrEqualTo($timeIn)) {
                 return back()
@@ -153,6 +198,14 @@ class AdminScheduleController extends Controller
                     ->withInput();
             }
         }
+
+        $businessRuleErrors = $this->validateScheduleBusinessRules($validated, $schedule);
+        if (! empty($businessRuleErrors)) {
+            return back()
+                ->withErrors($businessRuleErrors)
+                ->withInput();
+        }
+
         try {
             DB::transaction(function () use ($schedule, $validated) {
                 $schedule->update([
@@ -222,5 +275,85 @@ class AdminScheduleController extends Controller
         $suggestions = Schedule::getSearchSuggestions($query);
 
         return response()->json($suggestions);
+    }
+
+    private function validateScheduleBusinessRules(array $validated, ?Schedule $currentSchedule = null): array
+    {
+        $errors = [];
+
+        $duplicateScheduleQuery = Schedule::query()
+            ->where('faculty_id', $validated['faculty_id'])
+            ->where('academic_year', $validated['academic_year'])
+            ->where('semester', $validated['semester']);
+
+        if ($currentSchedule) {
+            $duplicateScheduleQuery->where('id', '!=', $currentSchedule->id);
+        }
+
+        if ($duplicateScheduleQuery->exists()) {
+            $errors['faculty_id'] = 'A schedule already exists for this faculty member in the selected academic year and semester.';
+        }
+
+        $detailCount = count($validated['details']);
+
+        for ($i = 0; $i < $detailCount; $i++) {
+            $currentDetail = $validated['details'][$i];
+            $currentRoom = trim((string) ($currentDetail['room'] ?? ''));
+
+            if ($currentRoom === '') {
+                continue;
+            }
+
+            $currentStart = Carbon::createFromFormat('H:i', $currentDetail['time_in'])->format('H:i:s');
+            $currentEnd = Carbon::createFromFormat('H:i', $currentDetail['time_out'])->format('H:i:s');
+
+            for ($j = $i + 1; $j < $detailCount; $j++) {
+                $compareDetail = $validated['details'][$j];
+                $compareRoom = trim((string) ($compareDetail['room'] ?? ''));
+
+                if ($compareRoom === '' || strcasecmp($currentRoom, $compareRoom) !== 0) {
+                    continue;
+                }
+
+                if ($currentDetail['day_of_week'] !== $compareDetail['day_of_week']) {
+                    continue;
+                }
+
+                $compareStart = Carbon::createFromFormat('H:i', $compareDetail['time_in'])->format('H:i:s');
+                $compareEnd = Carbon::createFromFormat('H:i', $compareDetail['time_out'])->format('H:i:s');
+
+                if ($currentStart < $compareEnd && $currentEnd > $compareStart) {
+                    $errors["details.$i.room"] = "Room {$currentRoom} has a conflict with entry #" . ($j + 1) . ' on ' . $currentDetail['day_of_week'] . '.';
+                    $errors["details.$j.room"] = "Room {$compareRoom} has a conflict with entry #" . ($i + 1) . ' on ' . $compareDetail['day_of_week'] . '.';
+                }
+            }
+
+            if (isset($errors["details.$i.room"])) {
+                continue;
+            }
+
+            $roomConflictQuery = ScheduleDetail::query()
+                ->where('day_of_week', $currentDetail['day_of_week'])
+                ->whereNotNull('room')
+                ->whereRaw('LOWER(TRIM(room)) = ?', [mb_strtolower($currentRoom)])
+                ->whereRaw('TIME(time_in) < ? AND TIME(time_out) > ?', [$currentEnd, $currentStart])
+                ->whereHas('schedule', function ($query) use ($validated, $currentSchedule) {
+                    $query->whereDate('effective_from', '<=', $validated['effective_until'])
+                        ->whereDate('effective_until', '>=', $validated['effective_from']);
+
+                    if ($currentSchedule) {
+                        $query->where('id', '!=', $currentSchedule->id);
+                    }
+                })
+                ->with('schedule')
+                ->first();
+
+            if ($roomConflictQuery) {
+                $conflictingScheduleCode = $roomConflictQuery->schedule?->schedule_code ?? 'another schedule';
+                $errors["details.$i.room"] = "Room {$currentRoom} is already occupied on {$currentDetail['day_of_week']} for the selected time range (conflict with {$conflictingScheduleCode}).";
+            }
+        }
+
+        return $errors;
     }
 }
