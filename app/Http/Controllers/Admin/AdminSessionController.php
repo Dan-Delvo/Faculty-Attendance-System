@@ -26,7 +26,8 @@ class AdminSessionController extends Controller
         }
 
         return Inertia::render('Admin/Login', [
-            'status' => session('status'),
+            'status'           => session('status'),
+            'canResetPassword' => true,
         ]);
     }
 
@@ -92,6 +93,6 @@ class AdminSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('admin.login');
+        return redirect('/');
     }
 }
