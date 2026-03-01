@@ -209,6 +209,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                         >
                                             Holidays
                                         </NavLink>
+
+                                        <NavLink
+                                            href={route('admin.attendance-imports.index')}
+                                            active={route().current('admin.attendance-imports.*')}
+                                        >
+                                            Attendance Imports
+                                        </NavLink>
                                     </>
                                 )}
                             </div>
@@ -451,6 +458,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                     active={route().current('admin.holidays.*')}
                                 >
                                     Holidays
+                                </ResponsiveNavLink>
+
+                                <ResponsiveNavLink
+                                    href={route('admin.attendance-imports.index')}
+                                    active={route().current('admin.attendance-imports.*')}
+                                >
+                                    Attendance Imports
                                 </ResponsiveNavLink>
                             </>
                         )}

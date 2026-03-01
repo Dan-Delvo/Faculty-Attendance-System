@@ -63,9 +63,6 @@ class AttendanceReconciliationService
                 'online_attendance'  => false,
             ];
         }
-
-        // 1. RETRIEVE ACTIVE SCHEDULE FOR THIS DAY
-        $activeSchedules = $faculty->schedules()
         // ── 1. RESOLVE EXPECTED SCHEDULE FOR THIS DAY ────────────────────
 
         $activeScheduleIds = $faculty->schedules()
