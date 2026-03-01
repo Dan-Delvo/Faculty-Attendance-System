@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminHolidayController;
+use App\Http\Controllers\Admin\AdminAttendanceImportController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
@@ -85,4 +86,14 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::delete('/holidays/{holiday}', [AdminHolidayController::class, 'destroy'])
         ->name('admin.holidays.destroy');
+
+    // ── Attendance Log Import ─────────────────────────────────────────────
+    Route::get('/attendance-imports', [AdminAttendanceImportController::class, 'index'])
+        ->name('admin.attendance-imports.index');
+
+    Route::post('/attendance-imports', [AdminAttendanceImportController::class, 'store'])
+        ->name('admin.attendance-imports.store');
+
+    Route::get('/attendance-imports/template', [AdminAttendanceImportController::class, 'downloadTemplate'])
+        ->name('admin.attendance-imports.template');
 });
