@@ -85,6 +85,11 @@ class Faculty extends Model
         return $this->hasMany(LeaveApplication::class);
     }
 
+    public function scheduleChangeRequests(): HasMany
+    {
+        return $this->hasMany(ScheduleChangeRequest::class);
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Accessors                                                          */
     /* ------------------------------------------------------------------ */
@@ -213,7 +218,7 @@ class Faculty extends Model
 
         $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
             ->where('day_of_week', $todayName)
-            ->orderBy('time_in')
+            ->orderByRaw('TIME(time_in) ASC')
             ->get();
 
         return $details->map(function (ScheduleDetail $detail, $index) use ($now) {
@@ -463,7 +468,7 @@ class Faculty extends Model
 
         $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
-            ->orderBy('time_in')
+            ->orderByRaw('TIME(time_in) ASC')
             ->get();
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];

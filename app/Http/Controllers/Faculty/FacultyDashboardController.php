@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Faculty;
 
+use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
-class FacultyController extends Controller
+class FacultyDashboardController extends Controller
 {
     /**
      * Display the faculty dashboard.

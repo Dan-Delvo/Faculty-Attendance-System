@@ -282,6 +282,49 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                 </div>
             </section>
 
+             {/* ── Today's Schedule ────────────────────── */}
+            <section className="mt-10">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                        Today's Schedule
+                    </h2>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                            {todaySchedule.length} {todaySchedule.length === 1 ? 'class' : 'classes'}
+                        </span>
+                        <Link
+                            href={route('faculty.schedule')}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                        >
+                            See full schedule
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                            </svg>
+                        </Link>
+                    </div>
+                </div>
+
+                {todaySchedule.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {todaySchedule.map((item) => (
+                            <ScheduleCard key={item.id} item={item} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 py-16 text-center">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4">
+                            {icons.calendar}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+                            No classes scheduled for today
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                            Enjoy your free day!
+                        </p>
+                    </div>
+                )}
+            </section>
+
             {/* ── Analytics Grid ─────────────────────────── */}
             <section className="mt-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -357,8 +400,8 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                             </div>
 
                             {/* Right side: Chart */}
-                            <div className="md:col-span-3 h-44 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="md:col-span-3 h-44 w-full min-h-[176px]">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                     <AreaChart
                                         data={trendData}
                                         margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
@@ -551,48 +594,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                 </div>
             </section>
 
-            {/* ── Today's Schedule ────────────────────── */}
-            <section className="mt-10">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                        Today's Schedule
-                    </h2>
-                    <div className="flex items-center gap-4">
-                        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                            {todaySchedule.length} {todaySchedule.length === 1 ? 'class' : 'classes'}
-                        </span>
-                        <Link
-                            href={route('faculty.schedule')}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-                        >
-                            See full schedule
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                            </svg>
-                        </Link>
-                    </div>
-                </div>
-
-                {todaySchedule.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {todaySchedule.map((item) => (
-                            <ScheduleCard key={item.id} item={item} />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 py-16 text-center">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4">
-                            {icons.calendar}
-                        </div>
-                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">
-                            No classes scheduled for today
-                        </p>
-                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                            Enjoy your free day!
-                        </p>
-                    </div>
-                )}
-            </section>
+           
 
             {/* ── Recent Attendance Match ────────────────────── */}
             {recentAttendance && recentAttendance.length > 0 && (

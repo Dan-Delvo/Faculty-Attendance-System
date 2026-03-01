@@ -104,6 +104,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                         >
                                             Attendance
                                         </NavLink>
+                                        <NavLink
+                                            href={route('faculty.schedule-change-requests.index')}
+                                            active={route().current('faculty.schedule-change-requests.*')}
+                                        >
+                                            Change Schedule
+                                        </NavLink>
                                     </>
                                 )}
 
@@ -249,6 +255,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                     active={route().current('faculty.biometric-logs')}
                                 >
                                     Biometric Logs
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('faculty.schedule-change-requests.index')}
+                                    active={route().current('faculty.schedule-change-requests.*')}
+                                >
+                                    Change Schedule
                                 </ResponsiveNavLink>
                             </>
                         )}

@@ -1,14 +1,27 @@
 <?php
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Http\Controllers\FacultyController;
+use App\Http\Controllers\Faculty\FacultyDashboardController;
+use App\Http\Controllers\Faculty\ScheduleChangeRequestController;
 
 Route::middleware(['auth', 'auth.faculty'])->group(function () {
-    Route::get('/faculty/dashboard', [FacultyController::class, 'index'])->name('faculty.dashboard');
-    Route::get('/faculty/api/analytics', [FacultyController::class, 'getAnalyticsData'])->name('faculty.api.analytics');
-    Route::get('/faculty/biometric-logs', [FacultyController::class, 'biometricLogs'])->name('faculty.biometric-logs');
-    Route::get('/faculty/schedule', [FacultyController::class, 'schedule'])->name('faculty.schedule');
-    Route::get('/faculty/attendance', [FacultyController::class, 'attendance'])->name('faculty.attendance');
+    Route::get('/faculty/dashboard', [FacultyDashboardController::class, 'index'])->name('faculty.dashboard');
+    Route::get('/faculty/api/analytics', [FacultyDashboardController::class, 'getAnalyticsData'])->name('faculty.api.analytics');
+    Route::get('/faculty/biometric-logs', [FacultyDashboardController::class, 'biometricLogs'])->name('faculty.biometric-logs');
+    Route::get('/faculty/schedule', [FacultyDashboardController::class, 'schedule'])->name('faculty.schedule');
+    Route::get('/faculty/attendance', [FacultyDashboardController::class, 'attendance'])->name('faculty.attendance');
+
+    // ── Schedule Change Requests ───────────────────────────────────────────
+    Route::get('/faculty/schedule-change-requests', [ScheduleChangeRequestController::class, 'index'])
+        ->name('faculty.schedule-change-requests.index');
+    Route::post('/faculty/schedule-change-requests', [ScheduleChangeRequestController::class, 'store'])
+        ->name('faculty.schedule-change-requests.store');
+    Route::delete('/faculty/schedule-change-requests/{scheduleChangeRequest}', [ScheduleChangeRequestController::class, 'destroy'])
+        ->name('faculty.schedule-change-requests.destroy');
+
+    // AJAX endpoints for schedule change requests
+    Route::get('/faculty/api/schedule-change-requests', [ScheduleChangeRequestController::class, 'filter'])
+        ->name('faculty.schedule-change-requests.filter');
 });
 
 /*

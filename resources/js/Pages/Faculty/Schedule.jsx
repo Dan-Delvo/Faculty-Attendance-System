@@ -15,8 +15,23 @@ const DAY_COLORS = {
 };
 
 export default function Schedule({ weeklySchedule, facultyName }) {
+    // Sort classes within each day by startTime chronologically
+    const sortedSchedule = weeklySchedule.map((dayData) => ({
+        ...dayData,
+        classes: [...dayData.classes].sort((a, b) => {
+            const toMin = (t) => {
+                const [time, period] = t.split(' ');
+                let [h, m] = time.split(':').map(Number);
+                if (period === 'PM' && h !== 12) h += 12;
+                if (period === 'AM' && h === 12) h = 0;
+                return h * 60 + m;
+            };
+            return toMin(a.startTime) - toMin(b.startTime);
+        }),
+    }));
+
     // Count total weekly hours
-    const totalWeeklyHours = weeklySchedule.reduce(
+    const totalWeeklyHours = sortedSchedule.reduce(
         (sum, day) => sum + day.classes.reduce((s, c) => s + c.hours, 0),
         0,
     );
@@ -49,7 +64,7 @@ export default function Schedule({ weeklySchedule, facultyName }) {
                 <div className="flex gap-3">
                     <div className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 px-5 py-3 shadow-sm text-center">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Teaching Days</p>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{weeklySchedule.length}</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{sortedSchedule.length}</p>
                     </div>
                     <div className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 px-5 py-3 shadow-sm text-center">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Weekly Hours</p>
@@ -62,8 +77,8 @@ export default function Schedule({ weeklySchedule, facultyName }) {
 
             {/* ── Weekly Schedule ─────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
-                {weeklySchedule.length > 0 ? (
-                    weeklySchedule.map((dayData) => (
+                {sortedSchedule.length > 0 ? (
+                    sortedSchedule.map((dayData) => (
                         <div
                             key={dayData.day}
                             className="flex flex-col h-full rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden"

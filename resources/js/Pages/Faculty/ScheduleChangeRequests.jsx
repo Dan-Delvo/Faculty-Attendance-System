@@ -1,0 +1,516 @@
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ScrollToTop from '@/Components/ScrollToTop';
+import Modal from '@/Components/Modal';
+import InputLabel from '@/Components/InputLabel';
+import TextInput from '@/Components/TextInput';
+import InputError from '@/Components/InputError';
+import PrimaryButton from '@/Components/PrimaryButton';
+import SecondaryButton from '@/Components/SecondaryButton';
+import DangerButton from '@/Components/DangerButton';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { useState, useCallback } from 'react';
+
+const STATUS_STYLES = {
+    pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
+    approved: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/30',
+    rejected: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-400/10 dark:text-red-400 dark:ring-red-400/30',
+};
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters }) {
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState(null);
+    const [filterStatus, setFilterStatus] = useState(filters.status || '');
+
+    // ── AJAX-driven requests list ────────────────────────────
+    const [requestsData, setRequestsData] = useState(initialRequests);
+    const [isFiltering, setIsFiltering] = useState(false);
+    const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
+
+    // ── Create form ──────────────────────────────────────────
+    const createForm = useForm({
+        schedule_detail_id: '',
+        requested_day_of_week: '',
+        requested_time_in: '',
+        requested_time_out: '',
+        requested_room: '',
+        effective_date: '',
+        reason: '',
+    });
+
+    const selectedDetail = scheduleDetails.find(
+        (d) => d.id === Number(createForm.data.schedule_detail_id),
+    );
+
+    // ── Frontend conflict detection ──────────────────────────
+    const detectConflict = () => {
+        const { requested_day_of_week, requested_time_in, requested_time_out, schedule_detail_id } = createForm.data;
+        if (!requested_day_of_week || !requested_time_in || !requested_time_out) return null;
+
+        const conflict = scheduleDetails.find((d) => {
+            if (String(d.id) === String(schedule_detail_id)) return false;
+            if (d.day_of_week !== requested_day_of_week) return false;
+            return d.time_in < requested_time_out && d.time_out > requested_time_in;
+        });
+
+        return conflict ?? null;
+    };
+
+    const frontendConflict = detectConflict();
+
+    const handleCreate = (e) => {
+        e.preventDefault();
+        createForm.post(route('faculty.schedule-change-requests.store'), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowCreateModal(false);
+                createForm.reset();
+                // Refresh the list via AJAX
+                fetchRequests(filterStatus, 1);
+            },
+        });
+    };
+
+    // ── Cancel (delete) ──────────────────────────────────────
+    const cancelForm = useForm({});
+    const handleCancel = () => {
+        cancelForm.delete(
+            route('faculty.schedule-change-requests.destroy', selectedRequest.id),
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setShowCancelModal(false);
+                    setSelectedRequest(null);
+                    // Refresh the list via AJAX
+                    fetchRequests(filterStatus, currentPage);
+                },
+            },
+        );
+    };
+
+    // ── AJAX filter & pagination ─────────────────────────────
+    const fetchRequests = useCallback((status, page = 1) => {
+        setIsFiltering(true);
+
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        params.set('page', page);
+
+        fetch(route('faculty.schedule-change-requests.filter') + '?' + params.toString(), {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                setRequestsData(data);
+                setCurrentPage(data.current_page || 1);
+            })
+            .catch(() => {})
+            .finally(() => setIsFiltering(false));
+    }, []);
+
+    const applyFilter = (status) => {
+        setFilterStatus(status);
+        fetchRequests(status, 1);
+    };
+
+    const goToPage = (page) => {
+        fetchRequests(filterStatus, page);
+    };
+
+    return (
+        <AuthenticatedLayout>
+            <Head title="Schedule Change Requests" />
+
+            {/* ── Header ────────────────────────────────────── */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+                <div>
+                    <Link
+                        href={route('faculty.schedule')}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-2"
+                    >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                        </svg>
+                        Back to Schedule
+                    </Link>
+                    <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                        Schedule Change Requests
+                    </h1>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Request changes to your teaching schedule. Requests require admin approval.
+                    </p>
+                </div>
+
+                <button
+                    onClick={() => setShowCreateModal(true)}
+                    disabled={scheduleDetails.length === 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7a1315] to-[#cc2127] px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-red-900/20 transition-all hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    New Request
+                </button>
+            </div>
+
+            {/* ── Status filter tabs ────────────────────────── */}
+            <div className="flex gap-2 mb-6 flex-wrap">
+                {['', 'pending', 'approved', 'rejected'].map((s) => (
+                    <button
+                        key={s}
+                        onClick={() => applyFilter(s)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                            filterStatus === s
+                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                        {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── Requests list ──────────────────────────────── */}
+            {isFiltering && (
+                <div className="flex justify-center py-8">
+                    <svg className="h-6 w-6 animate-spin text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                </div>
+            )}
+
+            {!isFiltering && requestsData.data && requestsData.data.length > 0 ? (
+                <div className="space-y-4">
+                    {requestsData.data.map((req) => (
+                        <div
+                            key={req.id}
+                            className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                        >
+                            <div className="p-5">
+                                {/* Top row: subject + status */}
+                                <div className="flex items-start justify-between gap-3 mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-xs shadow-sm">
+                                            {req.original_day.slice(0, 3)}
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-gray-900 dark:text-white">
+                                                {req.original_subject}
+                                            </h3>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                Submitted {req.created_at}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${STATUS_STYLES[req.status]}`}>
+                                        {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                                    </span>
+                                </div>
+
+                                {/* Change comparison */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Original */}
+                                    <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
+                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                        <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                            <p><span className="font-semibold">Day:</span> {req.original_day}</p>
+                                            <p><span className="font-semibold">Time:</span> {req.original_time_in} – {req.original_time_out}</p>
+                                            <p><span className="font-semibold">Room:</span> {req.original_room}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Requested */}
+                                    <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
+                                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Requested Change</p>
+                                        <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                            <p><span className="font-semibold">Day:</span> {req.requested_day}</p>
+                                            <p><span className="font-semibold">Time:</span> {req.requested_time_in} – {req.requested_time_out}</p>
+                                            <p><span className="font-semibold">Room:</span> {req.requested_room || 'Same'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Extra info row */}
+                                <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                    <span className="inline-flex items-center gap-1">
+                                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                        </svg>
+                                        Effective: {req.effective_date}
+                                    </span>
+                                </div>
+
+                                {/* Reason */}
+                                <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/20 border border-gray-100 dark:border-gray-700/40">
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Reason</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
+                                </div>
+
+                                {/* Review info (if reviewed) */}
+                                {req.review_remarks && (
+                                    <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
+                                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
+                                            Admin Remarks — {req.reviewed_at}
+                                        </p>
+                                        <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
+                                    </div>
+                                )}
+
+                                {/* Actions */}
+                                {req.status === 'pending' && (
+                                    <div className="mt-4 flex justify-end">
+                                        <button
+                                            onClick={() => { setSelectedRequest(req); setShowCancelModal(true); }}
+                                            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                        >
+                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                            </svg>
+                                            Cancel Request
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Pagination */}
+                    {requestsData.last_page > 1 && (
+                        <div className="flex items-center justify-between pt-4">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Page {requestsData.current_page} of {requestsData.last_page} ({requestsData.total} total)
+                            </p>
+                            <div className="flex gap-2">
+                                {requestsData.current_page > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => goToPage(requestsData.current_page - 1)}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                    >
+                                        Previous
+                                    </button>
+                                )}
+                                {requestsData.current_page < requestsData.last_page && (
+                                    <button
+                                        type="button"
+                                        onClick={() => goToPage(requestsData.current_page + 1)}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                    >
+                                        Next
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            ) : !isFiltering ? (
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-gray-300 dark:border-gray-700 py-20 text-center bg-white dark:bg-gray-800/80">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4">
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">No change requests yet</p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                        Click "New Request" to submit a schedule change request.
+                    </p>
+                </div>
+            ) : null}
+
+            {/* ═══════════════════════════════════════════════════
+                 CREATE MODAL
+                ═══════════════════════════════════════════════════ */}
+            <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="2xl">
+                <form onSubmit={handleCreate}>
+                    {/* Header */}
+                    <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                        <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                            New Schedule Change Request
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Select the schedule you want to change and specify the new details.
+                        </p>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-6 py-5 space-y-5 max-h-[60dvh] overflow-y-auto">
+                        {/* Schedule detail selector */}
+                        <div>
+                            <InputLabel value="Select Schedule to Change" htmlFor="schedule_detail_id" />
+                            <select
+                                id="schedule_detail_id"
+                                value={createForm.data.schedule_detail_id}
+                                onChange={(e) => createForm.setData('schedule_detail_id', e.target.value)}
+                                className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
+                            >
+                                <option value="">— Choose a schedule —</option>
+                                {scheduleDetails.map((d) => (
+                                    <option key={d.id} value={d.id}>
+                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} ({d.room})
+                                    </option>
+                                ))}
+                            </select>
+                            <InputError message={createForm.errors.schedule_detail_id} />
+                        </div>
+
+                        {/* Preview current schedule */}
+                        {selectedDetail && (
+                            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <p><span className="font-semibold">Day:</span> {selectedDetail.day_of_week}</p>
+                                    <p><span className="font-semibold">Subject:</span> {selectedDetail.subject_code}</p>
+                                    <p><span className="font-semibold">Time:</span> {selectedDetail.time_in} – {selectedDetail.time_out}</p>
+                                    <p><span className="font-semibold">Room:</span> {selectedDetail.room}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <hr className="border-gray-100 dark:border-gray-700" />
+
+                        {/* Requested changes */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <InputLabel value="New Day" htmlFor="requested_day_of_week" />
+                                <select
+                                    id="requested_day_of_week"
+                                    value={createForm.data.requested_day_of_week}
+                                    onChange={(e) => createForm.setData('requested_day_of_week', e.target.value)}
+                                    className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
+                                >
+                                    <option value="">— Select day —</option>
+                                    {DAYS.map((d) => (
+                                        <option key={d} value={d}>{d}</option>
+                                    ))}
+                                </select>
+                                <InputError message={createForm.errors.requested_day_of_week} />
+                            </div>
+
+                            <div>
+                                <InputLabel value="New Room (optional)" htmlFor="requested_room" />
+                                <TextInput
+                                    id="requested_room"
+                                    type="text"
+                                    className="mt-1 block w-full text-sm"
+                                    value={createForm.data.requested_room}
+                                    onChange={(e) => createForm.setData('requested_room', e.target.value)}
+                                    placeholder="e.g. Room 301"
+                                />
+                                <InputError message={createForm.errors.requested_room} />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <InputLabel value="New Time In" htmlFor="requested_time_in" />
+                                <TextInput
+                                    id="requested_time_in"
+                                    type="time"
+                                    className="mt-1 block w-full text-sm"
+                                    value={createForm.data.requested_time_in}
+                                    onChange={(e) => createForm.setData('requested_time_in', e.target.value)}
+                                />
+                                <InputError message={createForm.errors.requested_time_in} />
+                            </div>
+
+                            <div>
+                                <InputLabel value="New Time Out" htmlFor="requested_time_out" />
+                                <TextInput
+                                    id="requested_time_out"
+                                    type="time"
+                                    className="mt-1 block w-full text-sm"
+                                    value={createForm.data.requested_time_out}
+                                    onChange={(e) => createForm.setData('requested_time_out', e.target.value)}
+                                />
+                                <InputError message={createForm.errors.requested_time_out} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <InputLabel value="Effective Date" htmlFor="effective_date" />
+                            <TextInput
+                                id="effective_date"
+                                type="date"
+                                className="mt-1 block w-full text-sm"
+                                value={createForm.data.effective_date}
+                                onChange={(e) => createForm.setData('effective_date', e.target.value)}
+                            />
+                            <InputError message={createForm.errors.effective_date} />
+                        </div>
+
+                        <div>
+                            <InputLabel value="Reason for Change" htmlFor="reason" />
+                            <textarea
+                                id="reason"
+                                rows={3}
+                                className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm resize-none"
+                                value={createForm.data.reason}
+                                onChange={(e) => createForm.setData('reason', e.target.value)}
+                                placeholder="Briefly explain why you need this schedule change..."
+                            />
+                            <InputError message={createForm.errors.reason} />
+                        </div>
+
+                        {/* Conflict warning */}
+                        {frontendConflict && (
+                            <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 p-4 flex items-start gap-3">
+                                <svg className="h-5 w-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                </svg>
+                                <div>
+                                    <p className="text-sm font-bold text-red-700 dark:text-red-400">Schedule Conflict Detected</p>
+                                    <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                                        The requested time overlaps with <strong>{frontendConflict.subject_code}</strong> ({frontendConflict.time_in}–{frontendConflict.time_out}) on {frontendConflict.day_of_week}.
+                                        Please choose a different time slot.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+                        <SecondaryButton type="button" onClick={() => setShowCreateModal(false)}>
+                            Cancel
+                        </SecondaryButton>
+                        <PrimaryButton type="submit" disabled={createForm.processing || !!frontendConflict}>
+                            {createForm.processing ? 'Submitting…' : 'Submit Request'}
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* ═══════════════════════════════════════════════════
+                 CANCEL CONFIRMATION MODAL
+                ═══════════════════════════════════════════════════ */}
+            <Modal show={showCancelModal} onClose={() => setShowCancelModal(false)} maxWidth="md">
+                <div className="p-6">
+                    <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                        Cancel Request
+                    </h2>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        Are you sure you want to cancel this schedule change request? This action cannot be undone.
+                    </p>
+                    <div className="mt-6 flex justify-end gap-3">
+                        <SecondaryButton onClick={() => setShowCancelModal(false)}>
+                            Keep Request
+                        </SecondaryButton>
+                        <DangerButton onClick={handleCancel} disabled={cancelForm.processing}>
+                            {cancelForm.processing ? 'Cancelling…' : 'Yes, Cancel Request'}
+                        </DangerButton>
+                    </div>
+                </div>
+            </Modal>
+
+            <ScrollToTop />
+        </AuthenticatedLayout>
+    );
+}
