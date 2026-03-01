@@ -353,7 +353,14 @@ class AdminAttendanceImportController extends Controller
             }
 
             $normalizedHeader = array_map(static function ($column): string {
-                return strtolower(trim((string) $column));
+                $value = (string) $column;
+
+                // Strip UTF-8 BOM if present to ensure header names match required columns
+                if (strncmp($value, "\xEF\xBB\xBF", 3) === 0) {
+                    $value = substr($value, 3);
+                }
+
+                return strtolower(trim($value));
             }, $row);
 
             $hasAllRequired = true;
