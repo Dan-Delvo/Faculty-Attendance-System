@@ -456,6 +456,28 @@ class AdminAttendanceImportController extends Controller
 
     private function isDuplicateKeyException(QueryException $exception): bool
     {
-        return (string) $exception->getCode() === '23000';
+        $errorInfo = $exception->errorInfo ?? null;
+
+        if (is_array($errorInfo) && count($errorInfo) >= 2) {
+            $sqlState   = (string) $errorInfo[0];
+            $driverCode = (string) $errorInfo[1];
+
+            // MySQL / MariaDB duplicate entry
+            if ($sqlState === '23000' && $driverCode === '1062') {
+                return true;
+            }
+
+            // PostgreSQL unique violation
+            if ($sqlState === '23505') {
+                return true;
+            }
+        }
+
+        // Fallback for drivers that do not reliably populate errorInfo
+        $message = strtolower((string) $exception->getMessage());
+
+        return str_contains($message, 'duplicate entry')
+            || str_contains($message, 'unique constraint')
+            || str_contains($message, 'unique violation');
     }
 }
