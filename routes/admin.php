@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminNewPasswordController;
+use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
+use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
 use App\Http\Controllers\Admin\AdminSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -12,6 +15,19 @@ Route::prefix('admin')->group(function () {
 
     Route::post('/login', [AdminSessionController::class, 'store'])
         ->name('admin.login.store');
+
+    // ── Password Reset ─────────────────────────────────────────────────────
+    Route::get('/forgot-password', [AdminPasswordResetLinkController::class, 'create'])
+        ->name('admin.password.request');
+
+    Route::post('/forgot-password', [AdminPasswordResetLinkController::class, 'store'])
+        ->name('admin.password.email');
+
+    Route::get('/reset-password/{token}', [AdminNewPasswordController::class, 'create'])
+        ->name('admin.password.reset');
+
+    Route::post('/reset-password', [AdminNewPasswordController::class, 'store'])
+        ->name('admin.password.store');
 });
 
 // ── Admin Protected routes ─────────────────────────────────────────────────
@@ -42,4 +58,17 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::delete('/schedules/{schedule}', [AdminScheduleController::class, 'destroy'])
         ->name('admin.schedules.destroy');
+
+    // ── Schedule Change Requests ───────────────────────────────────────────
+    Route::get('/schedule-change-requests', [AdminScheduleChangeRequestController::class, 'index'])
+        ->name('admin.schedule-change-requests.index');
+
+    Route::get('/api/schedule-change-requests', [AdminScheduleChangeRequestController::class, 'filter'])
+        ->name('admin.schedule-change-requests.filter');
+
+    Route::patch('/schedule-change-requests/{scheduleChangeRequest}/approve', [AdminScheduleChangeRequestController::class, 'approve'])
+        ->name('admin.schedule-change-requests.approve');
+
+    Route::patch('/schedule-change-requests/{scheduleChangeRequest}/reject', [AdminScheduleChangeRequestController::class, 'reject'])
+        ->name('admin.schedule-change-requests.reject');
 });
