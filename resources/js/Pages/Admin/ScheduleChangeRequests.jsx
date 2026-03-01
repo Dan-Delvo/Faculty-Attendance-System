@@ -13,6 +13,35 @@ import {
     STRINGS,
 } from '@/Constants/admin';
 
+function formatTimeToAmPm(timeValue) {
+    if (!timeValue || typeof timeValue !== 'string') {
+        return timeValue;
+    }
+
+    const normalized = timeValue.trim();
+
+    if (/\b(AM|PM)\b/i.test(normalized)) {
+        return normalized.toUpperCase();
+    }
+
+    const match = normalized.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+        return normalized;
+    }
+
+    const hours24 = Number(match[1]);
+    const minutes = match[2];
+
+    if (Number.isNaN(hours24) || hours24 < 0 || hours24 > 23) {
+        return normalized;
+    }
+
+    const period = hours24 >= 12 ? 'PM' : 'AM';
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+
+    return `${String(hours12).padStart(2, '0')}:${minutes} ${period}`;
+}
+
 /* ──────────────────────────────────────────────
    Main Component
    ────────────────────────────────────────────── */
@@ -28,7 +57,6 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     // ── Modals + selected request ────────────────────────────────────────
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal,  setShowRejectModal]  = useState(false);
-    const [showDetailModal,  setShowDetailModal]  = useState(false);
     const [selectedRequest,  setSelectedRequest]  = useState(null);
 
     // ── Inertia forms ────────────────────────────────────────────────────
@@ -127,12 +155,6 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                 fetchRequests(filterStatus, searchQuery, currentPage);
             },
         });
-    };
-
-    /* ── View detail ─────────────────────────────────────────────────── */
-    const openDetail = (req) => {
-        setSelectedRequest(req);
-        setShowDetailModal(true);
     };
 
     /* ── Render ──────────────────────────────────────────────────────── */
@@ -234,7 +256,6 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                             req={req}
                             onApprove={() => openApprove(req)}
                             onReject={() => openReject(req)}
-                            onViewDetail={() => openDetail(req)}
                         />
                     ))}
 
@@ -306,7 +327,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <div className="flex-1 text-sm text-gray-700 dark:text-gray-300 space-y-1">
                                         <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">From</p>
-                                        <p>{selectedRequest.original_day} · {selectedRequest.original_time_in}–{selectedRequest.original_time_out}</p>
+                                        <p>{selectedRequest.original_day} · {formatTimeToAmPm(selectedRequest.original_time_in)}–{formatTimeToAmPm(selectedRequest.original_time_out)}</p>
                                         <p className="text-xs text-gray-500">Room: {selectedRequest.original_room}</p>
                                     </div>
                                     <svg className="h-5 w-5 text-gray-400 self-center" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -314,7 +335,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                                     </svg>
                                     <div className="flex-1 text-sm text-emerald-700 dark:text-emerald-400 space-y-1">
                                         <p className="text-xs font-bold text-emerald-500 dark:text-emerald-500 uppercase mb-1">To</p>
-                                        <p>{selectedRequest.requested_day} · {selectedRequest.requested_time_in}–{selectedRequest.requested_time_out}</p>
+                                        <p>{selectedRequest.requested_day} · {formatTimeToAmPm(selectedRequest.requested_time_in)}–{formatTimeToAmPm(selectedRequest.requested_time_out)}</p>
                                         <p className="text-xs text-emerald-600 dark:text-emerald-500">Room: {selectedRequest.requested_room || selectedRequest.original_room}</p>
                                     </div>
                                 </div>
@@ -399,7 +420,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                                 <p className="font-bold text-gray-800 dark:text-gray-200">{selectedRequest.original_subject}</p>
                                 <p className="text-gray-500 dark:text-gray-400">{selectedRequest.faculty_name} · {selectedRequest.faculty_code}</p>
                                 <p className="text-gray-500 dark:text-gray-400 mt-1">
-                                    Requested: {selectedRequest.requested_day} · {selectedRequest.requested_time_in}–{selectedRequest.requested_time_out}
+                                    Requested: {selectedRequest.requested_day} · {formatTimeToAmPm(selectedRequest.requested_time_in)}–{formatTimeToAmPm(selectedRequest.requested_time_out)}
                                 </p>
                             </div>
 
@@ -438,77 +459,6 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                 </form>
             </Modal>
 
-            {/* ════════════════════════════════════════════════════════════
-                 DETAIL VIEW MODAL (already‑reviewed requests)
-                ════════════════════════════════════════════════════════════ */}
-            <Modal show={showDetailModal} onClose={() => setShowDetailModal(false)} maxWidth="xl">
-                {selectedRequest && (
-                    <div>
-                        <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
-                                    Request Detail
-                                </h2>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    {selectedRequest.faculty_name} · {selectedRequest.faculty_code}
-                                </p>
-                            </div>
-                            <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset capitalize ${STATUS_STYLES[selectedRequest.status]}`}>
-                                {selectedRequest.status}
-                            </span>
-                        </div>
-
-                        <div className="px-6 py-5 space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
-                                    <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                                        <p><span className="font-semibold">Subject:</span> {selectedRequest.original_subject}</p>
-                                        <p><span className="font-semibold">Day:</span> {selectedRequest.original_day}</p>
-                                        <p><span className="font-semibold">Time:</span> {selectedRequest.original_time_in} – {selectedRequest.original_time_out}</p>
-                                        <p><span className="font-semibold">Room:</span> {selectedRequest.original_room}</p>
-                                    </div>
-                                </div>
-                                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
-                                    <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Requested Change</p>
-                                    <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                                        <p><span className="font-semibold">Day:</span> {selectedRequest.requested_day}</p>
-                                        <p><span className="font-semibold">Time:</span> {selectedRequest.requested_time_in} – {selectedRequest.requested_time_out}</p>
-                                        <p><span className="font-semibold">Room:</span> {selectedRequest.requested_room || 'Same'}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/20 p-4 border border-gray-100 dark:border-gray-700/40">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Reason</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">{selectedRequest.reason}</p>
-                            </div>
-
-                            {selectedRequest.review_remarks && (
-                                <div className={`p-4 rounded-xl border ${selectedRequest.status === 'approved' ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/30' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-800/30'}`}>
-                                    <p className={`text-xs font-bold mb-1 ${selectedRequest.status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                                        Admin Remarks — {selectedRequest.reviewed_at}
-                                    </p>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{selectedRequest.review_remarks}</p>
-                                </div>
-                            )}
-
-                            {selectedRequest.reviewed_by_email && (
-                                <p className="text-xs text-gray-400 dark:text-gray-500">
-                                    Reviewed by <span className="font-semibold">{selectedRequest.reviewed_by_email}</span> on {selectedRequest.reviewed_at}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
-                            <SecondaryButton onClick={() => setShowDetailModal(false)}>
-                                Close
-                            </SecondaryButton>
-                        </div>
-                    </div>
-                )}
-            </Modal>
-
             <ScrollToTop />
         </AuthenticatedLayout>
     );
@@ -517,14 +467,27 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
 /* ──────────────────────────────────────────────
    Request Card Component
    ────────────────────────────────────────────── */
-function RequestCard({ req, onApprove, onReject, onViewDetail }) {
+function RequestCard({ req, onApprove, onReject }) {
     const dayColor = DAY_AVATAR_COLORS[req.original_day] ?? 'from-gray-400 to-gray-500';
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const toggleExpand = () => {
+        setIsExpanded((prev) => !prev);
+    };
+
+    const handleActionClick = (event, callback) => {
+        event.stopPropagation();
+        callback();
+    };
 
     return (
-        <div className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+        <div
+            onClick={toggleExpand}
+            className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+        >
             <div className="p-5">
                 {/* ── Top row: faculty info + day badge + status ── */}
-                <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${dayColor} text-white font-bold text-xs shadow-sm`}>
                             {req.original_day.slice(0, 3)}
@@ -556,63 +519,28 @@ function RequestCard({ req, onApprove, onReject, onViewDetail }) {
                             </p>
                         </div>
                     </div>
-                    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset capitalize shrink-0 ${STATUS_STYLES[req.status]}`}>
-                        {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                    </span>
-                </div>
-
-                {/* ── Schedule comparison ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
-                        <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                            <p><span className="font-semibold">Day:</span> {req.original_day}</p>
-                            <p><span className="font-semibold">Time:</span> {req.original_time_in} – {req.original_time_out}</p>
-                            <p><span className="font-semibold">Room:</span> {req.original_room}</p>
-                        </div>
-                    </div>
-                    <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
-                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Requested Change</p>
-                        <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                            <p><span className="font-semibold">Day:</span> {req.requested_day}</p>
-                            <p><span className="font-semibold">Time:</span> {req.requested_time_in} – {req.requested_time_out}</p>
-                            <p><span className="font-semibold">Room:</span> {req.requested_room || 'Same'}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Effective date ── */}
-                <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                    <span className="inline-flex items-center gap-1">
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset capitalize ${STATUS_STYLES[req.status]}`}>
+                            {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </span>
+                        <svg
+                            className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                         </svg>
-                        Effective: {req.effective_date}
-                    </span>
-                </div>
-
-                {/* ── Reason ── */}
-                <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/20 border border-gray-100 dark:border-gray-700/40">
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Reason</p>
-                    <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
-                </div>
-
-                {/* ── Admin remarks (if reviewed) ── */}
-                {req.review_remarks && (
-                    <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
-                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
-                            Admin Remarks — {req.reviewed_at}
-                        </p>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
                     </div>
-                )}
+                </div>
 
                 {/* ── Action buttons ── */}
                 <div className="mt-4 flex items-center justify-end gap-2">
                     {req.status === 'pending' ? (
                         <>
                             <button
-                                onClick={onReject}
+                                onClick={(event) => handleActionClick(event, onReject)}
                                 className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                             >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
@@ -621,7 +549,7 @@ function RequestCard({ req, onApprove, onReject, onViewDetail }) {
                                 Reject
                             </button>
                             <button
-                                onClick={onApprove}
+                                onClick={(event) => handleActionClick(event, onApprove)}
                                 className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
                             >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
@@ -631,17 +559,60 @@ function RequestCard({ req, onApprove, onReject, onViewDetail }) {
                             </button>
                         </>
                     ) : (
-                        <button
-                            onClick={onViewDetail}
-                            className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                            </svg>
-                            View Details
-                        </button>
+                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                            Click card to {isExpanded ? 'hide' : 'show'} details
+                        </p>
                     )}
+                </div>
+
+                <div className={`grid transition-all duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] mt-4' : 'grid-rows-[0fr]'} `}>
+                    <div className="overflow-hidden">
+                        {/* ── Schedule comparison ── */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                    <p><span className="font-semibold">Day:</span> {req.original_day}</p>
+                                    <p><span className="font-semibold">Time:</span> {formatTimeToAmPm(req.original_time_in)} – {formatTimeToAmPm(req.original_time_out)}</p>
+                                    <p><span className="font-semibold">Room:</span> {req.original_room}</p>
+                                </div>
+                            </div>
+                            <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
+                                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Requested Change</p>
+                                <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                    <p><span className="font-semibold">Day:</span> {req.requested_day}</p>
+                                    <p><span className="font-semibold">Time:</span> {formatTimeToAmPm(req.requested_time_in)} – {formatTimeToAmPm(req.requested_time_out)}</p>
+                                    <p><span className="font-semibold">Room:</span> {req.requested_room || 'Same'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ── Effective date ── */}
+                        <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                            <span className="inline-flex items-center gap-1">
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                                Effective: {req.effective_date}
+                            </span>
+                        </div>
+
+                        {/* ── Reason ── */}
+                        <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/20 border border-gray-100 dark:border-gray-700/40">
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Reason</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
+                        </div>
+
+                        {/* ── Admin remarks (if reviewed) ── */}
+                        {req.review_remarks && (
+                            <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
+                                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
+                                    Admin Remarks — {req.reviewed_at}
+                                </p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
