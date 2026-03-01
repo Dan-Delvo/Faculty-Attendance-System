@@ -14,6 +14,8 @@ class OnlineAttendanceRequest extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $table = 'online_attendance';
+
     protected $fillable = [
         'faculty_id',
         'schedule_detail_id',
