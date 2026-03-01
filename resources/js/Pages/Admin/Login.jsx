@@ -5,7 +5,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState } from 'react';
-import { STRINGS } from '@/Constants/admin';
+import { STRINGS, SHARED_STRINGS } from '@/Constants/admin';
 
 export default function AdminLogin({ status, canResetPassword }) {
     const [showPassword, setShowPassword] = useState(false);
@@ -131,7 +131,7 @@ export default function AdminLogin({ status, canResetPassword }) {
                             />
                         </div>
                         <span className="ms-2.5 text-[13px] font-semibold text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                            Remember me
+                            {SHARED_STRINGS.rememberMe}
                         </span>
                     </label>
 
@@ -140,7 +140,7 @@ export default function AdminLogin({ status, canResetPassword }) {
                             href={route('admin.password.request')}
                             className="text-[13px] font-bold text-[#7a1315] dark:text-[#cc2127] hover:text-red-900 dark:hover:text-red-400 transition-colors"
                         >
-                            Forgot password?
+                            {SHARED_STRINGS.forgotPassword}
                         </Link>
                     )}
                 </div>
@@ -158,7 +158,7 @@ export default function AdminLogin({ status, canResetPassword }) {
                             </svg>
                         ) : (
                             <span className="flex items-center gap-2 tracking-wide uppercase">
-                                Sign in to Admin
+                                {STRINGS.signInButton}
                                 <svg className="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                                 </svg>

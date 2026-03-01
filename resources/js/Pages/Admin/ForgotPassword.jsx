@@ -3,6 +3,7 @@ import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
+import { STRINGS, SHARED_STRINGS } from '@/Constants/admin';
 
 export default function AdminForgotPassword({ status }) {
     const { data, setData, post, processing, errors } = useForm({
@@ -20,10 +21,10 @@ export default function AdminForgotPassword({ status }) {
 
             <div className="space-y-1.5 border-b border-gray-100 dark:border-gray-700/50 pb-6 mb-6">
                 <h3 className="text-xl font-extrabold text-[#7a1315] dark:text-[#cc2127] tracking-tight">
-                    Reset Admin Password
+                    {STRINGS.forgotPasswordTitle}
                 </h3>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Enter your admin email and we'll send a password reset link.
+                    {STRINGS.forgotPasswordSubtitle}
                 </p>
             </div>
 
@@ -82,7 +83,7 @@ export default function AdminForgotPassword({ status }) {
                             </svg>
                         ) : (
                             <span className="flex items-center gap-2 tracking-wide uppercase">
-                                Send Reset Link
+                                {SHARED_STRINGS.sendResetLink}
                                 <svg className="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                                 </svg>
@@ -100,7 +101,7 @@ export default function AdminForgotPassword({ status }) {
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                         </svg>
-                        Back to Admin Login
+                        {STRINGS.backToAdminLogin}
                     </Link>
                 </div>
             </form>

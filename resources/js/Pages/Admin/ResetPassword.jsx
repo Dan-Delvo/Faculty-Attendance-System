@@ -4,6 +4,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { STRINGS, SHARED_STRINGS } from '@/Constants/admin';
 
 export default function AdminResetPassword({ token, email }) {
     const [showPassword, setShowPassword] = useState(false);
@@ -29,10 +30,10 @@ export default function AdminResetPassword({ token, email }) {
 
             <div className="space-y-1.5 border-b border-gray-100 dark:border-gray-700/50 pb-6 mb-6">
                 <h3 className="text-xl font-extrabold text-[#7a1315] dark:text-[#cc2127] tracking-tight">
-                    Set New Password
+                    {STRINGS.resetPasswordTitle}
                 </h3>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Choose a strong password for your admin account.
+                    {STRINGS.resetPasswordSubtitle}
                 </p>
             </div>
 
@@ -159,7 +160,7 @@ export default function AdminResetPassword({ token, email }) {
                             </svg>
                         ) : (
                             <span className="flex items-center gap-2 tracking-wide uppercase">
-                                Reset Password
+                                {SHARED_STRINGS.resetPassword}
                                 <svg className="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                                 </svg>
