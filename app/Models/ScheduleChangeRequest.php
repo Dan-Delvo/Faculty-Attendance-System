@@ -89,7 +89,14 @@ class ScheduleChangeRequest extends Model
         $search  = $request->query('search', '');
 
         $query = static::with(['faculty.user', 'faculty.department', 'scheduleDetail.schedule', 'reviewedBy'])
-            ->orderByRaw("FIELD(status, 'pending', 'approved', 'rejected')")
+            ->orderByRaw("
+                CASE
+                    WHEN status = 'pending'  THEN 1
+                    WHEN status = 'approved' THEN 2
+                    WHEN status = 'rejected' THEN 3
+                    ELSE 4
+                END
+            ")
             ->orderBy('created_at', 'desc');
 
         if ($status) {
