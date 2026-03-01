@@ -62,10 +62,14 @@ export default function FacultyAttendance({ attendanceLogs }) {
             <div className="mb-8 relative isolate overflow-hidden rounded-3xl bg-white dark:bg-gray-800/60 p-8 shadow-sm border border-gray-200/60 dark:border-gray-700/60 backdrop-blur-xl">
                 <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br from-[#7a1315]/10 to-[#cc2127]/5 blur-3xl transition-transform duration-700" />
                 <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                    Attendance Match History
+                    {sourceFilter === 'online' ? 'Online Attendance History' : sourceFilter === 'biometric' ? 'Biometric Attendance History' : 'Attendance Match History'}
                 </h1>
                 <p className="mt-2 max-w-2xl text-base text-gray-500 dark:text-gray-400">
-                    Your matched attendance status spanning your entire history. This uses your raw biometric logs and approved online attendance aligned with your internal work schedule.
+                    {sourceFilter === 'online'
+                        ? 'Your approved online attendance records aligned with your internal work schedule.'
+                        : sourceFilter === 'biometric'
+                            ? 'Your matched attendance status from raw biometric logs aligned with your internal work schedule.'
+                            : 'Your matched attendance status spanning your entire history. This uses your raw biometric logs and approved online attendance aligned with your internal work schedule.'}
                 </p>
 
                 {/* Source filter */}
@@ -199,8 +203,16 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                                                 </svg>
                                             </div>
-                                            <h3 className="mt-2 text-base font-bold text-gray-900 dark:text-white">No Match History</h3>
-                                            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400 max-w-sm">You don't have any matched schedules mapped to your biometrics for this period.</p>
+                                            <h3 className="mt-2 text-base font-bold text-gray-900 dark:text-white">
+                                                {sourceFilter === 'online' ? 'No Online Attendance' : sourceFilter === 'biometric' ? 'No Biometric Records' : 'No Attendance Records'}
+                                            </h3>
+                                            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400 max-w-sm">
+                                                {sourceFilter === 'online'
+                                                    ? 'You don\'t have any approved online attendance records for this period.'
+                                                    : sourceFilter === 'biometric'
+                                                        ? 'You don\'t have any matched schedules mapped to your biometrics for this period.'
+                                                        : 'You don\'t have any attendance records for this period.'}
+                                            </p>
                                         </div>
                                     </td>
                                 </tr>
