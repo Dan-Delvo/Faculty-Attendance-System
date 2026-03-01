@@ -400,8 +400,8 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                             </div>
 
                             {/* Right side: Chart */}
-                            <div className="md:col-span-3 h-44 w-full min-h-[176px]">
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <div className="md:col-span-3 w-full">
+                                <ResponsiveContainer width="100%" height={176} minWidth={0}>
                                     <AreaChart
                                         data={trendData}
                                         margin={{ top: 10, right: 10, left: -20, bottom: 0 }}

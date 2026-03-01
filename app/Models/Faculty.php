@@ -91,6 +91,139 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
+    /*  Schedule Change Request Methods                                    */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Get active schedule details formatted for the change-request dropdown.
+     */
+    public function getScheduleDetailsForChangeRequest(): array
+    {
+        return $this->schedules()
+            ->where('status', 'active')
+            ->with('scheduleDetails')
+            ->get()
+            ->flatMap(function ($schedule) {
+                return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
+                    return [
+                        'id'            => $d->id,
+                        'day_of_week'   => $d->day_of_week,
+                        'time_in'       => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out'      => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code'  => $d->subject_code,
+                        'subject_desc'  => $d->subject_desc,
+                        'room'          => $d->room,
+                        'schedule_code' => $schedule->schedule_code,
+                    ];
+                });
+            })
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Create a schedule change request with ownership, duplicate, and conflict checks.
+     *
+     * @param  array  $data  Validated form data.
+     * @return array{success: bool, error_field?: string, error_message?: string}
+     */
+    public function createScheduleChangeRequest(array $data): array
+    {
+        // Verify ownership
+        $scheduleDetail = ScheduleDetail::whereHas('schedule', function ($q) {
+            $q->where('faculty_id', $this->id);
+        })->find($data['schedule_detail_id']);
+
+        if (!$scheduleDetail) {
+            return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'The selected schedule does not belong to you.'];
+        }
+
+        // Block duplicate pending request
+        $existingPending = $this->scheduleChangeRequests()
+            ->where('schedule_detail_id', $data['schedule_detail_id'])
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'You already have a pending request for this schedule.'];
+        }
+
+        // Conflict check against existing schedule details
+        $reqDay = $data['requested_day_of_week'];
+        $reqIn  = $data['requested_time_in'];
+        $reqOut = $data['requested_time_out'];
+
+        $conflictingDetail = ScheduleDetail::whereHas('schedule', function ($q) {
+                $q->where('faculty_id', $this->id)
+                  ->where('status', 'active');
+            })
+            ->where('id', '!=', $data['schedule_detail_id'])
+            ->where('day_of_week', $reqDay)
+            ->where(function ($q) use ($reqIn, $reqOut) {
+                $q->whereRaw("TIME(time_in) < ?", [$reqOut])
+                  ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+            })
+            ->first();
+
+        if ($conflictingDetail) {
+            $conflictSubject = $conflictingDetail->subject_code ?? 'another class';
+            $conflictTime    = Carbon::parse($conflictingDetail->time_in)->format('H:i')
+                             . '–'
+                             . Carbon::parse($conflictingDetail->time_out)->format('H:i');
+
+            return ['success' => false, 'error_field' => 'requested_time_in', 'error_message' => "Time conflict with {$conflictSubject} ({$conflictTime}) on {$reqDay}."];
+        }
+
+        // Conflict check against pending/approved change requests
+        $conflictingRequest = $this->scheduleChangeRequests()
+            ->whereIn('status', ['pending', 'approved'])
+            ->where('requested_day_of_week', $reqDay)
+            ->where(function ($q) use ($reqIn, $reqOut) {
+                $q->where('requested_time_in', '<', $reqOut)
+                  ->where('requested_time_out', '>', $reqIn);
+            })
+            ->first();
+
+        if ($conflictingRequest) {
+            return ['success' => false, 'error_field' => 'requested_time_in', 'error_message' => "Time conflict with another pending/approved change request ({$conflictingRequest->requested_time_in}–{$conflictingRequest->requested_time_out}) on {$reqDay}."];
+        }
+
+        // All checks passed — create
+        $this->scheduleChangeRequests()->create([
+            'schedule_detail_id'    => $data['schedule_detail_id'],
+            'requested_day_of_week' => $data['requested_day_of_week'],
+            'requested_time_in'     => $data['requested_time_in'],
+            'requested_time_out'    => $data['requested_time_out'],
+            'requested_room'        => $data['requested_room'] ?? null,
+            'effective_date'        => $data['effective_date'],
+            'reason'                => $data['reason'],
+            'status'                => 'pending',
+        ]);
+
+        return ['success' => true];
+    }
+
+    /**
+     * Cancel (soft-delete) a pending schedule change request.
+     *
+     * @return array{success: bool, error_message?: string}
+     */
+    public function cancelScheduleChangeRequest(ScheduleChangeRequest $request): array
+    {
+        if ($request->faculty_id !== $this->id) {
+            return ['success' => false, 'error_message' => 'Unauthorized.'];
+        }
+
+        if ($request->status !== 'pending') {
+            return ['success' => false, 'error_message' => 'Only pending requests can be cancelled.'];
+        }
+
+        $request->delete();
+
+        return ['success' => true];
+    }
+
+    /* ------------------------------------------------------------------ */
     /*  Accessors                                                          */
     /* ------------------------------------------------------------------ */
 

@@ -16,7 +16,7 @@ const STATUS_STYLES = {
     rejected: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-400/10 dark:text-red-400 dark:ring-red-400/30',
 };
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
