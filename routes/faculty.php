@@ -23,6 +23,8 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
     // AJAX endpoints for schedule change requests
     Route::get('/faculty/api/schedule-change-requests', [ScheduleChangeRequestController::class, 'filter'])
         ->name('faculty.schedule-change-requests.filter');
+    Route::post('/faculty/api/schedule-change-requests/check-conflict', [ScheduleChangeRequestController::class, 'checkConflict'])
+        ->name('faculty.schedule-change-requests.check-conflict');
 
     // ── Online Attendance Requests ─────────────────────────────────────────
     Route::get('/faculty/online-attendance', [OnlineAttendanceController::class, 'index'])

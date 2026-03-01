@@ -65,7 +65,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
                     Attendance Match History
                 </h1>
                 <p className="mt-2 max-w-2xl text-base text-gray-500 dark:text-gray-400">
-                    Your matched attendance status spanning your entire history. This uses your raw biometric logs and approved online attendance aligned with your official faculty schedule.
+                    Your matched attendance status spanning your entire history. This uses your raw biometric logs and approved online attendance aligned with your internal work schedule.
                 </p>
 
                 {/* Source filter */}

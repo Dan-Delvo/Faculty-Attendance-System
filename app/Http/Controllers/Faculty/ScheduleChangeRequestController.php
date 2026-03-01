@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Faculty;
 
 use App\Http\Controllers\Controller;
 use App\Models\ScheduleChangeRequest;
+use App\Models\ScheduleDetail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Carbon\Carbon;
 
 class ScheduleChangeRequestController extends Controller
 {
@@ -99,5 +101,78 @@ class ScheduleChangeRequestController extends Controller
         }
 
         return back()->with('success', 'Schedule change request cancelled.');
+    }
+
+    /**
+     * AJAX: Check for room & time conflicts before submitting.
+     */
+    public function checkConflict(Request $request)
+    {
+        $validated = $request->validate([
+            'schedule_detail_id'    => 'required|integer',
+            'requested_day_of_week' => 'required|string',
+            'requested_time_in'     => 'required|date_format:H:i',
+            'requested_time_out'    => 'required|date_format:H:i|after:requested_time_in',
+            'requested_room'        => 'nullable|string|max:100',
+        ]);
+
+        $faculty = $request->user()->faculty;
+        $conflicts = [];
+
+        $reqDay  = $validated['requested_day_of_week'];
+        $reqIn   = $validated['requested_time_in'];
+        $reqOut  = $validated['requested_time_out'];
+        $reqRoom = trim($validated['requested_room'] ?? '');
+
+        // Check room + time conflicts against ALL faculties' schedules (same room AND overlapping time)
+        if ($reqRoom !== '') {
+            $roomConflict = ScheduleDetail::whereHas('schedule', function ($q) {
+                    $q->where('status', 'active');
+                })
+                ->where('id', '!=', $validated['schedule_detail_id'])
+                ->where('day_of_week', $reqDay)
+                ->where('room', $reqRoom)
+                ->where(function ($q) use ($reqIn, $reqOut) {
+                    $q->whereRaw("TIME(time_in) < ?", [$reqOut])
+                      ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                })
+                ->with('schedule.faculty')
+                ->first();
+
+            if ($roomConflict) {
+                $occupant = $roomConflict->schedule?->faculty?->full_name ?? 'another faculty';
+                $conflicts[] = [
+                    'type'    => 'room',
+                    'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->subject_code} ("
+                               . Carbon::parse($roomConflict->time_in)->format('H:i') . '–'
+                               . Carbon::parse($roomConflict->time_out)->format('H:i') . ") on {$reqDay}.",
+                ];
+            }
+
+            // Also check room in pending/approved change requests from other faculties
+            $roomChangeConflict = ScheduleChangeRequest::where('faculty_id', '!=', $faculty->id)
+                ->whereIn('status', ['pending', 'approved'])
+                ->where('requested_day_of_week', $reqDay)
+                ->where('requested_room', $reqRoom)
+                ->where(function ($q) use ($reqIn, $reqOut) {
+                    $q->where('requested_time_in', '<', $reqOut)
+                      ->where('requested_time_out', '>', $reqIn);
+                })
+                ->with('faculty')
+                ->first();
+
+            if ($roomChangeConflict) {
+                $changeOccupant = $roomChangeConflict->faculty?->full_name ?? 'another faculty';
+                $conflicts[] = [
+                    'type'    => 'room_request',
+                    'message' => "Room {$reqRoom} has a pending request by {$changeOccupant} ({$roomChangeConflict->requested_time_in}–{$roomChangeConflict->requested_time_out}) on {$reqDay}.",
+                ];
+            }
+        }
+
+        return response()->json([
+            'has_conflict' => count($conflicts) > 0,
+            'conflicts'    => $conflicts,
+        ]);
     }
 }
