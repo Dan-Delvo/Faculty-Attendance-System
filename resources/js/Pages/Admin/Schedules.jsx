@@ -952,6 +952,7 @@ function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDe
                                         placeholder="Room 201"
                                         className="form-input-sm"
                                     />
+                                    {errors[`details.${index}.room`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room`]}</p>}
                                 </div>
                             </div>
                         </div>
