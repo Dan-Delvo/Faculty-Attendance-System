@@ -83,13 +83,20 @@ class ScheduleChangeRequest extends Model
      */
     public static function getForAdmin(Request $request): array
     {
-        $perPage = (int) $request->query('per_page', 10);
-        $page    = (int) $request->query('page', 1);
+        $perPage = max(1, min((int) $request->query('per_page', 10), 100));
+        $page    = max(1, (int) $request->query('page', 1));
         $status  = $request->query('status', '');
         $search  = $request->query('search', '');
 
         $query = static::with(['faculty.user', 'faculty.department', 'scheduleDetail.schedule', 'reviewedBy'])
-            ->orderByRaw("FIELD(status, 'pending', 'approved', 'rejected')")
+            ->orderByRaw("
+                CASE
+                    WHEN status = 'pending'  THEN 1
+                    WHEN status = 'approved' THEN 2
+                    WHEN status = 'rejected' THEN 3
+                    ELSE 4
+                END
+            ")
             ->orderBy('created_at', 'desc');
 
         if ($status) {
