@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\InternalSchedule;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use RuntimeException;
 
 class AdminScheduleChangeRequestController extends Controller
 {
@@ -59,7 +62,7 @@ class AdminScheduleChangeRequestController extends Controller
                     ->first();
 
                 if (! $locked || $locked->status !== 'pending') {
-                    throw new \RuntimeException('This request has already been reviewed.');
+                    throw new RuntimeException('This request has already been reviewed.');
                 }
 
                 // ── Apply the requested changes to the schedule detail ──────────
@@ -74,7 +77,7 @@ class AdminScheduleChangeRequestController extends Controller
 
                 // Ensure the requested time out is after time in before proceeding
                 if ($timeOut->lessThanOrEqualTo($timeIn)) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
+                    throw ValidationException::withMessages([
                         'requested_time_out' => ['The requested time out must be after the requested time in.'],
                     ]);
                 }
@@ -90,6 +93,23 @@ class AdminScheduleChangeRequestController extends Controller
                     'hours_required' => $hoursRequired,
                 ]);
 
+                // ── Create or update the corresponding internal schedule ─────────
+                InternalSchedule::updateOrCreate(
+                    [
+                        'schedule_id' => $detail->schedule_id,
+                        'faculty_id'  => $locked->faculty_id,
+                        'day_of_week' => $locked->requested_day_of_week,
+                    ],
+                    [
+                        'device_time_in'  => $timeIn->toDateTimeString(),
+                        'device_time_out' => $timeOut->toDateTimeString(),
+                        'is_operational'  => true,
+                        'required_hours'  => $hoursRequired,
+                        'sync_status'     => 'pending',
+                        'synced_at'       => null,
+                    ]
+                );
+
                 // ── Mark the request as approved ────────────────────────────────
                 $locked->update([
                     'status'         => 'approved',
@@ -98,8 +118,10 @@ class AdminScheduleChangeRequestController extends Controller
                     'review_remarks' => $validated['review_remarks'] ?? null,
                 ]);
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
+        } catch (ValidationException $ve) {
+            return back()->withErrors($ve->errors())->withInput();
         }
 
         return back()->with('success', 'Schedule change request approved. The schedule has been updated.');
@@ -126,7 +148,7 @@ class AdminScheduleChangeRequestController extends Controller
                     ->first();
 
                 if (! $locked || $locked->status !== 'pending') {
-                    throw new \RuntimeException('This request has already been reviewed.');
+                    throw new RuntimeException('This request has already been reviewed.');
                 }
 
                 $locked->update([
@@ -136,7 +158,7 @@ class AdminScheduleChangeRequestController extends Controller
                     'review_remarks' => $validated['review_remarks'],
                 ]);
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 

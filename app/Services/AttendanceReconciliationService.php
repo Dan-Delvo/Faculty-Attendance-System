@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Faculty;
+use App\Models\Holiday;
+use App\Models\Schedule;
 use App\Models\InternalSchedule;
 use App\Models\ScheduleDetail;
 use App\Models\ScheduleChangeRequest;
@@ -35,6 +37,35 @@ class AttendanceReconciliationService
         $dayOfWeek  = $targetDate->format('l'); // e.g., "Monday"
         $gracePeriodMinutes = 5;
 
+        // 0. CHECK IF THE DATE IS A HOLIDAY ─────────────────────────────────
+        $isHoliday = Holiday::where(function ($q) use ($targetDate) {
+            // Exact non-recurring match
+            $q->where('holiday_date', $targetDate->toDateString())
+              ->where('is_recurring', false);
+        })->orWhere(function ($q) use ($targetDate) {
+            // Recurring: same month + day regardless of year
+            $q->where('is_recurring', true)
+              ->whereMonth('holiday_date', $targetDate->month)
+              ->whereDay('holiday_date', $targetDate->day);
+        })->exists();
+
+        if ($isHoliday) {
+            return [
+                'status'             => 'Holiday',
+                'expected_time_in'   => null,
+                'expected_time_out'  => null,
+                'actual_time_in'     => '--:--',
+                'actual_time_out'    => '--:--',
+                'total_hours'        => '0h 0m',
+                'late_minutes'       => 0,
+                'undertime_minutes'  => 0,
+                'raw_logs'           => [],
+                'online_attendance'  => false,
+            ];
+        }
+
+        // 1. RETRIEVE ACTIVE SCHEDULE FOR THIS DAY
+        $activeSchedules = $faculty->schedules()
         // ── 1. RESOLVE EXPECTED SCHEDULE FOR THIS DAY ────────────────────
 
         $activeScheduleIds = $faculty->schedules()

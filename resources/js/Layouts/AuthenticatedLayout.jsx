@@ -202,6 +202,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 </Dropdown.Link>
                                             </Dropdown.Content>
                                         </Dropdown>
+
+                                        <NavLink
+                                            href={route('admin.holidays.index')}
+                                            active={route().current('admin.holidays.*')}
+                                        >
+                                            Holidays
+                                        </NavLink>
                                     </>
                                 )}
                             </div>
@@ -438,6 +445,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                         </div>
                                     )}
                                 </div>
+
+                                <ResponsiveNavLink
+                                    href={route('admin.holidays.index')}
+                                    active={route().current('admin.holidays.*')}
+                                >
+                                    Holidays
+                                </ResponsiveNavLink>
                             </>
                         )}
                     </div>
