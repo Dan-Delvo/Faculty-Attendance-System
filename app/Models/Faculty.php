@@ -153,44 +153,60 @@ class Faculty extends Model
             return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'You already have a pending request for this schedule.'];
         }
 
-        // Conflict check against existing schedule details
-        $reqDay = $data['requested_day_of_week'];
-        $reqIn  = $data['requested_time_in'];
-        $reqOut = $data['requested_time_out'];
+        // Room + schedule conflict checks (only block when same room AND overlapping time)
+        $reqDay  = $data['requested_day_of_week'];
+        $reqIn   = $data['requested_time_in'];
+        $reqOut  = $data['requested_time_out'];
+        $reqRoom = trim($data['requested_room'] ?? '');
+        if ($reqRoom !== '') {
+            $roomConflict = ScheduleDetail::whereHas('schedule', function ($q) {
+                    $q->where('status', 'active');
+                })
+                ->where('id', '!=', $data['schedule_detail_id'])
+                ->where('day_of_week', $reqDay)
+                ->where('room', $reqRoom)
+                ->where(function ($q) use ($reqIn, $reqOut) {
+                    $q->whereRaw("TIME(time_in) < ?", [$reqOut])
+                      ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                })
+                ->first();
 
-        $conflictingDetail = ScheduleDetail::whereHas('schedule', function ($q) {
-                $q->where('faculty_id', $this->id)
-                  ->where('status', 'active');
-            })
-            ->where('id', '!=', $data['schedule_detail_id'])
-            ->where('day_of_week', $reqDay)
-            ->where(function ($q) use ($reqIn, $reqOut) {
-                $q->whereRaw("TIME(time_in) < ?", [$reqOut])
-                  ->whereRaw("TIME(time_out) > ?", [$reqIn]);
-            })
-            ->first();
-
-        if ($conflictingDetail) {
-            $conflictSubject = $conflictingDetail->subject_code ?? 'another class';
-            $conflictTime    = Carbon::parse($conflictingDetail->time_in)->format('H:i')
+            if ($roomConflict) {
+                $roomFaculty = $roomConflict->schedule?->faculty;
+                $occupant    = $roomFaculty ? $roomFaculty->full_name : 'another faculty';
+                $roomSubject = $roomConflict->subject_code ?? 'a class';
+                $roomTime    = Carbon::parse($roomConflict->time_in)->format('H:i')
                              . '–'
-                             . Carbon::parse($conflictingDetail->time_out)->format('H:i');
+                             . Carbon::parse($roomConflict->time_out)->format('H:i');
 
-            return ['success' => false, 'error_field' => 'requested_time_in', 'error_message' => "Time conflict with {$conflictSubject} ({$conflictTime}) on {$reqDay}."];
-        }
+                return [
+                    'success'       => false,
+                    'error_field'   => 'requested_room',
+                    'error_message' => "Room {$reqRoom} is already occupied by {$occupant} for {$roomSubject} ({$roomTime}) on {$reqDay}.",
+                ];
+            }
 
-        // Conflict check against pending/approved change requests
-        $conflictingRequest = $this->scheduleChangeRequests()
-            ->whereIn('status', ['pending', 'approved'])
-            ->where('requested_day_of_week', $reqDay)
-            ->where(function ($q) use ($reqIn, $reqOut) {
-                $q->where('requested_time_in', '<', $reqOut)
-                  ->where('requested_time_out', '>', $reqIn);
-            })
-            ->first();
+            // Also check room conflicts against OTHER faculty's pending/approved change requests
+            $roomChangeConflict = ScheduleChangeRequest::where('faculty_id', '!=', $this->id)
+                ->whereIn('status', ['pending', 'approved'])
+                ->where('requested_day_of_week', $reqDay)
+                ->where('requested_room', $reqRoom)
+                ->where(function ($q) use ($reqIn, $reqOut) {
+                    $q->where('requested_time_in', '<', $reqOut)
+                      ->where('requested_time_out', '>', $reqIn);
+                })
+                ->first();
 
-        if ($conflictingRequest) {
-            return ['success' => false, 'error_field' => 'requested_time_in', 'error_message' => "Time conflict with another pending/approved change request ({$conflictingRequest->requested_time_in}–{$conflictingRequest->requested_time_out}) on {$reqDay}."];
+            if ($roomChangeConflict) {
+                $changeFaculty = $roomChangeConflict->faculty;
+                $changeOccupant = $changeFaculty ? $changeFaculty->full_name : 'another faculty';
+
+                return [
+                    'success'       => false,
+                    'error_field'   => 'requested_room',
+                    'error_message' => "Room {$reqRoom} has a pending/approved change request by {$changeOccupant} ({$roomChangeConflict->requested_time_in}–{$roomChangeConflict->requested_time_out}) on {$reqDay}.",
+                ];
+            }
         }
 
         // All checks passed — create

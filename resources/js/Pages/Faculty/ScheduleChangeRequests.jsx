@@ -8,7 +8,8 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
@@ -45,21 +46,62 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
         (d) => d.id === Number(createForm.data.schedule_detail_id),
     );
 
-    // ── Frontend conflict detection ──────────────────────────
-    const detectConflict = () => {
-        const { requested_day_of_week, requested_time_in, requested_time_out, schedule_detail_id } = createForm.data;
-        if (!requested_day_of_week || !requested_time_in || !requested_time_out) return null;
+    // ── AJAX conflict detection ──────────────────────────────
+    const [conflicts, setConflicts] = useState([]);
+    const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+    const conflictTimerRef = useRef(null);
 
-        const conflict = scheduleDetails.find((d) => {
-            if (String(d.id) === String(schedule_detail_id)) return false;
-            if (d.day_of_week !== requested_day_of_week) return false;
-            return d.time_in < requested_time_out && d.time_out > requested_time_in;
-        });
+    useEffect(() => {
+        const { schedule_detail_id, requested_day_of_week, requested_time_in, requested_time_out, requested_room } = createForm.data;
 
-        return conflict ?? null;
-    };
+        // Need at least day + time in + time out to check
+        if (!requested_day_of_week || !requested_time_in || !requested_time_out) {
+            setConflicts([]);
+            return;
+        }
 
-    const frontendConflict = detectConflict();
+        // Debounce 400ms
+        if (conflictTimerRef.current) clearTimeout(conflictTimerRef.current);
+        conflictTimerRef.current = setTimeout(() => {
+            setIsCheckingConflict(true);
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+            fetch(route('faculty.schedule-change-requests.check-conflict'), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({
+                    schedule_detail_id: schedule_detail_id || null,
+                    requested_day_of_week,
+                    requested_time_in,
+                    requested_time_out,
+                    requested_room: requested_room || null,
+                }),
+            })
+                .then((res) => res.json())
+                .then((data) => setConflicts(data.conflicts || []))
+                .catch(() => setConflicts([]))
+                .finally(() => setIsCheckingConflict(false));
+        }, 400);
+
+        return () => {
+            if (conflictTimerRef.current) clearTimeout(conflictTimerRef.current);
+        };
+    }, [
+        createForm.data.schedule_detail_id,
+        createForm.data.requested_day_of_week,
+        createForm.data.requested_time_in,
+        createForm.data.requested_time_out,
+        createForm.data.requested_room,
+    ]);
+
+    const hasConflict = conflicts.length > 0;
 
     const handleCreate = (e) => {
         e.preventDefault();
@@ -68,8 +110,12 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
+                setConflicts([]);
                 // Refresh the list via AJAX
                 fetchRequests(filterStatus, 1);
+            },
+            onError: () => {
+                toast.error('Please fix the errors and try again.');
             },
         });
     };
@@ -348,7 +394,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             <select
                                 id="schedule_detail_id"
                                 value={createForm.data.schedule_detail_id}
-                                onChange={(e) => createForm.setData('schedule_detail_id', e.target.value)}
+                                onChange={(e) => { createForm.setData('schedule_detail_id', e.target.value); createForm.clearErrors('schedule_detail_id'); }}
                                 className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
                             >
                                 <option value="">— Choose a schedule —</option>
@@ -383,7 +429,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 <select
                                     id="requested_day_of_week"
                                     value={createForm.data.requested_day_of_week}
-                                    onChange={(e) => createForm.setData('requested_day_of_week', e.target.value)}
+                                    onChange={(e) => { createForm.setData('requested_day_of_week', e.target.value); createForm.clearErrors('requested_day_of_week'); }}
                                     className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
                                 >
                                     <option value="">— Select day —</option>
@@ -401,7 +447,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                     type="text"
                                     className="mt-1 block w-full text-sm"
                                     value={createForm.data.requested_room}
-                                    onChange={(e) => createForm.setData('requested_room', e.target.value)}
+                                    onChange={(e) => { createForm.setData('requested_room', e.target.value); createForm.clearErrors('requested_room'); }}
                                     placeholder="e.g. Room 301"
                                 />
                                 <InputError message={createForm.errors.requested_room} />
@@ -416,7 +462,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                     type="time"
                                     className="mt-1 block w-full text-sm"
                                     value={createForm.data.requested_time_in}
-                                    onChange={(e) => createForm.setData('requested_time_in', e.target.value)}
+                                    onChange={(e) => { createForm.setData('requested_time_in', e.target.value); createForm.clearErrors('requested_time_in'); }}
                                 />
                                 <InputError message={createForm.errors.requested_time_in} />
                             </div>
@@ -428,7 +474,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                     type="time"
                                     className="mt-1 block w-full text-sm"
                                     value={createForm.data.requested_time_out}
-                                    onChange={(e) => createForm.setData('requested_time_out', e.target.value)}
+                                    onChange={(e) => { createForm.setData('requested_time_out', e.target.value); createForm.clearErrors('requested_time_out'); }}
                                 />
                                 <InputError message={createForm.errors.requested_time_out} />
                             </div>
@@ -441,7 +487,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 type="date"
                                 className="mt-1 block w-full text-sm"
                                 value={createForm.data.effective_date}
-                                onChange={(e) => createForm.setData('effective_date', e.target.value)}
+                                onChange={(e) => { createForm.setData('effective_date', e.target.value); createForm.clearErrors('effective_date'); }}
                             />
                             <InputError message={createForm.errors.effective_date} />
                         </div>
@@ -453,24 +499,39 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 rows={3}
                                 className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm resize-none"
                                 value={createForm.data.reason}
-                                onChange={(e) => createForm.setData('reason', e.target.value)}
+                                onChange={(e) => { createForm.setData('reason', e.target.value); createForm.clearErrors('reason'); }}
                                 placeholder="Briefly explain why you need this schedule change..."
                             />
                             <InputError message={createForm.errors.reason} />
                         </div>
 
                         {/* Conflict warning */}
-                        {frontendConflict && (
+                        {isCheckingConflict && (
+                            <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 p-3 flex items-center gap-2">
+                                <svg className="h-4 w-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                <p className="text-xs text-blue-600 dark:text-blue-300">Checking for conflicts…</p>
+                            </div>
+                        )}
+                        {!isCheckingConflict && hasConflict && (
                             <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 p-4 flex items-start gap-3">
                                 <svg className="h-5 w-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
                                 </svg>
                                 <div>
-                                    <p className="text-sm font-bold text-red-700 dark:text-red-400">Schedule Conflict Detected</p>
-                                    <p className="text-xs text-red-600 dark:text-red-300 mt-1">
-                                        The requested time overlaps with <strong>{frontendConflict.subject_code}</strong> ({frontendConflict.time_in}–{frontendConflict.time_out}) on {frontendConflict.day_of_week}.
-                                        Please choose a different time slot.
+                                    <p className="text-sm font-bold text-red-700 dark:text-red-400">
+                                        {conflicts.length === 1 ? 'Conflict Detected' : `${conflicts.length} Conflicts Detected`}
                                     </p>
+                                    <ul className="mt-1 space-y-1">
+                                        {conflicts.map((c, i) => (
+                                            <li key={i} className="text-xs text-red-600 dark:text-red-300 flex items-start gap-1.5">
+                                                <span className="shrink-0 mt-0.5">🚪</span>
+                                                <span>{c.message}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             </div>
                         )}
@@ -481,7 +542,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         <SecondaryButton type="button" onClick={() => setShowCreateModal(false)}>
                             Cancel
                         </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={createForm.processing || !!frontendConflict}>
+                        <PrimaryButton type="submit" disabled={createForm.processing || hasConflict || isCheckingConflict}>
                             {createForm.processing ? 'Submitting…' : 'Submit Request'}
                         </PrimaryButton>
                     </div>
