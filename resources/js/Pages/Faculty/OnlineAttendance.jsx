@@ -9,6 +9,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
+import toast from 'react-hot-toast';
 
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
@@ -58,6 +59,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         if (!file) return;
 
         createForm.setData(field, file);
+        createForm.clearErrors(field);
 
         // Generate preview
         const reader = new FileReader();
@@ -96,6 +98,9 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                 setPreviewIn(null);
                 setPreviewOut(null);
                 fetchRequests(filterStatus, 1);
+            },
+            onError: () => {
+                toast.error('Please fix the errors and try again.');
             },
         });
     };
@@ -431,7 +436,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                             <select
                                 id="schedule_detail_id"
                                 value={createForm.data.schedule_detail_id}
-                                onChange={(e) => createForm.setData('schedule_detail_id', e.target.value)}
+                                onChange={(e) => { createForm.setData('schedule_detail_id', e.target.value); createForm.clearErrors('schedule_detail_id'); }}
                                 className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm"
                             >
                                 <option value="">— No specific schedule —</option>
@@ -452,7 +457,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                     <button
                                         key={type}
                                         type="button"
-                                        onClick={() => createForm.setData('class_type', type)}
+                                        onClick={() => { createForm.setData('class_type', type); createForm.clearErrors('class_type'); }}
                                         className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold text-center transition-all border-2 ${
                                             createForm.data.class_type === type
                                                 ? type === 'synchronous'
@@ -487,7 +492,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 type="date"
                                 className="mt-1 block w-full text-sm"
                                 value={createForm.data.attendance_date}
-                                onChange={(e) => createForm.setData('attendance_date', e.target.value)}
+                                onChange={(e) => { createForm.setData('attendance_date', e.target.value); createForm.clearErrors('attendance_date'); }}
                                 max={new Date().toISOString().split('T')[0]}
                             />
                             <InputError message={createForm.errors.attendance_date} />
@@ -502,7 +507,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                     type="time"
                                     className="mt-1 block w-full text-sm"
                                     value={createForm.data.time_in}
-                                    onChange={(e) => createForm.setData('time_in', e.target.value)}
+                                    onChange={(e) => { createForm.setData('time_in', e.target.value); createForm.clearErrors('time_in'); }}
                                 />
                                 <InputError message={createForm.errors.time_in} />
                             </div>
@@ -513,7 +518,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                     type="time"
                                     className="mt-1 block w-full text-sm"
                                     value={createForm.data.time_out}
-                                    onChange={(e) => createForm.setData('time_out', e.target.value)}
+                                    onChange={(e) => { createForm.setData('time_out', e.target.value); createForm.clearErrors('time_out'); }}
                                 />
                                 <InputError message={createForm.errors.time_out} />
                             </div>
@@ -585,7 +590,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 rows={3}
                                 className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-sm resize-none"
                                 value={createForm.data.remarks}
-                                onChange={(e) => createForm.setData('remarks', e.target.value)}
+                                onChange={(e) => { createForm.setData('remarks', e.target.value); createForm.clearErrors('remarks'); }}
                                 placeholder="Any additional notes about this online class..."
                             />
                             <InputError message={createForm.errors.remarks} />
