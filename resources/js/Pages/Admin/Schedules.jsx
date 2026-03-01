@@ -26,6 +26,9 @@ const emptyDetail = {
     hours_required: 1,
 };
 
+const ALLOWED_TIME_MIN = '07:00';
+const ALLOWED_TIME_MAX = '21:00';
+
 /* ──────────────────────────────────────────────
    Status badge component
    ────────────────────────────────────────────── */
@@ -244,7 +247,58 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setShowViewModal(true);
     };
 
+    const toMinutes = (timeValue) => {
+        if (!timeValue || !timeValue.includes(':')) {
+            return null;
+        }
+
+        const [hourPart, minutePart] = timeValue.split(':').map(Number);
+        if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
+            return null;
+        }
+
+        return (hourPart * 60) + minutePart;
+    };
+
+    const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
+    const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
+
+    const validateDetailTimeRanges = () => {
+        const localErrors = {};
+
+        form.details.forEach((detail, index) => {
+            const timeInMinutes = toMinutes(detail.time_in);
+            const timeOutMinutes = toMinutes(detail.time_out);
+
+            if (timeInMinutes === null || timeOutMinutes === null) {
+                return;
+            }
+
+            if (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes) {
+                localErrors[`details.${index}.time_in`] = 'Time In must be between 07:00 AM and 09:00 PM.';
+            }
+
+            if (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes) {
+                localErrors[`details.${index}.time_out`] = 'Time Out must be between 07:00 AM and 09:00 PM.';
+                return;
+            }
+
+            if (timeOutMinutes <= timeInMinutes) {
+                localErrors[`details.${index}.time_out`] = 'Time Out must be later than Time In.';
+            }
+        });
+
+        return localErrors;
+    };
+
     const handleSubmitCreate = () => {
+        const localErrors = validateDetailTimeRanges();
+        if (Object.keys(localErrors).length > 0) {
+            setErrors(localErrors);
+            toast.error('Please fix invalid time ranges before creating the schedule.');
+            return;
+        }
+
         setProcessing(true);
         setErrors({});
         router.post(route('admin.schedules.store'), form, {
@@ -262,6 +316,13 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     };
 
     const handleSubmitEdit = () => {
+        const localErrors = validateDetailTimeRanges();
+        if (Object.keys(localErrors).length > 0) {
+            setErrors(localErrors);
+            toast.error('Please fix invalid time ranges before saving changes.');
+            return;
+        }
+
         setProcessing(true);
         setErrors({});
         router.put(route('admin.schedules.update', selectedSchedule.id), form, {
@@ -546,6 +607,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         form={form}
                         setForm={setForm}
                         errors={errors}
+                        setErrors={setErrors}
                         faculties={faculties}
                         addDetailRow={addDetailRow}
                         removeDetailRow={removeDetailRow}
@@ -587,6 +649,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                         form={form}
                         setForm={setForm}
                         errors={errors}
+                        setErrors={setErrors}
                         faculties={faculties}
                         addDetailRow={addDetailRow}
                         removeDetailRow={removeDetailRow}
@@ -728,7 +791,128 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 /* ──────────────────────────────────────────────
    Schedule Form component (shared between Create/Edit)
    ────────────────────────────────────────────── */
-function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDetailRow, updateDetail }) {
+function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRow, removeDetailRow, updateDetail }) {
+    const toMinutes = (timeValue) => {
+        if (!timeValue || !timeValue.includes(':')) {
+            return null;
+        }
+
+        const [hourPart, minutePart] = timeValue.split(':').map(Number);
+        if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
+            return null;
+        }
+
+        return (hourPart * 60) + minutePart;
+    };
+
+    const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
+    const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
+
+    const applyRowTimeValidation = (index, timeInValue, timeOutValue) => {
+        const timeInMinutes = toMinutes(timeInValue);
+        const timeOutMinutes = toMinutes(timeOutValue);
+
+        setErrors((prevErrors) => {
+            const nextErrors = { ...prevErrors };
+            const timeInErrorKey = `details.${index}.time_in`;
+            const timeOutErrorKey = `details.${index}.time_out`;
+
+            delete nextErrors[timeInErrorKey];
+            delete nextErrors[timeOutErrorKey];
+
+            if (timeInMinutes !== null && (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes)) {
+                nextErrors[timeInErrorKey] = 'Time In must be between 07:00 AM and 09:00 PM.';
+            }
+
+            if (timeOutMinutes !== null && (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes)) {
+                nextErrors[timeOutErrorKey] = 'Time Out must be between 07:00 AM and 09:00 PM.';
+                return nextErrors;
+            }
+
+            if (timeInMinutes !== null && timeOutMinutes !== null && timeOutMinutes <= timeInMinutes) {
+                nextErrors[timeOutErrorKey] = 'Time Out must be later than Time In.';
+            }
+
+            return nextErrors;
+        });
+    };
+
+    const toTimeString = (minutesValue) => {
+        const normalizedMinutes = ((minutesValue % 1440) + 1440) % 1440;
+        const hours = Math.floor(normalizedMinutes / 60);
+        const minutes = normalizedMinutes % 60;
+
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    };
+
+    const computeHoursFromRange = (timeInValue, timeOutValue) => {
+        const timeInMinutes = toMinutes(timeInValue);
+        const timeOutMinutes = toMinutes(timeOutValue);
+
+        if (timeInMinutes === null || timeOutMinutes === null || timeOutMinutes <= timeInMinutes) {
+            return null;
+        }
+
+        const totalMinutes = timeOutMinutes - timeInMinutes;
+        const roundedHours = Math.round(totalMinutes / 60);
+
+        return Math.max(1, Math.min(12, roundedHours));
+    };
+
+    const computeTimeOutFromHours = (timeInValue, hoursValue) => {
+        const timeInMinutes = toMinutes(timeInValue);
+        if (timeInMinutes === null) {
+            return null;
+        }
+
+        const normalizedHours = Number(hoursValue);
+        if (!Number.isFinite(normalizedHours)) {
+            return null;
+        }
+
+        const clampedHours = Math.max(1, Math.min(12, normalizedHours));
+        return toTimeString(timeInMinutes + (clampedHours * 60));
+    };
+
+    const handleTimeOutChange = (index, timeOutValue) => {
+        updateDetail(index, 'time_out', timeOutValue);
+
+        const currentTimeIn = form.details[index]?.time_in;
+        const computedHours = computeHoursFromRange(currentTimeIn, timeOutValue);
+
+        applyRowTimeValidation(index, currentTimeIn, timeOutValue);
+
+        if (computedHours !== null) {
+            updateDetail(index, 'hours_required', computedHours);
+        }
+    };
+
+    const handleTimeInChange = (index, timeInValue) => {
+        updateDetail(index, 'time_in', timeInValue);
+
+        const currentTimeOut = form.details[index]?.time_out;
+
+        applyRowTimeValidation(index, timeInValue, currentTimeOut);
+    };
+
+    const handleHoursChange = (index, hoursValue) => {
+        const parsedHours = Number(hoursValue);
+        const clampedHours = Number.isFinite(parsedHours)
+            ? Math.max(1, Math.min(12, parsedHours))
+            : 1;
+
+        updateDetail(index, 'hours_required', clampedHours);
+
+        const currentTimeIn = form.details[index]?.time_in;
+        const computedTimeOut = computeTimeOutFromHours(currentTimeIn, clampedHours);
+
+        if (computedTimeOut !== null) {
+            updateDetail(index, 'time_out', computedTimeOut);
+
+            applyRowTimeValidation(index, currentTimeIn, computedTimeOut);
+        }
+    };
+
     return (
         <div className="mt-5 space-y-6">
             {/* Top fields grid */}
@@ -891,7 +1075,9 @@ function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDe
                                     <input
                                         type="time"
                                         value={detail.time_in}
-                                        onChange={(e) => updateDetail(index, 'time_in', e.target.value)}
+                                        onChange={(e) => handleTimeInChange(index, e.target.value)}
+                                        min={ALLOWED_TIME_MIN}
+                                        max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
                                     {errors[`details.${index}.time_in`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.time_in`]}</p>}
@@ -902,7 +1088,9 @@ function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDe
                                     <input
                                         type="time"
                                         value={detail.time_out}
-                                        onChange={(e) => updateDetail(index, 'time_out', e.target.value)}
+                                        onChange={(e) => handleTimeOutChange(index, e.target.value)}
+                                        min={ALLOWED_TIME_MIN}
+                                        max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
                                     {errors[`details.${index}.time_out`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.time_out`]}</p>}
@@ -913,7 +1101,7 @@ function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDe
                                     <input
                                         type="number"
                                         value={detail.hours_required}
-                                        onChange={(e) => updateDetail(index, 'hours_required', Number(e.target.value))}
+                                        onChange={(e) => handleHoursChange(index, e.target.value)}
                                         min="1"
                                         max="12"
                                         className="form-input-sm"

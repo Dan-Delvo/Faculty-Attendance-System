@@ -70,6 +70,24 @@ class AdminScheduleController extends Controller
         foreach ($validated['details'] as $index => $detail) {
             $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
             $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+            $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
+            $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
+
+            if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_in" => 'The time in must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
+
+            if ($timeOut->lessThan($minAllowedTime) || $timeOut->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_out" => 'The time out must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
 
             if ($timeOut->lessThanOrEqualTo($timeIn)) {
                 return back()
@@ -151,6 +169,24 @@ class AdminScheduleController extends Controller
         foreach ($validated['details'] as $index => $detail) {
             $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
             $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+            $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
+            $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
+
+            if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_in" => 'The time in must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
+
+            if ($timeOut->lessThan($minAllowedTime) || $timeOut->greaterThan($maxAllowedTime)) {
+                return back()
+                    ->withErrors([
+                        "details.$index.time_out" => 'The time out must be between 07:00 AM and 09:00 PM.',
+                    ])
+                    ->withInput();
+            }
 
             if ($timeOut->lessThanOrEqualTo($timeIn)) {
                 return back()
