@@ -462,10 +462,13 @@ class Faculty extends Model
     }
 
     /**
-     * Get today's schedule details formatted for the dashboard.
+     * Get today's schedule entries formatted for the dashboard.
      *
-     * Each entry includes subject, code, section (from schedule_code),
-     * room, start/end time, and derived status (completed / ongoing / upcoming).
+     * Uses InternalSchedule (operational/biometric times) as the basis.
+     * Falls back to ScheduleDetail if no internal schedule exists.
+     *
+     * Each entry includes start/end time and derived status
+     * (completed / ongoing / upcoming).
      */
     public function getTodayScheduleDetails(): array
     {
@@ -473,30 +476,78 @@ class Faculty extends Model
         $todayName = $now->format('l');
 
         // Get the active schedules for this faculty
-        $activeSchedules = $this->schedules()
+        $activeScheduleIds = $this->schedules()
             ->where('status', 'active')
             ->where('effective_from', '<=', $now)
             ->where('effective_until', '>=', $now)
             ->pluck('id');
 
-        if ($activeSchedules->isEmpty()) {
+        if ($activeScheduleIds->isEmpty()) {
             return [];
         }
 
-        $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
+        // Try internal schedule first (operational/biometric times)
+        $internals = InternalSchedule::where('faculty_id', $this->id)
+            ->whereIn('schedule_id', $activeScheduleIds)
+            ->where('day_of_week', $todayName)
+            ->where('is_operational', true)
+            ->orderBy('device_time_in', 'asc')
+            ->get();
+
+        if ($internals->isNotEmpty()) {
+            // Also load matching schedule details for subject/room info
+            $detailsByScheduleAndDay = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
+                ->where('day_of_week', $todayName)
+                ->get()
+                ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
+
+            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay) {
+                $timeIn = Carbon::parse($entry->device_time_in);
+                $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
+
+                $todayTimeIn = $now->copy()->setTimeFrom($timeIn);
+                $todayTimeOut = $timeOut ? $now->copy()->setTimeFrom($timeOut) : null;
+
+                if ($todayTimeOut && $now->greaterThan($todayTimeOut)) {
+                    $status = 'completed';
+                } elseif ($todayTimeOut && $now->greaterThanOrEqualTo($todayTimeIn) && $now->lessThanOrEqualTo($todayTimeOut)) {
+                    $status = 'ongoing';
+                } elseif (!$todayTimeOut && $now->greaterThanOrEqualTo($todayTimeIn)) {
+                    $status = 'ongoing';
+                } else {
+                    $status = 'upcoming';
+                }
+
+                // Try to get subject/room info from the matching schedule detail
+                $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
+
+                return [
+                    'id' => $entry->id,
+                    'subject' => $detail?->subject_desc ?? 'Operational Duty',
+                    'code' => $detail?->subject_code ?? '',
+                    'section' => $detail?->subject_code ?? '',
+                    'room' => $detail?->room ?? 'TBA',
+                    'startTime' => $timeIn->format('h:i A'),
+                    'endTime' => $timeOut ? $timeOut->format('h:i A') : '--:--',
+                    'status' => $status,
+                    'source' => 'internal',
+                ];
+            })->values()->toArray();
+        }
+
+        // Fallback to official schedule details
+        $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->where('day_of_week', $todayName)
             ->orderByRaw('TIME(time_in) ASC')
             ->get();
 
-        return $details->map(function (ScheduleDetail $detail, $index) use ($now) {
+        return $details->map(function (ScheduleDetail $detail) use ($now) {
             $timeIn = Carbon::parse($detail->time_in);
             $timeOut = Carbon::parse($detail->time_out);
 
-            // Build actual datetime for today to compare
             $todayTimeIn = $now->copy()->setTimeFrom($timeIn);
             $todayTimeOut = $now->copy()->setTimeFrom($timeOut);
 
-            // Derive status
             if ($now->greaterThan($todayTimeOut)) {
                 $status = 'completed';
             } elseif ($now->greaterThanOrEqualTo($todayTimeIn) && $now->lessThanOrEqualTo($todayTimeOut)) {
@@ -505,18 +556,16 @@ class Faculty extends Model
                 $status = 'upcoming';
             }
 
-            // Extract a section-like label from schedule_code (e.g. "SCH-FAC001-2S-2026")
-            $section = $detail->subject_code ?? '';
-
             return [
                 'id' => $detail->id,
                 'subject' => $detail->subject_desc ?? 'Untitled Subject',
                 'code' => $detail->subject_code ?? '',
-                'section' => $section,
+                'section' => $detail->subject_code ?? '',
                 'room' => $detail->room ?? 'TBA',
                 'startTime' => $timeIn->format('h:i A'),
                 'endTime' => $timeOut->format('h:i A'),
                 'status' => $status,
+                'source' => 'official',
             ];
         })->values()->toArray();
     }
@@ -538,15 +587,44 @@ class Faculty extends Model
             return [];
         }
 
-        // We need the schedule to determine "on-time" vs "late" vs "early-out"
-        $activeSchedules = $this->schedules()
+        // Use internal schedule (operational times) for late/early-out detection.
+        // Falls back to official schedule details if no internal schedule exists.
+        $activeScheduleIds = $this->schedules()
             ->where('status', 'active')
             ->pluck('id');
 
-        // Build a lookup: day_of_week => [time_in, time_out] from schedule details
+        // Build a lookup: day_of_week => [time_in, time_out]
         $scheduleLookup = [];
-        if ($activeSchedules->isNotEmpty()) {
-            $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)->get();
+
+        // Try internal schedule first
+        $internals = InternalSchedule::where('faculty_id', $this->id)
+            ->whereIn('schedule_id', $activeScheduleIds)
+            ->where('is_operational', true)
+            ->get();
+
+        if ($internals->isNotEmpty()) {
+            foreach ($internals as $entry) {
+                $day = $entry->day_of_week;
+                $tIn = Carbon::parse($entry->device_time_in)->format('H:i');
+                $tOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out)->format('H:i') : null;
+
+                if (!isset($scheduleLookup[$day])) {
+                    $scheduleLookup[$day] = [
+                        'time_in' => $tIn,
+                        'time_out' => $tOut ?? '23:59',
+                    ];
+                } else {
+                    if ($tIn < $scheduleLookup[$day]['time_in']) {
+                        $scheduleLookup[$day]['time_in'] = $tIn;
+                    }
+                    if ($tOut && $tOut > $scheduleLookup[$day]['time_out']) {
+                        $scheduleLookup[$day]['time_out'] = $tOut;
+                    }
+                }
+            }
+        } elseif ($activeScheduleIds->isNotEmpty()) {
+            // Fallback to official schedule details
+            $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             foreach ($details as $detail) {
                 $day = $detail->day_of_week;
                 $tIn = Carbon::parse($detail->time_in)->format('H:i');
@@ -760,6 +838,62 @@ class Faculty extends Model
                         'startTime' => Carbon::parse($detail->time_in)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->time_out)->format('h:i A'),
                         'hours' => $detail->hours_required,
+                    ];
+                })->values()->toArray(),
+            ];
+        }
+
+        return $schedule;
+    }
+
+    /**
+     * Get the weekly internal (operational) schedule for the faculty.
+     *
+     * Returns an array grouped by day of week with expected clock-in/out,
+     * operational status, and required hours.
+     */
+    public function getWeeklyInternalSchedule(): array
+    {
+        $now = Carbon::now();
+
+        $activeScheduleIds = $this->schedules()
+            ->where('status', 'active')
+            ->where('effective_from', '<=', $now)
+            ->where('effective_until', '>=', $now)
+            ->pluck('id');
+
+        if ($activeScheduleIds->isEmpty()) {
+            return [];
+        }
+
+        $internals = InternalSchedule::where('faculty_id', $this->id)
+            ->whereIn('schedule_id', $activeScheduleIds)
+            ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+            ->orderBy('device_time_in', 'asc')
+            ->get();
+
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        $schedule = [];
+
+        foreach ($days as $day) {
+            $dayEntries = $internals->where('day_of_week', $day);
+
+            if ($dayEntries->isEmpty()) {
+                continue;
+            }
+
+            $schedule[] = [
+                'day' => $day,
+                'shortDay' => substr($day, 0, 3),
+                'entries' => $dayEntries->map(function (InternalSchedule $entry) {
+                    return [
+                        'id' => $entry->id,
+                        'timeIn' => Carbon::parse($entry->device_time_in)->format('h:i A'),
+                        'timeOut' => $entry->device_time_out ? Carbon::parse($entry->device_time_out)->format('h:i A') : '--:--',
+                        'requiredHours' => (float) $entry->required_hours,
+                        'isOperational' => $entry->is_operational,
+                        'syncStatus' => $entry->sync_status,
+                        'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
                     ];
                 })->values()->toArray(),
             ];

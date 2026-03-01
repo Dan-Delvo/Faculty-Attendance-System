@@ -56,11 +56,26 @@ class FacultyDashboardController extends Controller
 
         // Fetch the 20 most recent actual attendance records
         $recentAttendance = [];
-        $earliestLog = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
-            ->orderBy('log_datetime', 'asc')
-            ->first();
 
-        $startDate = $earliestLog ? Carbon::parse($earliestLog->log_datetime)->startOfDay() : Carbon::today()->subDays(60);
+        // Determine start date from earliest of: biometric log, online attendance, or schedule effective_from
+        $earliestBiometric = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
+            ->orderBy('log_datetime', 'asc')
+            ->value('log_datetime');
+
+        $earliestOnline = \App\Models\OnlineAttendanceRequest::where('faculty_id', $faculty->id)
+            ->where('status', 'approved')
+            ->orderBy('attendance_date', 'asc')
+            ->value('attendance_date');
+
+        $earliestSchedule = $faculty->schedules()
+            ->where('status', 'active')
+            ->orderBy('effective_from', 'asc')
+            ->value('effective_from');
+
+        $startDate = collect([$earliestBiometric, $earliestOnline, $earliestSchedule])
+            ->filter()
+            ->map(fn($d) => Carbon::parse($d)->startOfDay())
+            ->min() ?? Carbon::today()->subDays(60);
         $endDate = Carbon::today();
 
         for ($date = $endDate->copy(); $date->greaterThanOrEqualTo($startDate); $date->subDay()) {
@@ -140,12 +155,14 @@ class FacultyDashboardController extends Controller
         if (!$faculty) {
             return Inertia::render('Faculty/Schedule', [
                 'weeklySchedule' => [],
+                'internalSchedule' => [],
                 'facultyName' => '',
             ]);
         }
 
         return Inertia::render('Faculty/Schedule', [
             'weeklySchedule' => $faculty->getWeeklySchedule(),
+            'internalSchedule' => $faculty->getWeeklyInternalSchedule(),
             'facultyName' => $faculty->full_name,
         ]);
     }
@@ -160,11 +177,25 @@ class FacultyDashboardController extends Controller
 
         $attendanceLogs = [];
         if ($faculty) {
-            $earliestLog = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
+            // Determine start date from earliest of: biometric log, online attendance, or schedule effective_from
+            $earliestBiometric = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
                 ->orderBy('log_datetime', 'asc')
-                ->first();
+                ->value('log_datetime');
 
-            $startDate = $earliestLog ? Carbon::parse($earliestLog->log_datetime)->startOfDay() : Carbon::today()->subDays(30);
+            $earliestOnline = \App\Models\OnlineAttendanceRequest::where('faculty_id', $faculty->id)
+                ->where('status', 'approved')
+                ->orderBy('attendance_date', 'asc')
+                ->value('attendance_date');
+
+            $earliestSchedule = $faculty->schedules()
+                ->where('status', 'active')
+                ->orderBy('effective_from', 'asc')
+                ->value('effective_from');
+
+            $startDate = collect([$earliestBiometric, $earliestOnline, $earliestSchedule])
+                ->filter()
+                ->map(fn($d) => Carbon::parse($d)->startOfDay())
+                ->min() ?? Carbon::today()->subDays(30);
             $endDate = Carbon::today();
 
             for ($date = $endDate->copy(); $date->greaterThanOrEqualTo($startDate); $date->subDay()) {
