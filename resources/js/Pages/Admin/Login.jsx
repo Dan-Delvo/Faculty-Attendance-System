@@ -5,6 +5,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { STRINGS } from '@/Constants/admin';
 
 export default function AdminLogin({ status, canResetPassword }) {
     const [showPassword, setShowPassword] = useState(false);
@@ -44,10 +45,10 @@ export default function AdminLogin({ status, canResetPassword }) {
             <form onSubmit={submit} className="space-y-6">
                 <div className="space-y-1.5 border-b border-gray-100 dark:border-gray-700/50 pb-6 mb-6">
                     <h3 className="text-xl font-extrabold text-[#7a1315] dark:text-[#cc2127] tracking-tight">
-                        Admin Portal
+                        {STRINGS.portalTitle}
                     </h3>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                        Secure access for Authorized Administrators.
+                        {STRINGS.portalSubtitle}
                     </p>
                 </div>
 

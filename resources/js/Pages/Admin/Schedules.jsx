@@ -6,18 +6,15 @@ import { Head, router } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-
-/* ──────────────────────────────────────────────
-   Constants
-   ────────────────────────────────────────────── */
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const SEMESTERS = [
-    { value: 1, label: '1st Semester' },
-    { value: 2, label: '2nd Semester' },
-    { value: 3, label: 'Summer' },
-];
-const STATUSES = ['draft', 'active', 'archived'];
-const TYPES = ['fixed', 'flexible'];
+import {
+    DAYS,
+    SEMESTERS,
+    SCHEDULE_STATUSES,
+    SCHEDULE_TYPES,
+    SCHEDULE_STATUS_STYLES,
+    SCHEDULE_TYPE_STYLES,
+    STRINGS,
+} from '@/Constants/admin';
 
 const emptyDetail = {
     day_of_week: 'Monday',
@@ -33,14 +30,8 @@ const emptyDetail = {
    Status badge component
    ────────────────────────────────────────────── */
 function StatusBadge({ status }) {
-    const styles = {
-        active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-emerald-600/20',
-        draft: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ring-amber-600/20',
-        archived: 'bg-gray-100 text-gray-600 dark:bg-gray-700/40 dark:text-gray-400 ring-gray-600/20',
-    };
-
     return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${styles[status] ?? styles.draft}`}>
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${SCHEDULE_STATUS_STYLES[status] ?? SCHEDULE_STATUS_STYLES.draft}`}>
             {status}
         </span>
     );
@@ -50,13 +41,8 @@ function StatusBadge({ status }) {
    Type badge component
    ────────────────────────────────────────────── */
 function TypeBadge({ type }) {
-    const styles = {
-        fixed: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 ring-sky-600/20',
-        flexible: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 ring-violet-600/20',
-    };
-
     return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${styles[type] ?? styles.flexible}`}>
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset capitalize ${SCHEDULE_TYPE_STYLES[type] ?? SCHEDULE_TYPE_STYLES.flexible}`}>
             {type}
         </span>
     );
@@ -339,10 +325,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                        Schedule Management
+                        {STRINGS.schedulesPageTitle}
                     </h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Manage official faculty schedules. Add, edit, or remove schedule entries.
+                        {STRINGS.schedulesDescription}
                     </p>
                 </div>
                 <button
@@ -395,10 +381,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     </div>
 
                     {/* Status filter */}
-                    <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={STATUSES} />
+                    <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={SCHEDULE_STATUSES} />
 
                     {/* Type filter */}
-                    <FilterSelect label="Type" value={typeFilter} onChange={setTypeFilter} options={TYPES} />
+                    <FilterSelect label="Type" value={typeFilter} onChange={setTypeFilter} options={SCHEDULE_TYPES} />
 
                     {/* Semester filter */}
                     <div className="min-w-[130px]">
@@ -817,7 +803,7 @@ function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDe
                         onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
                         className="form-input"
                     >
-                        {STATUSES.map((s) => (
+                        {SCHEDULE_STATUSES.map((s) => (
                             <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                         ))}
                     </select>
@@ -829,7 +815,7 @@ function ScheduleForm({ form, setForm, errors, faculties, addDetailRow, removeDe
                         onChange={(e) => setForm((f) => ({ ...f, schedule_type: e.target.value }))}
                         className="form-input"
                     >
-                        {TYPES.map((t) => (
+                        {SCHEDULE_TYPES.map((t) => (
                             <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                         ))}
                     </select>

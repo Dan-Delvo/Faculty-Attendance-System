@@ -4,6 +4,12 @@ import { Head, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
+    CHART_BAR_ACTIVE_COLOR,
+    CHART_BAR_BASE_COLOR,
+    DASHBOARD_ITEMS_PER_PAGE,
+    STRINGS,
+} from '@/Constants/admin';
+import {
     BarChart,
     Bar,
     XAxis,
@@ -162,15 +168,14 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
     const [activeTab, setActiveTab] = useState('in');
 
     // Pagination for faculty lists
-    const ITEMS_PER_PAGE = 5;
     const [inPage, setInPage] = useState(1);
     const [outPage, setOutPage] = useState(1);
 
-    const totalInPages = Math.ceil(timedIn.length / ITEMS_PER_PAGE);
-    const totalOutPages = Math.ceil(timedOut.length / ITEMS_PER_PAGE);
+    const totalInPages = Math.ceil(timedIn.length / DASHBOARD_ITEMS_PER_PAGE);
+    const totalOutPages = Math.ceil(timedOut.length / DASHBOARD_ITEMS_PER_PAGE);
 
-    const paginatedIn = timedIn.slice((inPage - 1) * ITEMS_PER_PAGE, inPage * ITEMS_PER_PAGE);
-    const paginatedOut = timedOut.slice((outPage - 1) * ITEMS_PER_PAGE, outPage * ITEMS_PER_PAGE);
+    const paginatedIn = timedIn.slice((inPage - 1) * DASHBOARD_ITEMS_PER_PAGE, inPage * DASHBOARD_ITEMS_PER_PAGE);
+    const paginatedOut = timedOut.slice((outPage - 1) * DASHBOARD_ITEMS_PER_PAGE, outPage * DASHBOARD_ITEMS_PER_PAGE);
 
     // Auto-refresh every 30 seconds
     useEffect(() => {
@@ -209,7 +214,7 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
                         <span className="text-white opacity-90">{userName}</span>!
                     </h1>
                     <p className="mt-2 max-w-xl text-base text-white/70 leading-relaxed">
-                        Monitor faculty attendance, manage schedules, and keep track of campus activity in real time.
+                        {STRINGS.dashboardDescription}
                     </p>
                 </div>
             </section>
@@ -308,7 +313,7 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
                                         {graphData.map((entry, index) => (
                                             <Cell
                                                 key={`cell-${index}`}
-                                                fill={entry.isToday ? '#7a1315' : '#d1d5db'}
+                                                fill={entry.isToday ? CHART_BAR_ACTIVE_COLOR : CHART_BAR_BASE_COLOR}
                                                 className="transition-all duration-300"
                                             />
                                         ))}

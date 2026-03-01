@@ -8,25 +8,11 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import { Head, useForm } from '@inertiajs/react';
 import { useState, useCallback } from 'react';
-
-/* ──────────────────────────────────────────────
-   Status badge styles
-   ────────────────────────────────────────────── */
-const STATUS_STYLES = {
-    pending:  'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
-    approved: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/30',
-    rejected: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-400/10 dark:text-red-400 dark:ring-red-400/30',
-};
-
-const DAY_AVATAR_COLORS = {
-    Monday:    'from-sky-500 to-sky-600',
-    Tuesday:   'from-violet-500 to-violet-600',
-    Wednesday: 'from-blue-500 to-blue-600',
-    Thursday:  'from-teal-500 to-teal-600',
-    Friday:    'from-orange-500 to-orange-600',
-    Saturday:  'from-pink-500 to-pink-600',
-    Sunday:    'from-rose-500 to-rose-600',
-};
+import {
+    CHANGE_REQUEST_STATUS_STYLES as STATUS_STYLES,
+    DAY_AVATAR_COLORS,
+    STRINGS,
+} from '@/Constants/admin';
 
 /* ──────────────────────────────────────────────
    Main Component
@@ -151,10 +137,10 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-                        Schedule Change Requests
+                        {STRINGS.changeRequestsPageTitle}
                     </h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Review and process faculty schedule change requests. Approved requests update the official schedule.
+                        {STRINGS.changeRequestsDescription}
                     </p>
                 </div>
 
