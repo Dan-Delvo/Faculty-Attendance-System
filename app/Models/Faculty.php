@@ -90,6 +90,11 @@ class Faculty extends Model
         return $this->hasMany(ScheduleChangeRequest::class);
     }
 
+    public function onlineAttendanceRequests(): HasMany
+    {
+        return $this->hasMany(OnlineAttendanceRequest::class);
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Schedule Change Request Methods                                    */
     /* ------------------------------------------------------------------ */
@@ -216,6 +221,119 @@ class Faculty extends Model
 
         if ($request->status !== 'pending') {
             return ['success' => false, 'error_message' => 'Only pending requests can be cancelled.'];
+        }
+
+        $request->delete();
+
+        return ['success' => true];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Online Attendance Request Methods                                  */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Get active schedule details formatted for the online attendance dropdown.
+     */
+    public function getScheduleDetailsForOnlineAttendance(): array
+    {
+        return $this->schedules()
+            ->where('status', 'active')
+            ->with('scheduleDetails')
+            ->get()
+            ->flatMap(function ($schedule) {
+                return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
+                    return [
+                        'id'            => $d->id,
+                        'day_of_week'   => $d->day_of_week,
+                        'time_in'       => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out'      => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code'  => $d->subject_code,
+                        'subject_desc'  => $d->subject_desc,
+                        'room'          => $d->room,
+                        'schedule_code' => $schedule->schedule_code,
+                    ];
+                });
+            })
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Create an online attendance request with duplicate check.
+     *
+     * @param  array  $data       Validated form data.
+     * @param  string $screenshotInPath  Storage path for time-in screenshot.
+     * @param  string $screenshotOutPath Storage path for time-out screenshot.
+     * @return array{success: bool, error_field?: string, error_message?: string}
+     */
+    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, string $screenshotOutPath): array
+    {
+        // Block duplicate pending request for the same date
+        $existingPending = $this->onlineAttendanceRequests()
+            ->where('attendance_date', $data['attendance_date'])
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            return [
+                'success'       => false,
+                'error_field'   => 'attendance_date',
+                'error_message' => 'You already have a pending online attendance request for this date.',
+            ];
+        }
+
+        // Verify schedule detail belongs to this faculty (if provided)
+        if (!empty($data['schedule_detail_id'])) {
+            $owns = ScheduleDetail::whereHas('schedule', function ($q) {
+                $q->where('faculty_id', $this->id);
+            })->where('id', $data['schedule_detail_id'])->exists();
+
+            if (!$owns) {
+                return [
+                    'success'       => false,
+                    'error_field'   => 'schedule_detail_id',
+                    'error_message' => 'The selected schedule does not belong to you.',
+                ];
+            }
+        }
+
+        $this->onlineAttendanceRequests()->create([
+            'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+            'class_type'         => $data['class_type'],
+            'attendance_date'    => $data['attendance_date'],
+            'time_in'            => $data['time_in'],
+            'time_out'           => $data['time_out'],
+            'screenshot_in'      => $screenshotInPath,
+            'screenshot_out'     => $screenshotOutPath,
+            'remarks'            => $data['remarks'] ?? null,
+            'status'             => 'pending',
+        ]);
+
+        return ['success' => true];
+    }
+
+    /**
+     * Cancel (soft-delete) a pending online attendance request.
+     *
+     * @return array{success: bool, error_message?: string}
+     */
+    public function cancelOnlineAttendanceRequest(OnlineAttendanceRequest $request): array
+    {
+        if ($request->faculty_id !== $this->id) {
+            return ['success' => false, 'error_message' => 'Unauthorized.'];
+        }
+
+        if ($request->status !== 'pending') {
+            return ['success' => false, 'error_message' => 'Only pending requests can be cancelled.'];
+        }
+
+        // Delete uploaded screenshots
+        if ($request->screenshot_in) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($request->screenshot_in);
+        }
+        if ($request->screenshot_out) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($request->screenshot_out);
         }
 
         $request->delete();

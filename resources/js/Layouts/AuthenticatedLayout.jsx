@@ -110,6 +110,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                         >
                                             Change Schedule
                                         </NavLink>
+                                        <NavLink
+                                            href={route('faculty.online-attendance.index')}
+                                            active={route().current('faculty.online-attendance.*')}
+                                        >
+                                            Online Attendance
+                                        </NavLink>
                                     </>
                                 )}
 
@@ -261,6 +267,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                     active={route().current('faculty.schedule-change-requests.*')}
                                 >
                                     Change Schedule
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('faculty.online-attendance.index')}
+                                    active={route().current('faculty.online-attendance.*')}
+                                >
+                                    Online Attendance
                                 </ResponsiveNavLink>
                             </>
                         )}

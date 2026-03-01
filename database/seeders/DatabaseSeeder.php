@@ -23,6 +23,8 @@ class DatabaseSeeder extends Seeder
      *  9. BiometricLogSeeder     – 540 raw biometric entries (18 weeks × 15 faculty × 2 logs)
      * 10. AttendanceSeeder       – 270 attendance records + 75 DTR summaries
      * 11. LeaveApplicationSeeder – 15 leave applications
+     * 12. ScheduleChangeRequestSeeder – ~37 schedule change requests (2-3 per faculty)
+     * 13. OnlineAttendanceSeeder – ~37 online attendance requests (2-3 per faculty)
      */
     public function run(): void
     {
@@ -39,6 +41,8 @@ class DatabaseSeeder extends Seeder
                 BiometricLogSeeder::class,
                 AttendanceSeeder::class,
                 LeaveApplicationSeeder::class,
+                ScheduleChangeRequestSeeder::class,
+                OnlineAttendanceSeeder::class,
             ]);
         });
     }

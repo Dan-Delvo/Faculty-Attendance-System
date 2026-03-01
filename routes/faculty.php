@@ -3,6 +3,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Faculty\FacultyDashboardController;
 use App\Http\Controllers\Faculty\ScheduleChangeRequestController;
+use App\Http\Controllers\Faculty\OnlineAttendanceController;
 
 Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/dashboard', [FacultyDashboardController::class, 'index'])->name('faculty.dashboard');
@@ -22,6 +23,18 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
     // AJAX endpoints for schedule change requests
     Route::get('/faculty/api/schedule-change-requests', [ScheduleChangeRequestController::class, 'filter'])
         ->name('faculty.schedule-change-requests.filter');
+
+    // ── Online Attendance Requests ─────────────────────────────────────────
+    Route::get('/faculty/online-attendance', [OnlineAttendanceController::class, 'index'])
+        ->name('faculty.online-attendance.index');
+    Route::post('/faculty/online-attendance', [OnlineAttendanceController::class, 'store'])
+        ->name('faculty.online-attendance.store');
+    Route::delete('/faculty/online-attendance/{onlineAttendanceRequest}', [OnlineAttendanceController::class, 'destroy'])
+        ->name('faculty.online-attendance.destroy');
+
+    // AJAX endpoints for online attendance
+    Route::get('/faculty/api/online-attendance', [OnlineAttendanceController::class, 'filter'])
+        ->name('faculty.online-attendance.filter');
 });
 
 /*
