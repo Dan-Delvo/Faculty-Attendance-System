@@ -85,6 +85,262 @@ class Faculty extends Model
         return $this->hasMany(LeaveApplication::class);
     }
 
+    public function scheduleChangeRequests(): HasMany
+    {
+        return $this->hasMany(ScheduleChangeRequest::class);
+    }
+
+    public function onlineAttendanceRequests(): HasMany
+    {
+        return $this->hasMany(OnlineAttendanceRequest::class);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Schedule Change Request Methods                                    */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Get active schedule details formatted for the change-request dropdown.
+     */
+    public function getScheduleDetailsForChangeRequest(): array
+    {
+        return $this->schedules()
+            ->where('status', 'active')
+            ->with('scheduleDetails')
+            ->get()
+            ->flatMap(function ($schedule) {
+                return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
+                    return [
+                        'id'            => $d->id,
+                        'day_of_week'   => $d->day_of_week,
+                        'time_in'       => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out'      => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code'  => $d->subject_code,
+                        'subject_desc'  => $d->subject_desc,
+                        'room'          => $d->room,
+                        'schedule_code' => $schedule->schedule_code,
+                    ];
+                });
+            })
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Create a schedule change request with ownership, duplicate, and conflict checks.
+     *
+     * @param  array  $data  Validated form data.
+     * @return array{success: bool, error_field?: string, error_message?: string}
+     */
+    public function createScheduleChangeRequest(array $data): array
+    {
+        // Verify ownership
+        $scheduleDetail = ScheduleDetail::whereHas('schedule', function ($q) {
+            $q->where('faculty_id', $this->id);
+        })->find($data['schedule_detail_id']);
+
+        if (!$scheduleDetail) {
+            return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'The selected schedule does not belong to you.'];
+        }
+
+        // Block duplicate pending request
+        $existingPending = $this->scheduleChangeRequests()
+            ->where('schedule_detail_id', $data['schedule_detail_id'])
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'You already have a pending request for this schedule.'];
+        }
+
+        // Conflict check against existing schedule details
+        $reqDay = $data['requested_day_of_week'];
+        $reqIn  = $data['requested_time_in'];
+        $reqOut = $data['requested_time_out'];
+
+        $conflictingDetail = ScheduleDetail::whereHas('schedule', function ($q) {
+                $q->where('faculty_id', $this->id)
+                  ->where('status', 'active');
+            })
+            ->where('id', '!=', $data['schedule_detail_id'])
+            ->where('day_of_week', $reqDay)
+            ->where(function ($q) use ($reqIn, $reqOut) {
+                $q->whereRaw("TIME(time_in) < ?", [$reqOut])
+                  ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+            })
+            ->first();
+
+        if ($conflictingDetail) {
+            $conflictSubject = $conflictingDetail->subject_code ?? 'another class';
+            $conflictTime    = Carbon::parse($conflictingDetail->time_in)->format('H:i')
+                             . '–'
+                             . Carbon::parse($conflictingDetail->time_out)->format('H:i');
+
+            return ['success' => false, 'error_field' => 'requested_time_in', 'error_message' => "Time conflict with {$conflictSubject} ({$conflictTime}) on {$reqDay}."];
+        }
+
+        // Conflict check against pending/approved change requests
+        $conflictingRequest = $this->scheduleChangeRequests()
+            ->whereIn('status', ['pending', 'approved'])
+            ->where('requested_day_of_week', $reqDay)
+            ->where(function ($q) use ($reqIn, $reqOut) {
+                $q->where('requested_time_in', '<', $reqOut)
+                  ->where('requested_time_out', '>', $reqIn);
+            })
+            ->first();
+
+        if ($conflictingRequest) {
+            return ['success' => false, 'error_field' => 'requested_time_in', 'error_message' => "Time conflict with another pending/approved change request ({$conflictingRequest->requested_time_in}–{$conflictingRequest->requested_time_out}) on {$reqDay}."];
+        }
+
+        // All checks passed — create
+        $this->scheduleChangeRequests()->create([
+            'schedule_detail_id'    => $data['schedule_detail_id'],
+            'requested_day_of_week' => $data['requested_day_of_week'],
+            'requested_time_in'     => $data['requested_time_in'],
+            'requested_time_out'    => $data['requested_time_out'],
+            'requested_room'        => $data['requested_room'] ?? null,
+            'effective_date'        => $data['effective_date'],
+            'reason'                => $data['reason'],
+            'status'                => 'pending',
+        ]);
+
+        return ['success' => true];
+    }
+
+    /**
+     * Cancel (soft-delete) a pending schedule change request.
+     *
+     * @return array{success: bool, error_message?: string}
+     */
+    public function cancelScheduleChangeRequest(ScheduleChangeRequest $request): array
+    {
+        if ($request->faculty_id !== $this->id) {
+            return ['success' => false, 'error_message' => 'Unauthorized.'];
+        }
+
+        if ($request->status !== 'pending') {
+            return ['success' => false, 'error_message' => 'Only pending requests can be cancelled.'];
+        }
+
+        $request->delete();
+
+        return ['success' => true];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Online Attendance Request Methods                                  */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Get active schedule details formatted for the online attendance dropdown.
+     */
+    public function getScheduleDetailsForOnlineAttendance(): array
+    {
+        return $this->schedules()
+            ->where('status', 'active')
+            ->with('scheduleDetails')
+            ->get()
+            ->flatMap(function ($schedule) {
+                return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
+                    return [
+                        'id'            => $d->id,
+                        'day_of_week'   => $d->day_of_week,
+                        'time_in'       => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out'      => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code'  => $d->subject_code,
+                        'subject_desc'  => $d->subject_desc,
+                        'room'          => $d->room,
+                        'schedule_code' => $schedule->schedule_code,
+                    ];
+                });
+            })
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Create an online attendance request with duplicate check.
+     *
+     * @param  array  $data       Validated form data.
+     * @param  string $screenshotInPath  Storage path for time-in screenshot.
+     * @param  string $screenshotOutPath Storage path for time-out screenshot.
+     * @return array{success: bool, error_field?: string, error_message?: string}
+     */
+    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, string $screenshotOutPath): array
+    {
+        // Block duplicate pending request for the same date
+        $existingPending = $this->onlineAttendanceRequests()
+            ->where('attendance_date', $data['attendance_date'])
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            return [
+                'success'       => false,
+                'error_field'   => 'attendance_date',
+                'error_message' => 'You already have a pending online attendance request for this date.',
+            ];
+        }
+
+        // Verify schedule detail belongs to this faculty (if provided)
+        if (!empty($data['schedule_detail_id'])) {
+            $owns = ScheduleDetail::whereHas('schedule', function ($q) {
+                $q->where('faculty_id', $this->id);
+            })->where('id', $data['schedule_detail_id'])->exists();
+
+            if (!$owns) {
+                return [
+                    'success'       => false,
+                    'error_field'   => 'schedule_detail_id',
+                    'error_message' => 'The selected schedule does not belong to you.',
+                ];
+            }
+        }
+
+        $this->onlineAttendanceRequests()->create([
+            'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+            'class_type'         => $data['class_type'],
+            'attendance_date'    => $data['attendance_date'],
+            'time_in'            => $data['time_in'],
+            'time_out'           => $data['time_out'],
+            'screenshot_in'      => $screenshotInPath,
+            'screenshot_out'     => $screenshotOutPath,
+            'remarks'            => $data['remarks'] ?? null,
+            'status'             => 'pending',
+        ]);
+
+        return ['success' => true];
+    }
+
+    /**
+     * Cancel (soft-delete) a pending online attendance request.
+     *
+     * @return array{success: bool, error_message?: string}
+     */
+    public function cancelOnlineAttendanceRequest(OnlineAttendanceRequest $request): array
+    {
+        if ($request->faculty_id !== $this->id) {
+            return ['success' => false, 'error_message' => 'Unauthorized.'];
+        }
+
+        if ($request->status !== 'pending') {
+            return ['success' => false, 'error_message' => 'Only pending requests can be cancelled.'];
+        }
+
+        // Delete uploaded screenshots
+        if ($request->screenshot_in) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($request->screenshot_in);
+        }
+        if ($request->screenshot_out) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($request->screenshot_out);
+        }
+
+        $request->delete();
+
+        return ['success' => true];
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Accessors                                                          */
     /* ------------------------------------------------------------------ */
@@ -213,7 +469,7 @@ class Faculty extends Model
 
         $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
             ->where('day_of_week', $todayName)
-            ->orderBy('time_in')
+            ->orderByRaw('TIME(time_in) ASC')
             ->get();
 
         return $details->map(function (ScheduleDetail $detail, $index) use ($now) {
@@ -463,7 +719,7 @@ class Faculty extends Model
 
         $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
-            ->orderBy('time_in')
+            ->orderByRaw('TIME(time_in) ASC')
             ->get();
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];

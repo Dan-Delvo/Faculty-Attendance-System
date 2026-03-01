@@ -6,6 +6,7 @@ use App\Models\Faculty;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
 use App\Models\BiometricLog;
+use App\Models\OnlineAttendanceRequest;
 use Carbon\Carbon;
 
 class AttendanceReconciliationService
@@ -13,6 +14,10 @@ class AttendanceReconciliationService
     /**
      * Retrieve and calculate the attendance match for a specific date on the fly.
      * This can be used by both the Faculty Dashboard and the Admin Dashboard.
+     *
+     * Considers both biometric logs AND approved online attendance entries.
+     * Approved online attendance takes precedence when no biometric logs exist;
+     * when both exist, the earliest IN and latest OUT across both sources are used.
      *
      * @param Faculty $faculty
      * @param string $date (Y-m-d format)
@@ -45,6 +50,13 @@ class AttendanceReconciliationService
             ->orderBy('log_datetime', 'asc')
             ->get();
 
+        // 3. RETRIEVE APPROVED ONLINE ATTENDANCE FOR THAT DAY
+        $onlineEntries = OnlineAttendanceRequest::where('faculty_id', $faculty->id)
+            ->whereDate('attendance_date', $targetDate->toDateString())
+            ->where('status', 'approved')
+            ->orderBy('time_in', 'asc')
+            ->get();
+
         // If no schedule for today...
         if (count($scheduleDetails) === 0) {
             return [
@@ -56,11 +68,35 @@ class AttendanceReconciliationService
                 'total_hours' => '0h 0m',
                 'late_minutes' => 0,
                 'undertime_minutes' => 0,
-                'raw_logs' => $logs->toArray()
+                'raw_logs' => $logs->toArray(),
+                'online_attendance' => false,
             ];
         }
 
-        // 3. CALCULATION MECHANISM
+        // 4. DETERMINE ACTUAL IN/OUT — merge biometric logs + approved online attendance
+
+        $biometricIn  = $logs->where('log_type', 'IN')->first()
+            ? Carbon::parse($logs->where('log_type', 'IN')->first()->log_datetime)
+            : null;
+        $biometricOut = $logs->where('log_type', 'OUT')->last()
+            ? Carbon::parse($logs->where('log_type', 'OUT')->last()->log_datetime)
+            : null;
+
+        $onlineIn  = $onlineEntries->isNotEmpty()
+            ? Carbon::parse($targetDate->toDateString() . ' ' . $onlineEntries->first()->time_in)
+            : null;
+        $onlineOut = $onlineEntries->isNotEmpty()
+            ? Carbon::parse($targetDate->toDateString() . ' ' . $onlineEntries->last()->time_out)
+            : null;
+
+        // Pick the earliest IN and latest OUT across both sources
+        $actualTimeIn  = $this->earliest($biometricIn, $onlineIn);
+        $actualTimeOut = $this->latest($biometricOut, $onlineOut);
+
+        // Track whether online attendance contributed to this day
+        $hasOnline = $onlineEntries->isNotEmpty();
+
+        // 5. CALCULATION MECHANISM
 
         // Find earliest expected IN and latest expected OUT for the day
         $firstClass = $scheduleDetails->first();
@@ -68,13 +104,6 @@ class AttendanceReconciliationService
 
         $expectedTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($firstClass->time_in)->format('H:i:s'));
         $expectedTimeOut = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($lastClass->time_out)->format('H:i:s'));
-
-        // Find earliest actual IN and latest actual OUT from logs
-        $actualInLog = $logs->where('log_type', 'IN')->first();
-        $actualOutLog = $logs->where('log_type', 'OUT')->last();
-
-        $actualTimeIn = $actualInLog ? Carbon::parse($actualInLog->log_datetime) : null;
-        $actualTimeOut = $actualOutLog ? Carbon::parse($actualOutLog->log_datetime) : null;
 
         $lateMinutes = 0;
         $undertimeMinutes = 0;
@@ -128,7 +157,28 @@ class AttendanceReconciliationService
             'total_hours' => $totalHours,
             'late_minutes' => $lateMinutes,
             'undertime_minutes' => $undertimeMinutes,
-            'raw_logs' => $logs->toArray()
+            'raw_logs' => $logs->toArray(),
+            'online_attendance' => $hasOnline,
         ];
+    }
+
+    /**
+     * Return the earliest of two Carbon instances (either may be null).
+     */
+    private function earliest(?Carbon $a, ?Carbon $b): ?Carbon
+    {
+        if (!$a) return $b;
+        if (!$b) return $a;
+        return $a->lessThanOrEqualTo($b) ? $a : $b;
+    }
+
+    /**
+     * Return the latest of two Carbon instances (either may be null).
+     */
+    private function latest(?Carbon $a, ?Carbon $b): ?Carbon
+    {
+        if (!$a) return $b;
+        if (!$b) return $a;
+        return $a->greaterThanOrEqualTo($b) ? $a : $b;
     }
 }

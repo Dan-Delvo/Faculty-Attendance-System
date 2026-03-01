@@ -11,9 +11,14 @@ export default function FacultyAttendance({ attendanceLogs }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'biometric' | 'online'
 
-    // Filter logs based on date picker
+    // Filter logs based on date picker and source
     const filteredLogs = attendanceLogs.filter(log => {
+        // Source filter
+        if (sourceFilter === 'online' && !log.online_attendance) return false;
+        if (sourceFilter === 'biometric' && log.online_attendance) return false;
+
         if (!dateRange.start && !dateRange.end) return true;
 
         let valid = true;
@@ -60,8 +65,31 @@ export default function FacultyAttendance({ attendanceLogs }) {
                     Attendance Match History
                 </h1>
                 <p className="mt-2 max-w-2xl text-base text-gray-500 dark:text-gray-400">
-                    Your matched attendance status spanning your entire history. This uses your raw biometric logs aligned with your official faculty schedule.
+                    Your matched attendance status spanning your entire history. This uses your raw biometric logs and approved online attendance aligned with your official faculty schedule.
                 </p>
+
+                {/* Source filter */}
+                <div className="mt-5 flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Source:</span>
+                    {[
+                        { value: 'all', label: 'All' },
+                        { value: 'biometric', label: 'Biometric' },
+                        { value: 'online', label: 'Online' },
+                    ].map(opt => (
+                        <button
+                            key={opt.value}
+                            onClick={() => { setSourceFilter(opt.value); setCurrentPage(1); }}
+                            className={
+                                'rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-200 ' +
+                                (sourceFilter === opt.value
+                                    ? 'bg-[#7a1315] text-white shadow-sm'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600')
+                            }
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <Pagination
@@ -116,12 +144,22 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                             <div className="text-xs text-gray-500 dark:text-slate-400">{log.dayOfWeek}</div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-slate-400">
-                                            <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-black uppercase tracking-wider ring-1 ring-inset ${log.status === 'Present' || log.status === 'On-time' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                                log.status.includes('Late') ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400' :
-                                                    'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400'
-                                                }`}>
-                                                {log.status}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-black uppercase tracking-wider ring-1 ring-inset ${log.status === 'Present' || log.status === 'On-time' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                                    log.status.includes('Late') ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400' :
+                                                        'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400'
+                                                    }`}>
+                                                    {log.status}
+                                                </span>
+                                                {log.online_attendance && (
+                                                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700 ring-1 ring-inset ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/30">
+                                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+                                                        </svg>
+                                                        Online
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-600 dark:text-slate-300">
                                             {log.expected_time_in} <span className="text-gray-300 dark:text-slate-500 mx-1">-</span> {log.expected_time_out}
