@@ -141,7 +141,7 @@ export default function AttendanceImports({ batches, filters }) {
                                             <td className="py-3 pr-3 align-top">
                                                 <p className="font-semibold text-gray-800 dark:text-gray-100">{batch.file_name}</p>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                    Imported by: {batch.imported_by?.email ?? 'System'}
+                                                    Imported by: {batch.importedBy?.email ?? 'System'}
                                                 </p>
                                             </td>
                                             <td className="py-3 px-3 align-top">
