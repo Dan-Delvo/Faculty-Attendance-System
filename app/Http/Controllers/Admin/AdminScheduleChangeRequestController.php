@@ -10,7 +10,9 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use RuntimeException;
 
 class AdminScheduleChangeRequestController extends Controller
 {
@@ -60,7 +62,7 @@ class AdminScheduleChangeRequestController extends Controller
                     ->first();
 
                 if (! $locked || $locked->status !== 'pending') {
-                    throw new \RuntimeException('This request has already been reviewed.');
+                    throw new RuntimeException('This request has already been reviewed.');
                 }
 
                 // ── Apply the requested changes to the schedule detail ──────────
@@ -75,7 +77,7 @@ class AdminScheduleChangeRequestController extends Controller
 
                 // Ensure the requested time out is after time in before proceeding
                 if ($timeOut->lessThanOrEqualTo($timeIn)) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
+                    throw ValidationException::withMessages([
                         'requested_time_out' => ['The requested time out must be after the requested time in.'],
                     ]);
                 }
@@ -116,8 +118,10 @@ class AdminScheduleChangeRequestController extends Controller
                     'review_remarks' => $validated['review_remarks'] ?? null,
                 ]);
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
+        } catch (ValidationException $ve) {
+            return back()->withErrors($ve->errors())->withInput();
         }
 
         return back()->with('success', 'Schedule change request approved. The schedule has been updated.');
@@ -144,7 +148,7 @@ class AdminScheduleChangeRequestController extends Controller
                     ->first();
 
                 if (! $locked || $locked->status !== 'pending') {
-                    throw new \RuntimeException('This request has already been reviewed.');
+                    throw new RuntimeException('This request has already been reviewed.');
                 }
 
                 $locked->update([
@@ -154,7 +158,7 @@ class AdminScheduleChangeRequestController extends Controller
                     'review_remarks' => $validated['review_remarks'],
                 ]);
             });
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 

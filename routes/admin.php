@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
@@ -71,4 +72,17 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::patch('/schedule-change-requests/{scheduleChangeRequest}/reject', [AdminScheduleChangeRequestController::class, 'reject'])
         ->name('admin.schedule-change-requests.reject');
+
+    // ── Holiday Management ─────────────────────────────────────────────────
+    Route::get('/holidays', [AdminHolidayController::class, 'index'])
+        ->name('admin.holidays.index');
+
+    Route::post('/holidays', [AdminHolidayController::class, 'store'])
+        ->name('admin.holidays.store');
+
+    Route::put('/holidays/{holiday}', [AdminHolidayController::class, 'update'])
+        ->name('admin.holidays.update');
+
+    Route::delete('/holidays/{holiday}', [AdminHolidayController::class, 'destroy'])
+        ->name('admin.holidays.destroy');
 });
