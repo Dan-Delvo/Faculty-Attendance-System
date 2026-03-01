@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\InternalSchedule;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
 use Carbon\Carbon;
@@ -89,6 +90,23 @@ class AdminScheduleChangeRequestController extends Controller
                     'room'           => $locked->requested_room ?? $detail->room,
                     'hours_required' => $hoursRequired,
                 ]);
+
+                // ── Create or update the corresponding internal schedule ─────────
+                InternalSchedule::updateOrCreate(
+                    [
+                        'schedule_id' => $detail->schedule_id,
+                        'faculty_id'  => $locked->faculty_id,
+                        'day_of_week' => $locked->requested_day_of_week,
+                    ],
+                    [
+                        'device_time_in'  => $timeIn->toDateTimeString(),
+                        'device_time_out' => $timeOut->toDateTimeString(),
+                        'is_operational'  => true,
+                        'required_hours'  => $hoursRequired,
+                        'sync_status'     => 'pending',
+                        'synced_at'       => null,
+                    ]
+                );
 
                 // ── Mark the request as approved ────────────────────────────────
                 $locked->update([
