@@ -576,7 +576,7 @@ function RequestCard({ req, onApprove, onReject }) {
                         {/* ── Schedule comparison ── */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
                                 <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Day:</span> {req.original_day}</p>
                                     <p><span className="font-semibold">Time:</span> {formatTimeToAmPm(req.original_time_in)} – {formatTimeToAmPm(req.original_time_out)}</p>
