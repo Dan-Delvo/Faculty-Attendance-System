@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class AdminScheduleController extends Controller
@@ -61,9 +62,9 @@ class AdminScheduleController extends Controller
             'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'details.*.time_in'       => 'required|date_format:H:i',
             'details.*.time_out'      => 'required|date_format:H:i',
-            'details.*.subject_code'  => 'nullable|string|max:50',
+            'details.*.subject_code'  => 'required|string|max:50|regex:/\S/',
             'details.*.subject_desc'  => 'nullable|string|max:255',
-            'details.*.room'          => 'nullable|string|max:100',
+            'details.*.room'          => 'required|string|max:100|regex:/\S/',
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
@@ -158,12 +159,13 @@ class AdminScheduleController extends Controller
             'schedule_type'   => 'required|in:fixed,flexible',
             'notes'           => 'nullable|string|max:1000',
             'details'         => 'required|array|min:1',
+            'details.*.id'            => 'nullable|integer|min:1',
             'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'details.*.time_in'       => 'required|date_format:H:i',
             'details.*.time_out'      => 'required|date_format:H:i',
-            'details.*.subject_code'  => 'nullable|string|max:50',
+            'details.*.subject_code'  => 'required|string|max:50|regex:/\S/',
             'details.*.subject_desc'  => 'nullable|string|max:255',
-            'details.*.room'          => 'nullable|string|max:100',
+            'details.*.room'          => 'required|string|max:100|regex:/\S/',
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
@@ -220,21 +222,69 @@ class AdminScheduleController extends Controller
                     'notes'           => $validated['notes'] ?? null,
                 ]);
 
-                // Delete existing details and recreate
-                $schedule->scheduleDetails()->delete();
+                $existingDetails = $schedule->scheduleDetails()->get()->keyBy('id');
+
+                $submittedDetailIds = collect($validated['details'])
+                    ->pluck('id')
+                    ->filter(fn ($id) => ! empty($id))
+                    ->map(fn ($id) => (int) $id)
+                    ->values();
+
+                // Soft-delete removed schedule_details so related history/attendance data
+                // remains intact. Unique-key collisions for previously soft-deleted rows
+                // are handled below via withTrashed restore when re-adding the same entry.
+                $toRemove = $existingDetails->keys()->diff($submittedDetailIds);
+                if ($toRemove->isNotEmpty()) {
+                    ScheduleDetail::whereIn('id', $toRemove->all())->delete();
+                }
 
                 foreach ($validated['details'] as $detail) {
-                    $schedule->scheduleDetails()->create([
+                    $payload = [
                         'day_of_week'    => $detail['day_of_week'],
                         'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
                         'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
-                        'subject_code'   => $detail['subject_code'] ?? null,
+                        'subject_code'   => $detail['subject_code'],
                         'subject_desc'   => $detail['subject_desc'] ?? null,
-                        'room'           => $detail['room'] ?? null,
+                        'room'           => $detail['room'],
                         'hours_required' => $detail['hours_required'],
-                    ]);
+                    ];
+
+                    $detailId = isset($detail['id']) ? (int) $detail['id'] : null;
+
+                    if ($detailId && ! $existingDetails->has($detailId)) {
+                        throw ValidationException::withMessages([
+                            'details' => 'One or more schedule details are invalid for this schedule.',
+                        ]);
+                    }
+
+                    if ($detailId && $existingDetails->has($detailId)) {
+                        $existingDetails->get($detailId)->update($payload);
+                        continue;
+                    }
+
+                    // When creating a new detail, check for a soft-deleted row with the
+                    // same schedule/day/time so we restore+update it instead of inserting
+                    // a new row that would violate the unique_schedule_detail constraint.
+                    $timeIn  = Carbon::createFromFormat('H:i', $detail['time_in'])->format('H:i:s');
+                    $timeOut = Carbon::createFromFormat('H:i', $detail['time_out'])->format('H:i:s');
+
+                    $softDeleted = ScheduleDetail::onlyTrashed()
+                        ->where('schedule_id', $schedule->id)
+                        ->where('day_of_week', $payload['day_of_week'])
+                        ->whereRaw('TIME(time_in) = ?', [$timeIn])
+                        ->whereRaw('TIME(time_out) = ?', [$timeOut])
+                        ->first();
+
+                    if ($softDeleted) {
+                        $softDeleted->restore();
+                        $softDeleted->update($payload);
+                    } else {
+                        $schedule->scheduleDetails()->create($payload);
+                    }
                 }
             });
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
         } catch (\Throwable $e) {
             return redirect()->route('admin.schedules.index')
                 ->with('error', 'Failed to update schedule. Please try again.');

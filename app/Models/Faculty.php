@@ -118,6 +118,13 @@ class Faculty extends Model
                         'subject_code' => $d->subject_code,
                         'subject_desc' => $d->subject_desc,
                         'room' => $d->room,
+                        'id' => $d->id,
+                        'day_of_week' => $d->day_of_week,
+                        'time_in' => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out' => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code' => $d->subject_code,
+                        'subject_desc' => $d->subject_desc,
+                        'room' => $d->room,
                         'schedule_code' => $schedule->schedule_code,
                     ];
                 });
@@ -157,9 +164,14 @@ class Faculty extends Model
         $reqDay = $data['requested_day_of_week'];
         $reqIn = $data['requested_time_in'];
         $reqOut = $data['requested_time_out'];
+        $reqDay = $data['requested_day_of_week'];
+        $reqIn = $data['requested_time_in'];
+        $reqOut = $data['requested_time_out'];
         $reqRoom = trim($data['requested_room'] ?? '');
         if ($reqRoom !== '') {
             $roomConflict = ScheduleDetail::whereHas('schedule', function ($q) {
+                $q->where('status', 'active');
+            })
                 $q->where('status', 'active');
             })
                 ->where('id', '!=', $data['schedule_detail_id'])
@@ -168,18 +180,25 @@ class Faculty extends Model
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->whereRaw("TIME(time_in) < ?", [$reqOut])
                         ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                        ->whereRaw("TIME(time_out) > ?", [$reqIn]);
                 })
                 ->first();
 
             if ($roomConflict) {
                 $roomFaculty = $roomConflict->schedule?->faculty;
                 $occupant = $roomFaculty ? $roomFaculty->full_name : 'another faculty';
+                $occupant = $roomFaculty ? $roomFaculty->full_name : 'another faculty';
                 $roomSubject = $roomConflict->subject_code ?? 'a class';
+                $roomTime = Carbon::parse($roomConflict->time_in)->format('H:i')
+                    . '–'
+                    . Carbon::parse($roomConflict->time_out)->format('H:i');
                 $roomTime = Carbon::parse($roomConflict->time_in)->format('H:i')
                     . '–'
                     . Carbon::parse($roomConflict->time_out)->format('H:i');
 
                 return [
+                    'success' => false,
+                    'error_field' => 'requested_room',
                     'success' => false,
                     'error_field' => 'requested_room',
                     'error_message' => "Room {$reqRoom} is already occupied by {$occupant} for {$roomSubject} ({$roomTime}) on {$reqDay}.",
@@ -194,6 +213,7 @@ class Faculty extends Model
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->where('requested_time_in', '<', $reqOut)
                         ->where('requested_time_out', '>', $reqIn);
+                        ->where('requested_time_out', '>', $reqIn);
                 })
                 ->first();
 
@@ -204,6 +224,8 @@ class Faculty extends Model
                 return [
                     'success' => false,
                     'error_field' => 'requested_room',
+                    'success' => false,
+                    'error_field' => 'requested_room',
                     'error_message' => "Room {$reqRoom} has a pending/approved change request by {$changeOccupant} ({$roomChangeConflict->requested_time_in}–{$roomChangeConflict->requested_time_out}) on {$reqDay}.",
                 ];
             }
@@ -212,7 +234,14 @@ class Faculty extends Model
         // All checks passed — create
         $this->scheduleChangeRequests()->create([
             'schedule_detail_id' => $data['schedule_detail_id'],
+            'schedule_detail_id' => $data['schedule_detail_id'],
             'requested_day_of_week' => $data['requested_day_of_week'],
+            'requested_time_in' => $data['requested_time_in'],
+            'requested_time_out' => $data['requested_time_out'],
+            'requested_room' => $data['requested_room'] ?? null,
+            'effective_date' => $data['effective_date'],
+            'reason' => $data['reason'],
+            'status' => 'pending',
             'requested_time_in' => $data['requested_time_in'],
             'requested_time_out' => $data['requested_time_out'],
             'requested_room' => $data['requested_room'] ?? null,
@@ -267,6 +296,13 @@ class Faculty extends Model
                         'subject_code' => $d->subject_code,
                         'subject_desc' => $d->subject_desc,
                         'room' => $d->room,
+                        'id' => $d->id,
+                        'day_of_week' => $d->day_of_week,
+                        'time_in' => Carbon::parse($d->time_in)->format('H:i'),
+                        'time_out' => Carbon::parse($d->time_out)->format('H:i'),
+                        'subject_code' => $d->subject_code,
+                        'subject_desc' => $d->subject_desc,
+                        'room' => $d->room,
                         'schedule_code' => $schedule->schedule_code,
                     ];
                 });
@@ -295,6 +331,8 @@ class Faculty extends Model
             return [
                 'success' => false,
                 'error_field' => 'attendance_date',
+                'success' => false,
+                'error_field' => 'attendance_date',
                 'error_message' => 'You already have a pending online attendance request for this date.',
             ];
         }
@@ -309,6 +347,8 @@ class Faculty extends Model
                 return [
                     'success' => false,
                     'error_field' => 'schedule_detail_id',
+                    'success' => false,
+                    'error_field' => 'schedule_detail_id',
                     'error_message' => 'The selected schedule does not belong to you.',
                 ];
             }
@@ -316,6 +356,14 @@ class Faculty extends Model
 
         $this->onlineAttendanceRequests()->create([
             'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+            'class_type' => $data['class_type'],
+            'attendance_date' => $data['attendance_date'],
+            'time_in' => $data['time_in'],
+            'time_out' => $data['time_out'],
+            'screenshot_in' => $screenshotInPath,
+            'screenshot_out' => $screenshotOutPath,
+            'remarks' => $data['remarks'] ?? null,
+            'status' => 'pending',
             'class_type' => $data['class_type'],
             'attendance_date' => $data['attendance_date'],
             'time_in' => $data['time_in'],
@@ -601,8 +649,11 @@ class Faculty extends Model
         // Use internal schedule (operational times) for late/early-out detection.
         // Falls back to official schedule details if no internal schedule exists.
         $now = Carbon::now();
+        $now = Carbon::now();
         $activeScheduleIds = $this->schedules()
             ->where('status', 'active')
+            ->whereDate('effective_from', '<=', $now->toDateString())
+            ->whereDate('effective_until', '>=', $now->toDateString())
             ->whereDate('effective_from', '<=', $now->toDateString())
             ->whereDate('effective_until', '>=', $now->toDateString())
             ->pluck('id');
@@ -880,6 +931,8 @@ class Faculty extends Model
 
         $activeScheduleIds = $this->schedules()
             ->where('status', 'active')
+            ->whereDate('effective_from', '<=', $now->toDateString())
+            ->whereDate('effective_until', '>=', $now->toDateString())
             ->whereDate('effective_from', '<=', $now->toDateString())
             ->whereDate('effective_until', '>=', $now->toDateString())
             ->pluck('id');

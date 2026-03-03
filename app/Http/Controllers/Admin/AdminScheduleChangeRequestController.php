@@ -42,7 +42,7 @@ class AdminScheduleChangeRequestController extends Controller
     }
 
     /**
-     * Approve a schedule change request and apply the change to schedule_details.
+     * Approve a schedule change request and apply the change to internal_schedules only.
      */
     public function approve(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
     {
@@ -65,7 +65,7 @@ class AdminScheduleChangeRequestController extends Controller
                     throw new RuntimeException('This request has already been reviewed.');
                 }
 
-                // ── Apply the requested changes to the schedule detail ──────────
+                // ── Keep official schedule detail unchanged; use it only as anchor ──
                 $detail = ScheduleDetail::findOrFail($locked->schedule_detail_id);
 
                 // Preserve the existing date part from the stored timestamps and apply the requested times
@@ -82,16 +82,8 @@ class AdminScheduleChangeRequestController extends Controller
                     ]);
                 }
 
-                // Recalculate hours_required from the new times (whole hours)
+                // Recalculate required_hours from the new times (whole hours)
                 $hoursRequired = max(0, intval(round($timeOut->diffInMinutes($timeIn) / 60)));
-
-                $detail->update([
-                    'day_of_week'    => $locked->requested_day_of_week,
-                    'time_in'        => $timeIn->toDateTimeString(),
-                    'time_out'       => $timeOut->toDateTimeString(),
-                    'room'           => $locked->requested_room ?? $detail->room,
-                    'hours_required' => $hoursRequired,
-                ]);
 
                 // ── Create or update the corresponding internal schedule ─────────
                 InternalSchedule::updateOrCreate(
@@ -124,7 +116,7 @@ class AdminScheduleChangeRequestController extends Controller
             return back()->withErrors($ve->errors())->withInput();
         }
 
-        return back()->with('success', 'Schedule change request approved. The schedule has been updated.');
+        return back()->with('success', 'Schedule change request approved. Official schedule is unchanged; internal schedule has been updated.');
     }
 
     /**
