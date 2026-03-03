@@ -267,8 +267,18 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = {};
 
         form.details.forEach((detail, index) => {
+            const subjectCode = (detail.subject_code ?? '').trim();
+            const room = (detail.room ?? '').trim();
             const timeInMinutes = toMinutes(detail.time_in);
             const timeOutMinutes = toMinutes(detail.time_out);
+
+            if (!subjectCode) {
+                localErrors[`details.${index}.subject_code`] = 'Subject Code is required.';
+            }
+
+            if (!room) {
+                localErrors[`details.${index}.room`] = 'Room is required.';
+            }
 
             if (timeInMinutes === null || timeOutMinutes === null) {
                 if (timeInMinutes === null) {
@@ -1105,14 +1115,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Subject Code</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Subject Code *</label>
                                     <input
                                         type="text"
                                         value={detail.subject_code}
                                         onChange={(e) => updateDetail(index, 'subject_code', e.target.value)}
                                         placeholder="CS101"
+                                        required
                                         className="form-input-sm"
                                     />
+                                    {errors[`details.${index}.subject_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.subject_code`]}</p>}
                                 </div>
 
                                 <div className="sm:col-span-2">
@@ -1127,12 +1139,13 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room *</label>
                                     <input
                                         type="text"
                                         value={detail.room}
                                         onChange={(e) => updateDetail(index, 'room', e.target.value)}
                                         placeholder="Room 201"
+                                        required
                                         className="form-input-sm"
                                     />
                                     {errors[`details.${index}.room`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room`]}</p>}
