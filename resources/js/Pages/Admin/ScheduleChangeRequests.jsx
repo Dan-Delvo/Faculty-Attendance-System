@@ -47,21 +47,21 @@ function formatTimeToAmPm(timeValue) {
    ────────────────────────────────────────────── */
 export default function AdminScheduleChangeRequests({ requests: initialRequests, filters, pendingCount }) {
     // ── List state ───────────────────────────────────────────────────────
-    const [requestsData, setRequestsData]   = useState(initialRequests);
-    const [filterStatus, setFilterStatus]   = useState(filters.status || '');
-    const [searchQuery, setSearchQuery]     = useState(filters.search || '');
-    const [searchInput, setSearchInput]     = useState(filters.search || '');
-    const [isFiltering, setIsFiltering]     = useState(false);
-    const [currentPage, setCurrentPage]     = useState(initialRequests.current_page || 1);
+    const [requestsData, setRequestsData] = useState(initialRequests);
+    const [filterStatus, setFilterStatus] = useState(filters.status || '');
+    const [searchQuery, setSearchQuery] = useState(filters.search || '');
+    const [searchInput, setSearchInput] = useState(filters.search || '');
+    const [isFiltering, setIsFiltering] = useState(false);
+    const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
 
     // ── Modals + selected request ────────────────────────────────────────
     const [showApproveModal, setShowApproveModal] = useState(false);
-    const [showRejectModal,  setShowRejectModal]  = useState(false);
-    const [selectedRequest,  setSelectedRequest]  = useState(null);
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState(null);
 
     // ── Inertia forms ────────────────────────────────────────────────────
     const approveForm = useForm({ review_remarks: '' });
-    const rejectForm  = useForm({ review_remarks: '' });
+    const rejectForm = useForm({ review_remarks: '' });
 
     /* ── AJAX filtering ──────────────────────────────────────────────── */
     const fetchRequests = useCallback((status, search, page = 1) => {
@@ -69,7 +69,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
 
         const params = new URLSearchParams();
         if (status) params.set('status', status);
-        if (search)  params.set('search', search);
+        if (search) params.set('search', search);
         params.set('page', page);
 
         fetch(route('admin.schedule-change-requests.filter') + '?' + params.toString(), {
@@ -225,11 +225,10 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                         <button
                             key={s}
                             onClick={() => applyFilter(s)}
-                            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
-                                filterStatus === s
-                                    ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
-                            }`}
+                            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${filterStatus === s
+                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                                }`}
                         >
                             {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
                         </button>
@@ -520,6 +519,14 @@ function RequestCard({ req, onApprove, onReject }) {
                                 <p className="text-xs text-gray-400 dark:text-gray-500">
                                     {req.department}
                                 </p>
+                                {req.schedule_code && (
+                                    <>
+                                        <span className="text-gray-300 dark:text-gray-600">·</span>
+                                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-300/50 dark:ring-gray-600/50">
+                                            {req.schedule_code}
+                                        </span>
+                                    </>
+                                )}
                             </div>
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                                 Submitted {req.created_at}
@@ -576,7 +583,7 @@ function RequestCard({ req, onApprove, onReject }) {
                         {/* ── Schedule comparison ── */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
                                 <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Day:</span> {req.original_day}</p>
                                     <p><span className="font-semibold">Time:</span> {formatTimeToAmPm(req.original_time_in)} – {formatTimeToAmPm(req.original_time_out)}</p>

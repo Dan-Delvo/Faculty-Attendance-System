@@ -167,6 +167,22 @@ function ScheduleCard({ item }) {
                     {item.room}
                 </div>
             </div>
+
+            {/* Schedule Code & Effective Period */}
+            {(item.scheduleCode || item.effectiveFrom) && (
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    {item.scheduleCode && (
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-300/50 dark:ring-gray-600/50">
+                            {item.scheduleCode}
+                        </span>
+                    )}
+                    {item.effectiveFrom && (
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                            {item.effectiveFrom} – {item.effectiveUntil}
+                        </span>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -282,7 +298,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                 </div>
             </section>
 
-             {/* ── Today's Schedule ────────────────────── */}
+            {/* ── Today's Schedule ────────────────────── */}
             <section className="mt-10">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -594,7 +610,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                 </div>
             </section>
 
-           
+
 
             {/* ── Recent Attendance Match ────────────────────── */}
             {recentAttendance && recentAttendance.length > 0 && (

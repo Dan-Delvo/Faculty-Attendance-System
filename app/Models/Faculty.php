@@ -475,16 +475,19 @@ class Faculty extends Model
         $now = Carbon::now();
         $todayName = $now->format('l');
 
-        // Get the active schedules for this faculty
-        $activeScheduleIds = $this->schedules()
+        // Fetch ALL active schedules — no date-range filter so every developer/
+        // tester sees the correct schedule regardless of the current date.
+        $activeSchedules = $this->schedules()
             ->where('status', 'active')
-            ->whereDate('effective_from', '<=', $now->toDateString())
-            ->whereDate('effective_until', '>=', $now->toDateString())
-            ->pluck('id');
+            ->orderBy('effective_from', 'desc')
+            ->get();
 
-        if ($activeScheduleIds->isEmpty()) {
+        if ($activeSchedules->isEmpty()) {
             return [];
         }
+
+        $activeScheduleIds = $activeSchedules->pluck('id');
+        $scheduleMeta = $activeSchedules->keyBy('id'); // id => Schedule model
 
         // Try internal schedule first (operational/biometric times)
         $internals = InternalSchedule::where('faculty_id', $this->id)
@@ -495,13 +498,12 @@ class Faculty extends Model
             ->get();
 
         if ($internals->isNotEmpty()) {
-            // Also load matching schedule details for subject/room info
             $detailsByScheduleAndDay = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
                 ->where('day_of_week', $todayName)
                 ->get()
                 ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
 
-            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay) {
+            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay, $scheduleMeta) {
                 $timeIn = Carbon::parse($entry->device_time_in);
                 $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
 
@@ -518,8 +520,8 @@ class Faculty extends Model
                     $status = 'upcoming';
                 }
 
-                // Try to get subject/room info from the matching schedule detail
                 $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
+                $meta = $scheduleMeta->get($entry->schedule_id);
 
                 return [
                     'id' => $entry->id,
@@ -531,6 +533,9 @@ class Faculty extends Model
                     'endTime' => $timeOut ? $timeOut->format('h:i A') : '--:--',
                     'status' => $status,
                     'source' => 'internal',
+                    'scheduleCode' => $meta?->schedule_code,
+                    'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
+                    'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                 ];
             })->values()->toArray();
         }
@@ -541,7 +546,7 @@ class Faculty extends Model
             ->orderByRaw('TIME(time_in) ASC')
             ->get();
 
-        return $details->map(function (ScheduleDetail $detail) use ($now) {
+        return $details->map(function (ScheduleDetail $detail) use ($now, $scheduleMeta) {
             $timeIn = Carbon::parse($detail->time_in);
             $timeOut = Carbon::parse($detail->time_out);
 
@@ -556,6 +561,8 @@ class Faculty extends Model
                 $status = 'upcoming';
             }
 
+            $meta = $scheduleMeta->get($detail->schedule_id);
+
             return [
                 'id' => $detail->id,
                 'subject' => $detail->subject_desc ?? 'Untitled Subject',
@@ -566,9 +573,13 @@ class Faculty extends Model
                 'endTime' => $timeOut->format('h:i A'),
                 'status' => $status,
                 'source' => 'official',
+                'scheduleCode' => $meta?->schedule_code,
+                'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
+                'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
             ];
         })->values()->toArray();
     }
+
 
     /**
      * Get recent biometric logs formatted for the dashboard.
@@ -802,19 +813,23 @@ class Faculty extends Model
      */
     public function getWeeklySchedule(): array
     {
-        $now = Carbon::now();
-
+        // Show ALL active schedules regardless of today's date so faculty (and
+        // testers/developers on any date) always see their schedule.
         $activeSchedules = $this->schedules()
             ->where('status', 'active')
-            ->whereDate('effective_from', '<=', $now->toDateString())
-            ->whereDate('effective_until', '>=', $now->toDateString())
-            ->pluck('id');
+            ->orderBy('effective_from', 'desc')   // most recent first if multiple
+            ->get();
 
         if ($activeSchedules->isEmpty()) {
             return [];
         }
 
-        $details = ScheduleDetail::whereIn('schedule_id', $activeSchedules)
+        $activeScheduleIds = $activeSchedules->pluck('id');
+
+        // Build a lookup: schedule_id => { effective_from, effective_until, schedule_code }
+        $scheduleMeta = $activeSchedules->keyBy('id');
+
+        $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
             ->orderByRaw('TIME(time_in) ASC')
             ->get();
@@ -832,7 +847,8 @@ class Faculty extends Model
             $schedule[] = [
                 'day' => $day,
                 'shortDay' => substr($day, 0, 3),
-                'classes' => $dayDetails->map(function (ScheduleDetail $detail) {
+                'classes' => $dayDetails->map(function (ScheduleDetail $detail) use ($scheduleMeta) {
+                    $meta = $scheduleMeta->get($detail->schedule_id);
                     return [
                         'id' => $detail->id,
                         'subject' => $detail->subject_desc ?? 'Untitled Subject',
@@ -841,6 +857,9 @@ class Faculty extends Model
                         'startTime' => Carbon::parse($detail->time_in)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->time_out)->format('h:i A'),
                         'hours' => $detail->hours_required,
+                        'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
+                        'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
+                        'scheduleCode' => $meta?->schedule_code,
                     ];
                 })->values()->toArray(),
             ];
@@ -889,11 +908,20 @@ class Faculty extends Model
                 'day' => $day,
                 'shortDay' => substr($day, 0, 3),
                 'entries' => $dayEntries->map(function (InternalSchedule $entry) {
+                    $timeIn = Carbon::parse($entry->device_time_in);
+                    $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
+
+                    // If required_hours is 0 but we have valid times, derive it from the diff
+                    $storedHours = (float) $entry->required_hours;
+                    $requiredHours = ($storedHours <= 0 && $timeOut)
+                        ? max(0, (int) round($timeOut->diffInMinutes($timeIn) / 60))
+                        : $storedHours;
+
                     return [
                         'id' => $entry->id,
-                        'timeIn' => Carbon::parse($entry->device_time_in)->format('h:i A'),
-                        'timeOut' => $entry->device_time_out ? Carbon::parse($entry->device_time_out)->format('h:i A') : '--:--',
-                        'requiredHours' => (float) $entry->required_hours,
+                        'timeIn' => $timeIn->format('h:i A'),
+                        'timeOut' => $timeOut ? $timeOut->format('h:i A') : '--:--',
+                        'requiredHours' => $requiredHours,
                         'isOperational' => $entry->is_operational,
                         'syncStatus' => $entry->sync_status,
                         'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,

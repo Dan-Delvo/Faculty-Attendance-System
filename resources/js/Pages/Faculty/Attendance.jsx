@@ -3,6 +3,27 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import Pagination from '@/Components/Pagination';
 
+// ── Status badge colour helper ──────────────────────────────────────────────
+function statusStyle(status = '') {
+    const s = status.toLowerCase();
+    if (s === 'present' || s === 'on-time')
+        return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400';
+    if (s.includes('late') && s.includes('early'))
+        return 'bg-orange-50 text-orange-700 ring-orange-500/20 dark:bg-orange-900/30 dark:text-orange-400';
+    if (s.includes('late') || s.includes('tardy'))
+        return 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400';
+    if (s.includes('early') || s.includes('undertime'))
+        return 'bg-orange-50 text-orange-700 ring-orange-500/20 dark:bg-orange-900/30 dark:text-orange-400';
+    if (s === 'absent')
+        return 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400';
+    if (s === 'holiday')
+        return 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400';
+    if (s.includes('missing') || s.includes('check'))
+        return 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-400';
+    // default
+    return 'bg-gray-50 text-gray-700 ring-gray-500/20 dark:bg-gray-800 dark:text-gray-300';
+}
+
 export default function FacultyAttendance({ attendanceLogs }) {
     const { auth } = usePage().props;
     const userName = auth.faculty ? `${auth.faculty.first_name} ${auth.faculty.last_name}` : 'Faculty Member';
@@ -11,32 +32,60 @@ export default function FacultyAttendance({ attendanceLogs }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(10);
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
-    const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'biometric' | 'online'
+    const [sourceFilter, setSourceFilter] = useState('all');
 
     // Filter logs based on date picker and source
     const filteredLogs = attendanceLogs.filter(log => {
-        // Source filter
         if (sourceFilter === 'online' && !log.online_attendance) return false;
         if (sourceFilter === 'biometric' && log.online_attendance) return false;
 
         if (!dateRange.start && !dateRange.end) return true;
 
         let valid = true;
-        // Parse raw_date generated from backend (YYYY-MM-DD)
         const logDate = new Date(log.raw_date).getTime();
-
-        if (dateRange.start) {
-            const start = new Date(dateRange.start).getTime();
-            if (logDate < start) valid = false;
-        }
-        if (dateRange.end) {
-            // Need to make sure end date includes the whole day
-            const end = new Date(dateRange.end).getTime();
-            if (logDate > end) valid = false;
-        }
-
+        if (dateRange.start && logDate < new Date(dateRange.start).getTime()) valid = false;
+        if (dateRange.end && logDate > new Date(dateRange.end).getTime()) valid = false;
         return valid;
     });
+
+    // ── Summary stats (over filtered window) ───────────────────────────────
+    const summary = filteredLogs.reduce((acc, log) => {
+        const s = (log.status || '').toLowerCase();
+        if (s === 'absent') acc.daysAbsent++;
+        if (s.includes('late') || s.includes('tardy')) {
+            acc.timesLate++;
+            acc.totalLateMinutes += log.late_minutes || 0;
+        }
+        if (s.includes('early') || s.includes('undertime')) {
+            acc.timesUndertime++;
+            acc.totalUndertimeMinutes += log.undertime_minutes || 0;
+        }
+        if ((log.night_minutes || 0) > 0) {
+            acc.timesNight++;
+            acc.totalNightMinutes += log.night_minutes;
+        }
+        if ((log.overtime_minutes || 0) > 0) {
+            acc.timesOvertime++;
+            acc.totalOvertimeMinutes += log.overtime_minutes;
+        }
+        if ((log.overtime_night_minutes || 0) > 0) {
+            acc.timesOvertimeNight++;
+            acc.totalOvertimeNightMinutes += log.overtime_night_minutes;
+        }
+        return acc;
+    }, {
+        daysAbsent: 0,
+        timesLate: 0, totalLateMinutes: 0,
+        timesUndertime: 0, totalUndertimeMinutes: 0,
+        timesNight: 0, totalNightMinutes: 0,
+        timesOvertime: 0, totalOvertimeMinutes: 0,
+        timesOvertimeNight: 0, totalOvertimeNightMinutes: 0,
+    });
+
+    const fmtMins = (m) => {
+        const h = Math.floor(m / 60), rem = m % 60;
+        return h > 0 ? `${h}h ${rem}m` : `${rem} mins.`;
+    };
 
     const paginatedLogs = filteredLogs.slice(
         (currentPage - 1) * perPage,
@@ -114,6 +163,29 @@ export default function FacultyAttendance({ attendanceLogs }) {
                 className="px-6 border-t border-gray-200/60 dark:border-slate-700/80"
             />
 
+            {/* ── Summary Panel ────────────────────────────────────────── */}
+            <div className="mb-6 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40">
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Summary</h2>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y divide-gray-100 dark:divide-gray-700/50">
+                    {[
+                        { label: 'Days Absent', value: summary.daysAbsent, sub: null, color: 'text-red-600 dark:text-red-400' },
+                        { label: 'Times Tardy', value: summary.timesLate, sub: fmtMins(summary.totalLateMinutes), color: 'text-amber-600 dark:text-amber-400' },
+                        { label: 'Under Time', value: summary.timesUndertime, sub: fmtMins(summary.totalUndertimeMinutes), color: 'text-orange-600 dark:text-orange-400' },
+                        { label: 'Nights Rendered', value: summary.timesNight, sub: fmtMins(summary.totalNightMinutes), color: 'text-violet-600 dark:text-violet-400' },
+                        { label: 'Overtime Rendered', value: summary.timesOvertime, sub: fmtMins(summary.totalOvertimeMinutes), color: 'text-emerald-600 dark:text-emerald-400' },
+                        { label: 'OT Nights', value: summary.timesOvertimeNight, sub: fmtMins(summary.totalOvertimeNightMinutes), color: 'text-indigo-600 dark:text-indigo-400' },
+                    ].map(({ label, value, sub, color }) => (
+                        <div key={label} className="px-4 py-4">
+                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 leading-tight">{label}</p>
+                            <p className={`mt-1 text-2xl font-extrabold tabular-nums ${color}`}>{value}</p>
+                            {sub && <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">({sub})</p>}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             <div className="bg-white dark:bg-slate-800/80 shadow-sm ring-1 ring-gray-900/5 sm:rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700/80">
@@ -121,6 +193,9 @@ export default function FacultyAttendance({ attendanceLogs }) {
                             <tr>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-slate-300 uppercase tracking-widest">
                                     Date
+                                </th>
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-slate-300 uppercase tracking-widest">
+                                    Subject
                                 </th>
                                 <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-slate-300 uppercase tracking-widest">
                                     Status
@@ -147,19 +222,34 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                             <div className="font-bold text-gray-900 dark:text-white group-hover:text-[#7a1315] dark:group-hover:text-red-400 transition-colors">{log.date}</div>
                                             <div className="text-xs text-gray-500 dark:text-slate-400">{log.dayOfWeek}</div>
                                         </td>
+                                        {/* Subject column */}
+                                        <td className="px-6 py-4 text-sm">
+                                            {log.subjects && log.subjects.length > 0 ? (
+                                                <div className="flex flex-col gap-1">
+                                                    {log.subjects.map((s, i) => (
+                                                        <div key={i}>
+                                                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-300/50 dark:ring-indigo-500/30">
+                                                                {s.code}
+                                                            </span>
+                                                            {s.desc && (
+                                                                <div className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500 truncate max-w-[140px]" title={s.desc}>
+                                                                    {s.desc}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-300 dark:text-slate-600">—</span>
+                                            )}
+                                        </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-slate-400">
                                             <div className="flex items-center gap-2">
-                                                <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-black uppercase tracking-wider ring-1 ring-inset ${log.status === 'Present' || log.status === 'On-time' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                                    log.status.includes('Late') ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400' :
-                                                        'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400'
-                                                    }`}>
+                                                <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-black uppercase tracking-wider ring-1 ring-inset ${statusStyle(log.status)}`}>
                                                     {log.status}
                                                 </span>
                                                 {log.online_attendance && (
                                                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700 ring-1 ring-inset ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/30">
-                                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
-                                                        </svg>
                                                         Online
                                                     </span>
                                                 )}
@@ -196,7 +286,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={6} className="py-16 text-center text-gray-500 dark:text-slate-400">
+                                    <td colSpan={7} className="py-16 text-center text-gray-500 dark:text-slate-400">
                                         <div className="flex flex-col items-center justify-center">
                                             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-50 dark:bg-slate-800 ring-1 ring-gray-100 dark:ring-slate-700 mb-4">
                                                 <svg className="h-8 w-8 text-gray-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" strokeWidth={1.5}>
