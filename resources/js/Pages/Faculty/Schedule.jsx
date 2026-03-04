@@ -281,6 +281,31 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                                     </span>
                                                 </div>
 
+                                                {/* Subject & Details */}
+                                                {(entry.subject || entry.code) && (
+                                                    <div className="mb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="font-bold text-gray-900 dark:text-white leading-tight">
+                                                                {entry.subject}
+                                                            </h4>
+                                                            {entry.isChanged && (
+                                                                <span className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-400/30" title={`Moved from ${entry.originalDay}`}>
+                                                                    Changed
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                                                            <span>{entry.code}</span>
+                                                            {entry.room && entry.room !== 'TBA' && (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span>{entry.room}</span>
+                                                                </>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                )}
+
                                                 {/* Time */}
                                                 <div className="flex items-center gap-3 mb-2">
                                                     <div className="flex items-center gap-1.5">

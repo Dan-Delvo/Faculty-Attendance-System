@@ -169,7 +169,7 @@ function ScheduleCard({ item }) {
             </div>
 
             {/* Schedule Code & Effective Period */}
-            {(item.scheduleCode || item.effectiveFrom) && (
+            {(item.scheduleCode || item.effectiveFrom || item.isChanged) && (
                 <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                     {item.scheduleCode && (
                         <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-300/50 dark:ring-gray-600/50">
@@ -179,6 +179,11 @@ function ScheduleCard({ item }) {
                     {item.effectiveFrom && (
                         <span className="text-[10px] text-gray-400 dark:text-gray-500">
                             {item.effectiveFrom} – {item.effectiveUntil}
+                        </span>
+                    )}
+                    {item.isChanged && (
+                        <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-400/30" title={`Moved from ${item.originalDay}`}>
+                            Changed
                         </span>
                     )}
                 </div>

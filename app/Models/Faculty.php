@@ -543,11 +543,19 @@ class Faculty extends Model
 
         if ($internals->isNotEmpty()) {
             $detailsByScheduleAndDay = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
-                ->where('day_of_week', $todayName)
                 ->get()
                 ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
 
-            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay, $scheduleMeta) {
+            $approvedRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
+                ->with('scheduleDetail')
+                ->where('status', 'approved')
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->keyBy(function ($req) {
+                    return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
+                });
+
+            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay, $scheduleMeta, $approvedRequests) {
                 $timeIn = Carbon::parse($entry->device_time_in);
                 $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
 
@@ -564,7 +572,20 @@ class Faculty extends Model
                     $status = 'upcoming';
                 }
 
-                $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
+                $changeReq = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
+
+                if ($changeReq && $changeReq->scheduleDetail) {
+                    $detail = $changeReq->scheduleDetail;
+                    $isChanged = true;
+                    $originalDay = $detail->day_of_week;
+                    $room = $changeReq->requested_room ?: $detail->room;
+                } else {
+                    $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
+                    $isChanged = false;
+                    $originalDay = null;
+                    $room = $detail?->room ?? 'TBA';
+                }
+
                 $meta = $scheduleMeta->get($entry->schedule_id);
 
                 return [
@@ -572,7 +593,7 @@ class Faculty extends Model
                     'subject' => $detail?->subject_desc ?? 'Operational Duty',
                     'code' => $detail?->subject_code ?? '',
                     'section' => $detail?->subject_code ?? '',
-                    'room' => $detail?->room ?? 'TBA',
+                    'room' => $room,
                     'startTime' => $timeIn->format('h:i A'),
                     'endTime' => $timeOut ? $timeOut->format('h:i A') : '--:--',
                     'status' => $status,
@@ -580,6 +601,8 @@ class Faculty extends Model
                     'scheduleCode' => $meta?->schedule_code,
                     'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                     'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
+                    'isChanged' => $isChanged,
+                    'originalDay' => $originalDay,
                 ];
             })->values()->toArray();
         }
@@ -648,10 +671,6 @@ class Faculty extends Model
         $now = Carbon::now();
         $activeScheduleIds = $this->schedules()
             ->where('status', 'active')
-            ->whereDate('effective_from', '<=', $now->toDateString())
-            ->whereDate('effective_until', '>=', $now->toDateString())
-            ->whereDate('effective_from', '<=', $now->toDateString())
-            ->whereDate('effective_until', '>=', $now->toDateString())
             ->pluck('id');
 
         // Build a lookup: day_of_week => [time_in, time_out]
@@ -925,23 +944,35 @@ class Faculty extends Model
     {
         $now = Carbon::now();
 
-        $activeScheduleIds = $this->schedules()
+        $activeSchedules = $this->schedules()
             ->where('status', 'active')
-            ->whereDate('effective_from', '<=', $now->toDateString())
-            ->whereDate('effective_until', '>=', $now->toDateString())
-            ->whereDate('effective_from', '<=', $now->toDateString())
-            ->whereDate('effective_until', '>=', $now->toDateString())
-            ->pluck('id');
+            ->get();
 
-        if ($activeScheduleIds->isEmpty()) {
+        if ($activeSchedules->isEmpty()) {
             return [];
         }
+
+        $activeScheduleIds = $activeSchedules->pluck('id');
+        $scheduleMeta = $activeSchedules->keyBy('id');
 
         $internals = InternalSchedule::where('faculty_id', $this->id)
             ->whereIn('schedule_id', $activeScheduleIds)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
             ->orderBy('device_time_in', 'asc')
             ->get();
+
+        $detailsByScheduleAndDay = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
+            ->get()
+            ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
+
+        $approvedRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
+            ->with('scheduleDetail')
+            ->where('status', 'approved')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->keyBy(function ($req) {
+                return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
+            });
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         $schedule = [];
@@ -956,7 +987,7 @@ class Faculty extends Model
             $schedule[] = [
                 'day' => $day,
                 'shortDay' => substr($day, 0, 3),
-                'entries' => $dayEntries->map(function (InternalSchedule $entry) {
+                'entries' => $dayEntries->map(function (InternalSchedule $entry) use ($detailsByScheduleAndDay, $scheduleMeta, $approvedRequests) {
                     $timeIn = Carbon::parse($entry->device_time_in);
                     $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
 
@@ -966,6 +997,22 @@ class Faculty extends Model
                         ? max(0, (int) round($timeOut->diffInMinutes($timeIn) / 60))
                         : $storedHours;
 
+                    $changeReq = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
+
+                    if ($changeReq && $changeReq->scheduleDetail) {
+                        $detail = $changeReq->scheduleDetail;
+                        $isChanged = true;
+                        $originalDay = $detail->day_of_week;
+                        $room = $changeReq->requested_room ?: $detail->room;
+                    } else {
+                        $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
+                        $isChanged = false;
+                        $originalDay = null;
+                        $room = $detail?->room ?? 'TBA';
+                    }
+
+                    $meta = $scheduleMeta->get($entry->schedule_id);
+
                     return [
                         'id' => $entry->id,
                         'timeIn' => $timeIn->format('h:i A'),
@@ -974,6 +1021,12 @@ class Faculty extends Model
                         'isOperational' => $entry->is_operational,
                         'syncStatus' => $entry->sync_status,
                         'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
+                        'subject' => $detail?->subject_desc ?? 'Operational Duty',
+                        'code' => $detail?->subject_code ?? '',
+                        'room' => $room,
+                        'scheduleCode' => $meta?->schedule_code,
+                        'isChanged' => $isChanged,
+                        'originalDay' => $originalDay,
                     ];
                 })->values()->toArray(),
             ];
