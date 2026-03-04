@@ -44,6 +44,27 @@ const icons = {
 /* ──────────────────────────────────────────────
    Status badge component
    ────────────────────────────────────────────── */
+
+function statusStyle(status = '') {
+    const s = status.toLowerCase();
+    if (s === 'present' || s === 'on-time')
+        return 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/40 ring-emerald-600/20';
+    if (s.includes('late') && s.includes('early'))
+        return 'text-orange-700 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/40 ring-orange-500/20';
+    if (s.includes('late') || s.includes('tardy'))
+        return 'text-amber-700 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/40 ring-amber-600/20';
+    if (s.includes('early') || s.includes('undertime'))
+        return 'text-orange-700 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/40 ring-orange-500/20';
+    if (s === 'absent')
+        return 'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/40 ring-red-600/20';
+    if (s === 'holiday')
+        return 'text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/40 ring-blue-600/20';
+    if (s.includes('missing') || s.includes('check'))
+        return 'text-rose-700 bg-rose-100 dark:text-rose-400 dark:bg-rose-900/40 ring-rose-600/20';
+    // default
+    return 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-gray-800 ring-gray-500/20';
+}
+
 function StatusBadge({ status }) {
     const styles = {
         completed:
@@ -643,9 +664,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                     <div className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-6 shadow-sm flex flex-col">
                         <div className="flex-1 space-y-3">
                             {recentAttendance.slice((attendancePage - 1) * attendancePerPage, attendancePage * attendancePerPage).map((log, index) => {
-                                const statusColor = log.status === 'Present' || log.status === 'On-time' ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/40 ring-emerald-600/20' :
-                                    log.status.includes('Late') ? 'text-amber-700 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/40 ring-amber-600/20' :
-                                        'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/40 ring-red-600/20';
+                                const statusColor = statusStyle(log.status);
 
                                 return (
                                     <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 p-4 transition-colors hover:bg-gray-100/80 dark:hover:bg-gray-700/40 group">
@@ -665,7 +684,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                    {log.dayOfWeek} • Rendered: {log.total_hours}
+                                                    {log.dayOfWeek} • Rendered: {log.hoursRendered} hrs
                                                 </p>
                                             </div>
                                         </div>
@@ -673,13 +692,13 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                                         <div className="flex items-center gap-6 sm:ml-auto">
                                             <div className="text-right">
                                                 <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Schedule</p>
-                                                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{log.expected_time_in} - {log.expected_time_out}</p>
+                                                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{log.expectedTimeIn} - {log.expectedTimeOut}</p>
                                             </div>
                                             <div className="h-6 w-px bg-gray-200 dark:bg-gray-700/80 hidden sm:block"></div>
                                             <div className="text-right">
                                                 <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Actual</p>
-                                                <p className={`text-xs font-bold transition-colors ${log.late_minutes > 0 || log.undertime_minutes > 0 ? 'text-amber-600 dark:text-amber-400 group-hover:text-red-500' : 'text-gray-900 dark:text-white'}`}>
-                                                    {log.actual_time_in} - {log.actual_time_out}
+                                                <p className={`text-xs font-bold transition-colors ${log.lateMinutes > 0 || log.undertimeMinutes > 0 ? 'text-amber-600 dark:text-amber-400 group-hover:text-red-500' : 'text-gray-900 dark:text-white'}`}>
+                                                    {log.timeIn} - {log.timeOut}
                                                 </p>
                                             </div>
                                         </div>

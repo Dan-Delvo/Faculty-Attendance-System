@@ -1027,6 +1027,7 @@ class Faculty extends Model
                         'scheduleCode' => $meta?->schedule_code,
                         'isChanged' => $isChanged,
                         'originalDay' => $originalDay,
+                        'originalScheduleDetailId' => $isChanged ? $detail?->id : null,
                     ];
                 })->values()->toArray(),
             ];
@@ -1055,6 +1056,12 @@ class Faculty extends Model
                 'subjectCode' => $record->scheduleDetail?->subject_code ?? '',
                 'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
                 'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
+                'expectedTimeIn' => $record->operational_time_in
+                    ? Carbon::parse($record->operational_time_in)->format('h:i A')
+                    : ($record->official_time_in ? Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
+                'expectedTimeOut' => $record->operational_time_out
+                    ? Carbon::parse($record->operational_time_out)->format('h:i A')
+                    : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                 'hoursRendered' => (float) $record->total_hours_rendered,
                 'requiredHours' => (float) $record->required_hours,
                 'lateMinutes' => $record->late_minutes,

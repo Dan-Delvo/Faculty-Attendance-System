@@ -54,45 +54,8 @@ class FacultyDashboardController extends Controller
                 break;
         }
 
-        // Fetch the 20 most recent actual attendance records
-        $recentAttendance = [];
-
-        // Determine start date from earliest of: biometric log, online attendance, or schedule effective_from
-        $earliestBiometric = \App\Models\BiometricLog::where('biometric_id', $faculty->biometric_id)
-            ->orderBy('log_datetime', 'asc')
-            ->value('log_datetime');
-
-        $earliestOnline = \App\Models\OnlineAttendanceRequest::where('faculty_id', $faculty->id)
-            ->where('status', 'approved')
-            ->orderBy('attendance_date', 'asc')
-            ->value('attendance_date');
-
-        $earliestSchedule = $faculty->schedules()
-            ->where('status', 'active')
-            ->orderBy('effective_from', 'asc')
-            ->value('effective_from');
-
-        $startDate = collect([$earliestBiometric, $earliestOnline, $earliestSchedule])
-            ->filter()
-            ->map(fn($d) => Carbon::parse($d)->startOfDay())
-            ->min() ?? Carbon::today()->subDays(60);
-        $endDate = Carbon::today();
-
-        for ($date = $endDate->copy(); $date->greaterThanOrEqualTo($startDate); $date->subDay()) {
-            if (count($recentAttendance) >= 20)
-                break;
-
-            $targetDate = $date->toDateString();
-            $statusData = $service->getDailyAttendanceStatus($faculty, $targetDate);
-
-            if ($statusData['status'] !== 'No Schedule') {
-                $recentAttendance[] = array_merge([
-                    'date' => Carbon::parse($targetDate)->format('M d, Y'),
-                    'raw_date' => $targetDate,
-                    'dayOfWeek' => Carbon::parse($targetDate)->format('l'),
-                ], $statusData);
-            }
-        }
+        // Fetch the 20 most recent actual attendance records directly from the table based on internal schedule logic
+        $recentAttendance = $faculty->getRecentAttendance(20);
 
         return Inertia::render('Faculty/Dashboard', [
             'stats' => $faculty->getDashboardStats(),
@@ -206,10 +169,12 @@ class FacultyDashboardController extends Controller
                     'raw_date' => $record->attendance_date->toDateString(),
                     'dayOfWeek' => $record->attendance_date->format('l'),
                     'status' => $record->status,
-                    'expected_time_in' => $record->official_time_in
-                        ? $record->official_time_in->format('h:i A') : '--:--',
-                    'expected_time_out' => $record->official_time_out
-                        ? $record->official_time_out->format('h:i A') : '--:--',
+                    'expected_time_in' => $record->operational_time_in
+                        ? $record->operational_time_in->format('h:i A')
+                        : ($record->official_time_in ? $record->official_time_in->format('h:i A') : '--:--'),
+                    'expected_time_out' => $record->operational_time_out
+                        ? $record->operational_time_out->format('h:i A')
+                        : ($record->official_time_out ? $record->official_time_out->format('h:i A') : '--:--'),
                     'actual_time_in' => $record->actual_time_in
                         ? $record->actual_time_in->format('h:i A') : '--:--',
                     'actual_time_out' => $record->actual_time_out
