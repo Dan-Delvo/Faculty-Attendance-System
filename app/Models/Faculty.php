@@ -172,14 +172,11 @@ class Faculty extends Model
             $roomConflict = ScheduleDetail::whereHas('schedule', function ($q) {
                 $q->where('status', 'active');
             })
-                $q->where('status', 'active');
-            })
                 ->where('id', '!=', $data['schedule_detail_id'])
                 ->where('day_of_week', $reqDay)
                 ->where('room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->whereRaw("TIME(time_in) < ?", [$reqOut])
-                        ->whereRaw("TIME(time_out) > ?", [$reqIn]);
                         ->whereRaw("TIME(time_out) > ?", [$reqIn]);
                 })
                 ->first();
@@ -212,7 +209,6 @@ class Faculty extends Model
                 ->where('requested_room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->where('requested_time_in', '<', $reqOut)
-                        ->where('requested_time_out', '>', $reqIn);
                         ->where('requested_time_out', '>', $reqIn);
                 })
                 ->first();
