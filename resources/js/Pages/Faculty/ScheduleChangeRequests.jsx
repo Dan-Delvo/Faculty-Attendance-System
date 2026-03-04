@@ -157,7 +157,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                 setRequestsData(data);
                 setCurrentPage(data.current_page || 1);
             })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setIsFiltering(false));
     }, []);
 
@@ -212,11 +212,10 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                     <button
                         key={s}
                         onClick={() => applyFilter(s)}
-                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                            filterStatus === s
-                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
-                        }`}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterStatus === s
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            }`}
                     >
                         {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
                     </button>
@@ -251,9 +250,16 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                             <h3 className="font-bold text-gray-900 dark:text-white">
                                                 {req.original_subject}
                                             </h3>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                Submitted {req.created_at}
-                                            </p>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                {req.schedule_code && (
+                                                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-300/50 dark:ring-gray-600/50">
+                                                        {req.schedule_code}
+                                                    </span>
+                                                )}
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    Submitted {req.created_at}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                     <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${STATUS_STYLES[req.status]}`}>
@@ -265,7 +271,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {/* Original */}
                                     <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
                                         <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                                             <p><span className="font-semibold">Day:</span> {req.original_day}</p>
                                             <p><span className="font-semibold">Time:</span> {req.original_time_in} – {req.original_time_out}</p>
@@ -400,7 +406,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 <option value="">— Choose a schedule —</option>
                                 {scheduleDetails.map((d) => (
                                     <option key={d.id} value={d.id}>
-                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} ({d.room})
+                                        [{d.schedule_code}] {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} ({d.room})
                                     </option>
                                 ))}
                             </select>
@@ -410,7 +416,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         {/* Preview current schedule */}
                         {selectedDetail && (
                             <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Current Schedule</p>
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
                                 <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Day:</span> {selectedDetail.day_of_week}</p>
                                     <p><span className="font-semibold">Subject:</span> {selectedDetail.subject_code}</p>

@@ -34,33 +34,33 @@ class AttendanceReconciliationService
     public function getDailyAttendanceStatus(Faculty $faculty, string $date): array
     {
         $targetDate = Carbon::parse($date);
-        $dayOfWeek  = $targetDate->format('l'); // e.g., "Monday"
+        $dayOfWeek = $targetDate->format('l'); // e.g., "Monday"
         $gracePeriodMinutes = 5;
 
         // 0. CHECK IF THE DATE IS A HOLIDAY ─────────────────────────────────
         $isHoliday = Holiday::where(function ($q) use ($targetDate) {
             // Exact non-recurring match
             $q->where('holiday_date', $targetDate->toDateString())
-              ->where('is_recurring', false);
+                ->where('is_recurring', false);
         })->orWhere(function ($q) use ($targetDate) {
             // Recurring: same month + day regardless of year
             $q->where('is_recurring', true)
-              ->whereMonth('holiday_date', $targetDate->month)
-              ->whereDay('holiday_date', $targetDate->day);
+                ->whereMonth('holiday_date', $targetDate->month)
+                ->whereDay('holiday_date', $targetDate->day);
         })->exists();
 
         if ($isHoliday) {
             return [
-                'status'             => 'Holiday',
-                'expected_time_in'   => null,
-                'expected_time_out'  => null,
-                'actual_time_in'     => '--:--',
-                'actual_time_out'    => '--:--',
-                'total_hours'        => '0h 0m',
-                'late_minutes'       => 0,
-                'undertime_minutes'  => 0,
-                'raw_logs'           => [],
-                'online_attendance'  => false,
+                'status' => 'Holiday',
+                'expected_time_in' => null,
+                'expected_time_out' => null,
+                'actual_time_in' => '--:--',
+                'actual_time_out' => '--:--',
+                'total_hours' => '0h 0m',
+                'late_minutes' => 0,
+                'undertime_minutes' => 0,
+                'raw_logs' => [],
+                'online_attendance' => false,
             ];
         }
         // ── 1. RESOLVE EXPECTED SCHEDULE FOR THIS DAY ────────────────────
@@ -74,7 +74,10 @@ class AttendanceReconciliationService
         // Collect the effective expected entries for today:
         //   { time_in (H:i:s), time_out (H:i:s), source }
         $expectedEntries = $this->resolveExpectedEntries(
-            $faculty, $activeScheduleIds, $dayOfWeek, $targetDate
+            $faculty,
+            $activeScheduleIds,
+            $dayOfWeek,
+            $targetDate
         );
 
         // ── 2. RETRIEVE BIOMETRIC LOGS FOR THAT DAY ─────────────────────
@@ -96,46 +99,46 @@ class AttendanceReconciliationService
 
         if (empty($expectedEntries)) {
             return [
-                'status'            => 'No Schedule',
-                'expected_time_in'  => null,
+                'status' => 'No Schedule',
+                'expected_time_in' => null,
                 'expected_time_out' => null,
-                'actual_time_in'    => $logs->where('log_type', 'IN')->first()?->log_datetime?->format('h:i A'),
-                'actual_time_out'   => $logs->where('log_type', 'OUT')->last()?->log_datetime?->format('h:i A'),
-                'total_hours'       => '0h 0m',
-                'late_minutes'      => 0,
+                'actual_time_in' => $logs->where('log_type', 'IN')->first()?->log_datetime?->format('h:i A'),
+                'actual_time_out' => $logs->where('log_type', 'OUT')->last()?->log_datetime?->format('h:i A'),
+                'total_hours' => '0h 0m',
+                'late_minutes' => 0,
                 'undertime_minutes' => 0,
-                'raw_logs'          => $logs->toArray(),
+                'raw_logs' => $logs->toArray(),
                 'online_attendance' => false,
-                'schedule_source'   => null,
+                'schedule_source' => null,
             ];
         }
 
         // ── 4. DETERMINE ACTUAL IN/OUT ───────────────────────────────────
 
-        $biometricIn  = $logs->where('log_type', 'IN')->first()
+        $biometricIn = $logs->where('log_type', 'IN')->first()
             ? Carbon::parse($logs->where('log_type', 'IN')->first()->log_datetime)
             : null;
         $biometricOut = $logs->where('log_type', 'OUT')->last()
             ? Carbon::parse($logs->where('log_type', 'OUT')->last()->log_datetime)
             : null;
 
-        $onlineIn  = $onlineEntries->isNotEmpty()
+        $onlineIn = $onlineEntries->isNotEmpty()
             ? Carbon::parse($targetDate->toDateString() . ' ' . $onlineEntries->first()->time_in)
             : null;
         $onlineOut = $onlineEntries->isNotEmpty()
             ? Carbon::parse($targetDate->toDateString() . ' ' . $onlineEntries->last()->time_out)
             : null;
 
-        $actualTimeIn  = $this->earliest($biometricIn, $onlineIn);
+        $actualTimeIn = $this->earliest($biometricIn, $onlineIn);
         $actualTimeOut = $this->latest($biometricOut, $onlineOut);
-        $hasOnline     = $onlineEntries->isNotEmpty();
+        $hasOnline = $onlineEntries->isNotEmpty();
 
         // ── 5. EXPECTED WINDOW (earliest in / latest out) ────────────────
 
-        $sortedByIn  = collect($expectedEntries)->sortBy('time_in');
+        $sortedByIn = collect($expectedEntries)->sortBy('time_in');
         $sortedByOut = collect($expectedEntries)->sortByDesc('time_out');
 
-        $expectedTimeIn  = Carbon::parse($targetDate->toDateString() . ' ' . $sortedByIn->first()['time_in']);
+        $expectedTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . $sortedByIn->first()['time_in']);
         $expectedTimeOut = Carbon::parse($targetDate->toDateString() . ' ' . $sortedByOut->first()['time_out']);
 
         // Determine dominant schedule source for display
@@ -143,10 +146,10 @@ class AttendanceReconciliationService
 
         // ── 6. CALCULATE STATUS / LATE / UNDERTIME ───────────────────────
 
-        $lateMinutes      = 0;
+        $lateMinutes = 0;
         $undertimeMinutes = 0;
-        $totalHours       = '0h 0m';
-        $status           = 'Absent';
+        $totalHours = '0h 0m';
+        $status = 'Absent';
 
         if ($actualTimeIn) {
             $status = 'Present';
@@ -163,11 +166,11 @@ class AttendanceReconciliationService
             }
 
             $validStart = $actualTimeIn->greaterThan($expectedTimeIn) ? $actualTimeIn : $expectedTimeIn;
-            $validEnd   = $actualTimeOut->lessThan($expectedTimeOut) ? $actualTimeOut : $expectedTimeOut;
+            $validEnd = $actualTimeOut->lessThan($expectedTimeOut) ? $actualTimeOut : $expectedTimeOut;
 
             if ($validEnd->greaterThan($validStart)) {
                 $totalDiffInMinutes = $validStart->diffInMinutes($validEnd);
-                $hours   = floor($totalDiffInMinutes / 60);
+                $hours = floor($totalDiffInMinutes / 60);
                 $minutes = $totalDiffInMinutes % 60;
 
                 $totalHours = '';
@@ -182,18 +185,30 @@ class AttendanceReconciliationService
             $status = 'Missing Check-Out';
         }
 
+        // Collect unique subjects from expected entries for display
+        $subjects = collect($expectedEntries)
+            ->filter(fn($e) => !empty($e['subject_code']))
+            ->map(fn($e) => [
+                'code' => $e['subject_code'],
+                'desc' => $e['subject_desc'] ?? null,
+            ])
+            ->unique('code')
+            ->values()
+            ->toArray();
+
         return [
-            'status'            => $status,
-            'expected_time_in'  => $expectedTimeIn->format('h:i A'),
+            'status' => $status,
+            'expected_time_in' => $expectedTimeIn->format('h:i A'),
             'expected_time_out' => $expectedTimeOut->format('h:i A'),
-            'actual_time_in'    => $actualTimeIn ? $actualTimeIn->format('h:i A') : '--:--',
-            'actual_time_out'   => $actualTimeOut ? $actualTimeOut->format('h:i A') : '--:--',
-            'total_hours'       => $totalHours,
-            'late_minutes'      => $lateMinutes,
+            'actual_time_in' => $actualTimeIn ? $actualTimeIn->format('h:i A') : '--:--',
+            'actual_time_out' => $actualTimeOut ? $actualTimeOut->format('h:i A') : '--:--',
+            'total_hours' => $totalHours,
+            'late_minutes' => $lateMinutes,
             'undertime_minutes' => $undertimeMinutes,
-            'raw_logs'          => $logs->toArray(),
+            'raw_logs' => $logs->toArray(),
             'online_attendance' => $hasOnline,
-            'schedule_source'   => $scheduleSource,
+            'schedule_source' => $scheduleSource,
+            'subjects' => $subjects,
         ];
     }
 
@@ -261,9 +276,11 @@ class AttendanceReconciliationService
 
                 // Use the changed times
                 $entries[] = [
-                    'time_in'  => Carbon::parse($change->requested_time_in)->format('H:i:s'),
+                    'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
-                    'source'   => 'change_request',
+                    'source' => 'change_request',
+                    'subject_code' => $detail->subject_code ?? null,
+                    'subject_desc' => $detail->subject_desc ?? null,
                 ];
             } else {
                 // No change request — use internal schedule only
@@ -287,9 +304,11 @@ class AttendanceReconciliationService
             $originalDetail = $change->scheduleDetail;
             if ($originalDetail && $originalDetail->day_of_week !== $dayOfWeek) {
                 $entries[] = [
-                    'time_in'  => Carbon::parse($change->requested_time_in)->format('H:i:s'),
+                    'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
-                    'source'   => 'change_request',
+                    'source' => 'change_request',
+                    'subject_code' => $originalDetail->subject_code ?? null,
+                    'subject_desc' => $originalDetail->subject_desc ?? null,
                 ];
             }
         }
@@ -315,11 +334,13 @@ class AttendanceReconciliationService
         }
 
         return [
-            'time_in'  => Carbon::parse($internal->device_time_in)->format('H:i:s'),
+            'time_in' => Carbon::parse($internal->device_time_in)->format('H:i:s'),
             'time_out' => $internal->device_time_out
                 ? Carbon::parse($internal->device_time_out)->format('H:i:s')
                 : Carbon::parse($internal->device_time_in)->addHours(3)->format('H:i:s'),
-            'source'   => 'internal',
+            'source' => 'internal',
+            'subject_code' => $detail->subject_code ?? null,
+            'subject_desc' => $detail->subject_desc ?? null,
         ];
     }
 
@@ -343,9 +364,11 @@ class AttendanceReconciliationService
             $originalDetail = $change->scheduleDetail;
             if ($originalDetail && $originalDetail->day_of_week !== $dayOfWeek) {
                 $entries[] = [
-                    'time_in'  => Carbon::parse($change->requested_time_in)->format('H:i:s'),
+                    'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
-                    'source'   => 'change_request',
+                    'source' => 'change_request',
+                    'subject_code' => $originalDetail->subject_code ?? null,
+                    'subject_desc' => $originalDetail->subject_desc ?? null,
                 ];
             }
         }
@@ -358,8 +381,10 @@ class AttendanceReconciliationService
      */
     private function earliest(?Carbon $a, ?Carbon $b): ?Carbon
     {
-        if (!$a) return $b;
-        if (!$b) return $a;
+        if (!$a)
+            return $b;
+        if (!$b)
+            return $a;
         return $a->lessThanOrEqualTo($b) ? $a : $b;
     }
 
@@ -368,8 +393,10 @@ class AttendanceReconciliationService
      */
     private function latest(?Carbon $a, ?Carbon $b): ?Carbon
     {
-        if (!$a) return $b;
-        if (!$b) return $a;
+        if (!$a)
+            return $b;
+        if (!$b)
+            return $a;
         return $a->greaterThanOrEqualTo($b) ? $a : $b;
     }
 }
