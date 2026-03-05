@@ -1,9 +1,12 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Pagination from '@/Components/Pagination';
+import Modal from '@/Components/Modal';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
+import SecondaryButton from '@/Components/SecondaryButton';
 import { Head, router, useForm } from '@inertiajs/react';
-import { useMemo } from 'react';
+import toast from 'react-hot-toast';
+import { useMemo, useRef, useState } from 'react';
 
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300',
@@ -23,7 +26,10 @@ function StatusBadge({ status }) {
 function formatDateTime(value) {
     if (!value) return '—';
 
-    return new Date(value).toLocaleString('en-PH', {
+    const parsedDate = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(parsedDate.getTime())) return '—';
+
+    return parsedDate.toLocaleString('en-PH', {
         year: 'numeric',
         month: 'short',
         day: '2-digit',
@@ -32,10 +38,52 @@ function formatDateTime(value) {
     });
 }
 
+function formatDate(value) {
+    if (!value) return '—';
+
+    const parsedDate = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(parsedDate.getTime())) return '—';
+
+    return parsedDate.toLocaleDateString('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+    });
+}
+
+function formatTime(value) {
+    if (!value) return '—';
+
+    const parsedDate = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(parsedDate.getTime())) return '—';
+
+    return parsedDate.toLocaleTimeString('en-PH', {
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function formatLogType(type) {
+    const normalizedType = String(type ?? '').trim().toLowerCase();
+
+    if (normalizedType.includes('out')) return 'Time Out';
+    if (normalizedType.includes('in')) return 'Time In';
+
+    return type || '—';
+}
+
 export default function AttendanceImports({ batches, filters }) {
     const form = useForm({
         file: null,
     });
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [showSyncModal, setShowSyncModal] = useState(false);
+    const [selectedBatch, setSelectedBatch] = useState(null);
+    const [batchDetails, setBatchDetails] = useState(null);
+    const [detailsLoading, setDetailsLoading] = useState(false);
+    const [detailsError, setDetailsError] = useState('');
+    const [syncing, setSyncing] = useState(false);
+    const syncTargetRef = useRef(null);
 
     const currentPage = useMemo(() => Number(batches?.current_page ?? 1), [batches]);
     const perPage = useMemo(() => Number(filters?.per_page ?? batches?.per_page ?? 10), [filters, batches]);
@@ -65,6 +113,117 @@ export default function AttendanceImports({ batches, filters }) {
             { preserveState: true, preserveScroll: true, replace: true },
         );
     };
+
+    const loadBatchDetails = async (batch) => {
+        setSelectedBatch(batch);
+        setShowDetailsModal(true);
+        setDetailsLoading(true);
+        setDetailsError('');
+        setBatchDetails(null);
+
+        try {
+            const response = await fetch(route('admin.attendance-imports.details', batch.id), {
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to load import details (${response.status}).`);
+            }
+
+            const payload = await response.json();
+            setBatchDetails(payload);
+        } catch (error) {
+            console.error('Failed to load attendance import details:', error);
+            setDetailsError('Failed to load import details. Please try again.');
+        } finally {
+            setDetailsLoading(false);
+        }
+    };
+
+    const closeDetailsModal = () => {
+        setShowDetailsModal(false);
+        setShowSyncModal(false);
+        setSelectedBatch(null);
+        setBatchDetails(null);
+        setDetailsError('');
+    };
+
+    const syncBatch = async (batchOverride) => {
+        const batch = batchOverride ?? selectedBatch;
+
+        console.group('[syncBatch] START');
+        console.log('selectedBatch (state):', selectedBatch);
+        console.log('batchOverride:', batchOverride);
+        console.log('resolved batch:', batch);
+        console.log('syncing:', syncing);
+
+        if (!batch || syncing) {
+            console.warn('[syncBatch] Aborted — guard hit (no batch or already syncing)');
+            console.groupEnd();
+            return;
+        }
+
+        setSyncing(true);
+
+        try {
+            const rawCookie = document.cookie;
+            const match = rawCookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+            const xsrfToken = decodeURIComponent(match?.[1] ?? '');
+            const url = route('admin.attendance-imports.sync', batch.id);
+
+            console.log('[syncBatch] Cookie string:', rawCookie);
+            console.log('[syncBatch] XSRF-TOKEN (decoded):', xsrfToken || '(empty — CSRF will fail)');
+            console.log('[syncBatch] PATCH URL:', url);
+
+            const response = await fetch(url, {
+                method: 'PATCH',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': xsrfToken,
+                },
+            });
+
+            console.log('[syncBatch] HTTP status:', response.status, response.statusText);
+            console.log('[syncBatch] Response headers:', Object.fromEntries(response.headers.entries()));
+
+            const rawText = await response.text();
+            console.log('[syncBatch] Raw response body:', rawText);
+
+            if (!response.ok) {
+                let parsed = {};
+                try { parsed = JSON.parse(rawText); } catch (_) {}
+                throw new Error(parsed.message || `Sync failed (${response.status}).`);
+            }
+
+            let data = {};
+            try { data = JSON.parse(rawText); } catch (_) {}
+
+            console.log('[syncBatch] Parsed response data:', data);
+
+            setShowSyncModal(false);
+            toast.success(data.message ?? 'Logs synced successfully.');
+
+            console.log('[syncBatch] Reloading batch details…');
+            await loadBatchDetails(batch);
+            console.log('[syncBatch] Batch details reloaded. Triggering router.reload…');
+            router.reload({ only: ['batches'], preserveState: true, preserveScroll: true });
+            console.log('[syncBatch] Done.');
+        } catch (error) {
+            console.error('[syncBatch] Error caught:', error);
+            toast.error(error.message || 'Failed to sync. Please try again.');
+        } finally {
+            setSyncing(false);
+            console.groupEnd();
+        }
+    };
+
+    const unsyncedLogsCount = Number(batchDetails?.batch?.unsynced_logs ?? 0);
 
     return (
         <AuthenticatedLayout
@@ -131,7 +290,8 @@ export default function AttendanceImports({ batches, filters }) {
                                     <th className="py-3 px-3 text-right">Failed</th>
                                     <th className="py-3 px-3 text-right">Duplicates</th>
                                     <th className="py-3 px-3">Started</th>
-                                    <th className="py-3 pl-3">Completed</th>
+                                    <th className="py-3 px-3">Completed</th>
+                                    <th className="py-3 pl-3 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -152,19 +312,32 @@ export default function AttendanceImports({ batches, filters }) {
                                             <td className="py-3 px-3 text-right align-top">{batch.failed_records}</td>
                                             <td className="py-3 px-3 text-right align-top">{batch.duplicate_records}</td>
                                             <td className="py-3 px-3 align-top">{formatDateTime(batch.started_at)}</td>
-                                            <td className="py-3 pl-3 align-top">
+                                            <td className="py-3 px-3 align-top">
                                                 {formatDateTime(batch.completed_at)}
-                                                {batch.error_log && (
-                                                    <p className="mt-1 text-xs text-red-600 dark:text-red-400 line-clamp-2">
+                                                {batch.status === 'failed' && batch.error_log && (
+                                                    <p className="mt-1 text-xs text-red-600 dark:text-red-400 whitespace-pre-line">
                                                         {batch.error_log}
                                                     </p>
+                                                )}
+                                            </td>
+                                            <td className="py-3 pl-3 text-right align-top">
+                                                {batch.status !== 'failed' ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => loadBatchDetails(batch)}
+                                                        className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                                    >
+                                                        View Details
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                                                 )}
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={8} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        <td colSpan={9} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                                             No import batches yet.
                                         </td>
                                     </tr>
@@ -183,6 +356,151 @@ export default function AttendanceImports({ batches, filters }) {
                     />
                 </div>
             </div>
+
+            <Modal show={showDetailsModal} onClose={() => { if (!showSyncModal) closeDetailsModal(); }} maxWidth="4xl">
+                <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Import Details</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                {selectedBatch?.file_name ?? '—'}
+                            </p>
+                        </div>
+                        {selectedBatch && <StatusBadge status={selectedBatch.status} />}
+                    </div>
+                </div>
+
+                <div className="flex-1 px-6 py-5 space-y-4 overflow-y-auto">
+                    {detailsLoading && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Loading batch logs...</p>
+                    )}
+
+                    {!detailsLoading && detailsError && (
+                        <div className="rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-300">
+                            {detailsError}
+                        </div>
+                    )}
+
+                    {!detailsLoading && !detailsError && batchDetails && (
+                        <>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Logs</p>
+                                    <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{batchDetails.batch?.total_logs ?? 0}</p>
+                                </div>
+                                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10 p-3">
+                                    <p className="text-xs text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Synced</p>
+                                    <p className="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-300">{batchDetails.batch?.synced_logs ?? 0}</p>
+                                </div>
+                                <div className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 uppercase tracking-wider">Not Synced</p>
+                                    <p className="mt-1 text-lg font-semibold text-amber-700 dark:text-amber-300">{batchDetails.batch?.unsynced_logs ?? 0}</p>
+                                </div>
+                            </div>
+
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
+                                <table className="w-full min-w-[780px] text-sm">
+                                    <thead>
+                                        <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                            <th className="py-3 px-3">Faculty</th>
+                                            <th className="py-3 px-3">Date</th>
+                                            <th className="py-3 px-3">Time</th>
+                                            <th className="py-3 px-3">Type</th>
+                                            <th className="py-3 px-3">Synced</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {batchDetails.logs?.length > 0 ? (
+                                            batchDetails.logs.map((log) => (
+                                                <tr key={log.id} className="border-b border-gray-100 dark:border-gray-700/80 text-gray-700 dark:text-gray-200">
+                                                    <td className="py-3 px-3 align-top">
+                                                        <p className="font-semibold text-gray-800 dark:text-gray-100">{log.faculty_name}</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{log.biometric_id}</p>
+                                                    </td>
+                                                    <td className="py-3 px-3 align-top">{formatDate(log.log_datetime)}</td>
+                                                    <td className="py-3 px-3 align-top">{formatTime(log.log_datetime)}</td>
+                                                    <td className="py-3 px-3 align-top">{formatLogType(log.log_type)}</td>
+                                                    <td className="py-3 px-3 align-top">
+                                                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${log.is_processed
+                                                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                            : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300'
+                                                            }`}
+                                                        >
+                                                            {log.is_processed ? 'Synced' : 'Not Synced'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={5} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                                    No biometric logs found for this batch.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-4">
+                                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Sync Logs</h4>
+                                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                    Sync this batch to mark all remaining unsynced logs as synced.
+                                </p>
+
+                                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                        {unsyncedLogsCount > 0
+                                            ? <>Ready to sync <span className="font-semibold">{unsyncedLogsCount}</span> log {unsyncedLogsCount === 1 ? 'entry' : 'entries'}.</>
+                                            : 'All logs in this batch are already synced.'}
+                                    </p>
+
+                                    <PrimaryButton
+                                        type="button"
+                                        onClick={() => {
+                                            syncTargetRef.current = selectedBatch;
+                                            setShowSyncModal(true);
+                                        }}
+                                        disabled={syncing}
+                                    >
+                                        Sync Logs
+                                    </PrimaryButton>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+                    <SecondaryButton onClick={closeDetailsModal}>Close</SecondaryButton>
+                </div>
+            </Modal>
+
+            <Modal show={showSyncModal} onClose={() => !syncing && setShowSyncModal(false)} maxWidth="md">
+                <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm Sync</h3>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        This will sync the remaining logs in this import batch.
+                    </p>
+                </div>
+
+                <div className="px-6 py-5">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                        {unsyncedLogsCount > 0
+                            ? <>Sync <span className="font-semibold">{unsyncedLogsCount}</span> unsynced log {unsyncedLogsCount === 1 ? 'entry' : 'entries'} now?</>
+                            : 'No unsynced logs were found. You can still continue to verify the batch status.'}
+                    </p>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+                    <SecondaryButton onClick={() => setShowSyncModal(false)} disabled={syncing}>
+                        Cancel
+                    </SecondaryButton>
+                    <PrimaryButton type="button" onClick={() => syncBatch(syncTargetRef.current)} disabled={syncing}>
+                        {syncing ? 'Syncing…' : 'Sync Now'}
+                    </PrimaryButton>
+                </div>
+            </Modal>
         </AuthenticatedLayout>
     );
 }

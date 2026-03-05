@@ -94,6 +94,12 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::post('/attendance-imports', [AdminAttendanceImportController::class, 'store'])
         ->name('admin.attendance-imports.store');
 
+    Route::get('/attendance-imports/{batch}/details', [AdminAttendanceImportController::class, 'details'])
+        ->name('admin.attendance-imports.details');
+
+    Route::patch('/attendance-imports/{batch}/sync', [AdminAttendanceImportController::class, 'sync'])
+        ->name('admin.attendance-imports.sync');
+
     Route::get('/attendance-imports/template', [AdminAttendanceImportController::class, 'downloadTemplate'])
         ->name('admin.attendance-imports.template');
 });

@@ -8,9 +8,11 @@ use App\Models\Faculty;
 use App\Models\ImportBatch;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -156,6 +158,77 @@ class AdminAttendanceImportController extends Controller
                 ->route('admin.attendance-imports.index')
                 ->with('error', 'Import failed due to an unexpected error.');
         }
+    }
+
+    public function details(ImportBatch $batch): JsonResponse
+    {
+        $logs = BiometricLog::query()
+            ->where('import_batch_id', $batch->id)
+            ->with(['faculty:id,biometric_id,first_name,middle_name,last_name'])
+            ->orderBy('log_datetime')
+            ->orderBy('id')
+            ->get()
+            ->map(function (BiometricLog $log): array {
+                return [
+                    'id' => $log->id,
+                    'faculty_name' => $log->faculty?->full_name ?? $log->biometric_id,
+                    'biometric_id' => $log->biometric_id,
+                    'log_datetime' => optional($log->log_datetime)->format('Y-m-d H:i:s'),
+                    'log_type' => $log->log_type,
+                    'is_processed' => (bool) $log->is_processed,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'batch' => [
+                'id' => $batch->id,
+                'file_name' => $batch->file_name,
+                'status' => $batch->status,
+                'error_log' => $batch->error_log,
+                'total_logs' => $logs->count(),
+                'synced_logs' => $logs->where('is_processed', true)->count(),
+                'unsynced_logs' => $logs->where('is_processed', false)->count(),
+            ],
+            'logs' => $logs,
+        ]);
+    }
+
+    public function sync(ImportBatch $batch): JsonResponse
+    {
+        Log::debug('[Sync] Request received', [
+            'batch_id'   => $batch->id,
+            'batch_status' => $batch->status,
+            'auth_user'  => Auth::id(),
+        ]);
+
+        $unsyncedCount = BiometricLog::query()
+            ->where('import_batch_id', $batch->id)
+            ->where('is_processed', false)
+            ->count();
+
+        Log::debug('[Sync] Unsynced logs before update', ['unsynced_count' => $unsyncedCount]);
+
+        $syncedCount = BiometricLog::query()
+            ->where('import_batch_id', $batch->id)
+            ->where('is_processed', false)
+            ->update([
+                'is_processed' => true,
+                'updated_at' => now(),
+            ]);
+
+        Log::debug('[Sync] Update result', ['rows_affected' => $syncedCount]);
+
+        $message = $syncedCount > 0
+            ? "{$syncedCount} biometric log " . ($syncedCount === 1 ? 'entry was' : 'entries were') . ' successfully synced.'
+            : 'This batch is already fully synced.';
+
+        Log::debug('[Sync] Responding with JSON', ['message' => $message]);
+
+        return response()->json([
+            'message' => $message,
+            'synced_count' => $syncedCount,
+        ]);
     }
 
     public function downloadTemplate()
