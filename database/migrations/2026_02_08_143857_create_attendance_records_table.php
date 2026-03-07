@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -24,8 +23,8 @@ return new class extends Migration
             $table->string('operational_day_of_week')->nullable();
             $table->datetime('operational_time_in')->nullable();
             $table->datetime('operational_time_out')->nullable();
-            $table->datetime('actual_time_in');
-            $table->datetime('actual_time_out');
+            $table->datetime('actual_time_in')->nullable();
+            $table->datetime('actual_time_out')->nullable();
             $table->integer('late_minutes');
             $table->integer('undertime_minutes');
             $table->integer('overtime_minutes');

@@ -27,11 +27,6 @@ class AttendanceRecord extends Model
         'actual_time_out',
         'late_minutes',
         'undertime_minutes',
-        'undertime_justification',
-        'undertime_status',
-        'undertime_reviewed_by',
-        'undertime_reviewed_at',
-        'undertime_review_remarks',
         'overtime_minutes',
         'night_minutes',
         'overtime_night_minutes',
@@ -55,8 +50,6 @@ class AttendanceRecord extends Model
             'actual_time_out' => 'datetime',
             'late_minutes' => 'integer',
             'undertime_minutes' => 'integer',
-            'undertime_status' => 'string',
-            'undertime_reviewed_at' => 'datetime',
             'overtime_minutes' => 'integer',
             'night_minutes' => 'integer',
             'overtime_night_minutes' => 'integer',
@@ -89,5 +82,10 @@ class AttendanceRecord extends Model
     public function attendanceAdjustments(): HasMany
     {
         return $this->hasMany(AttendanceAdjustment::class);
+    }
+
+    public function justifications(): HasMany
+    {
+        return $this->hasMany(AttendanceJustification::class);
     }
 }

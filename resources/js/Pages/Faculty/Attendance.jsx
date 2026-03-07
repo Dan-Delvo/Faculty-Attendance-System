@@ -40,36 +40,43 @@ export default function FacultyAttendance({ attendanceLogs }) {
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [sourceFilter, setSourceFilter] = useState('all');
 
-    // Justification Modal
-    const [showUndertimeModal, setShowUndertimeModal] = useState(false);
+    // Justification Modals
+    const [showJustifyModal, setShowJustifyModal] = useState(false);
+    const [justifyType, setJustifyType] = useState('undertime'); // 'undertime' or 'missing_time'
     const [selectedLog, setSelectedLog] = useState(null);
 
     const justifyForm = useForm({
         justification: '',
     });
 
-    const canEditJustification = (log) => {
+    const canEditJustification = (log, type) => {
         if (!log) return false;
-        if (!log.undertime_status) return true; // Can always add new
-        if (log.undertime_status !== 'pending' || !log.updated_at) return false;
+        const statusField = type === 'undertime' ? 'undertime_status' : 'missing_time_status';
+        if (!log[statusField]) return true; // Can always add new
+        if (log[statusField] !== 'pending' || !log.updated_at) return false;
+
+        // Use the ISO string from the backend
         const updatedTime = new Date(log.updated_at).getTime();
         const now = new Date().getTime();
         return (now - updatedTime) <= 15 * 60 * 1000;
     };
 
-    const openJustifyModal = (log) => {
+    const openJustifyModal = (log, type) => {
         setSelectedLog(log);
-        justifyForm.setData('justification', log.undertime_justification || '');
+        setJustifyType(type);
+        const justificationField = type === 'undertime' ? 'undertime_justification' : 'missing_time_justification';
+        justifyForm.setData('justification', log[justificationField] || '');
         justifyForm.clearErrors();
-        setShowUndertimeModal(true);
+        setShowJustifyModal(true);
     };
 
     const submitJustification = (e) => {
         e.preventDefault();
-        justifyForm.post(route('faculty.attendance.justify', selectedLog.id), {
+        const routeName = justifyType === 'undertime' ? 'faculty.attendance.justify' : 'faculty.attendance.missing-justify';
+        justifyForm.post(route(routeName, selectedLog.id), {
             preserveScroll: true,
             onSuccess: () => {
-                setShowUndertimeModal(false);
+                setShowJustifyModal(false);
             },
         });
     };
@@ -341,12 +348,16 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                             {log.expected_time_in} <span className="text-gray-300 dark:text-slate-500 mx-1">-</span> {log.expected_time_out}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-gray-900 dark:text-white">
-                                            <span className={log.late_minutes > 0 ? 'text-amber-600 dark:text-amber-400' : ''}>{log.actual_time_in}</span>
+                                            <span className={log.late_minutes > 0 ? 'text-amber-600 dark:text-amber-400' : (!log.actual_time_in || log.actual_time_in === '--:--' ? 'text-rose-500 animate-pulse' : '')}>
+                                                {log.actual_time_in}
+                                            </span>
                                             <span className="text-gray-300 dark:text-slate-500 mx-1">-</span>
-                                            <span className={log.undertime_minutes > 0 ? 'text-red-600 dark:text-red-400' : ''}>{log.actual_time_out}</span>
+                                            <span className={log.undertime_minutes > 0 ? 'text-red-600 dark:text-red-400' : (!log.actual_time_out || log.actual_time_out === '--:--' ? 'text-rose-500 animate-pulse' : '')}>
+                                                {log.actual_time_out}
+                                            </span>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-center">
-                                            {log.late_minutes === 0 && log.undertime_minutes === 0 ? (
+                                            {(log.late_minutes === 0 && log.undertime_minutes === 0 && log.actual_time_in !== '--:--' && log.actual_time_out !== '--:--') ? (
                                                 <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500">
                                                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12h15" />
@@ -358,22 +369,42 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                     {log.undertime_minutes > 0 && (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{log.undertime_minutes}m Early</span>
-                                                            {((log.status || '').toLowerCase().includes('undertime') || (log.status || '').toLowerCase().includes('early')) && (
-                                                                log.undertime_status ? (
-                                                                    <button type="button" onClick={() => openJustifyModal(log)} className={`mt-0.5 group flex items-center gap-1 text-[11px] font-extrabold uppercase transition-colors ${log.undertime_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800' : log.undertime_status === 'rejected' ? 'text-red-600 dark:text-red-400 hover:text-red-800' : 'text-amber-600 dark:text-amber-400 hover:text-amber-800'}`}>
-                                                                        <span>{log.undertime_status}</span>
-                                                                        <svg className="h-3 w-3 opacity-50 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Zm3.75 11.625a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-                                                                        </svg>
-                                                                    </button>
-                                                                ) : (
-                                                                    <button type="button" onClick={() => openJustifyModal(log)} className="mt-0.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline transition-colors flex items-center gap-1">
-                                                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                                                                        </svg>
-                                                                        Justify
-                                                                    </button>
-                                                                )
+                                                            {log.undertime_status ? (
+                                                                <button type="button" onClick={() => openJustifyModal(log, 'undertime')} className={`mt-0.5 group flex items-center gap-1 text-[11px] font-extrabold uppercase transition-colors ${log.undertime_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800' : log.undertime_status === 'rejected' ? 'text-red-600 dark:text-red-400 hover:text-red-800' : 'text-amber-600 dark:text-amber-400 hover:text-amber-800'}`}>
+                                                                    <span>{log.undertime_status}</span>
+                                                                    <svg className="h-3 w-3 opacity-50 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Zm3.75 11.625a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                                                                    </svg>
+                                                                </button>
+                                                            ) : (
+                                                                <button type="button" onClick={() => openJustifyModal(log, 'undertime')} className="mt-0.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline transition-colors flex items-center gap-1">
+                                                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                                                    </svg>
+                                                                    Justify Undertime
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {(log.actual_time_in === '--:--' || log.actual_time_out === '--:--') && (
+                                                        <div className="flex flex-col items-center gap-1 mt-1">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-300">
+                                                                Missing {log.actual_time_in === '--:--' ? 'In' : ''}{log.actual_time_in === '--:--' && log.actual_time_out === '--:--' ? ' & ' : ''}{log.actual_time_out === '--:--' ? 'Out' : ''}
+                                                            </span>
+                                                            {log.missing_time_status ? (
+                                                                <button type="button" onClick={() => openJustifyModal(log, 'missing_time')} className={`mt-0.5 group flex items-center gap-1 text-[11px] font-extrabold uppercase transition-colors ${log.missing_time_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800' : log.missing_time_status === 'rejected' ? 'text-red-600 dark:text-red-400 hover:text-red-800' : 'text-amber-600 dark:text-amber-400 hover:text-amber-800'}`}>
+                                                                    <span>{log.missing_time_status}</span>
+                                                                    <svg className="h-3 w-3 opacity-50 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Zm3.75 11.625a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                                                                    </svg>
+                                                                </button>
+                                                            ) : (
+                                                                <button type="button" onClick={() => openJustifyModal(log, 'missing_time')} className="mt-0.5 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 hover:underline transition-colors flex items-center gap-1">
+                                                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                                                    </svg>
+                                                                    Justify Missing Time
+                                                                </button>
                                                             )}
                                                         </div>
                                                     )}
@@ -444,16 +475,22 @@ export default function FacultyAttendance({ attendanceLogs }) {
             </div>
 
             {/* Justification Modal */}
-            <Modal show={showUndertimeModal} onClose={() => setShowUndertimeModal(false)} maxWidth="md">
+            <Modal show={showJustifyModal} onClose={() => setShowJustifyModal(false)} maxWidth="md">
                 <form onSubmit={submitJustification} className="p-6">
                     <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mt-2">
-                        {!canEditJustification(selectedLog) ? 'View Justification' : selectedLog?.undertime_status ? 'Edit Justification' : 'Justify Undertime'}
+                        {!canEditJustification(selectedLog, justifyType)
+                            ? 'View Justification'
+                            : (selectedLog?.[justifyType === 'undertime' ? 'undertime_status' : 'missing_time_status'] ? 'Edit Justification' : `Justify ${justifyType === 'undertime' ? 'Undertime' : 'Missing Time'}`)}
                     </h2>
                     {selectedLog && (
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                            You recorded <span className="font-bold text-red-600 dark:text-red-400">{selectedLog.undertime_minutes} minutes</span> of undertime on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.
-                            {canEditJustification(selectedLog) && !selectedLog.undertime_status && ' Please provide a reason to request approval from the Head of Academic Program.'}
-                            {canEditJustification(selectedLog) && selectedLog.undertime_status === 'pending' && <span className="block mt-1 font-medium text-amber-600 dark:text-amber-500">You can edit your justification for up to 15 minutes after submitting.</span>}
+                            {justifyType === 'undertime' ? (
+                                <>You recorded <span className="font-bold text-red-600 dark:text-red-400">{selectedLog.undertime_minutes} minutes</span> of undertime on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.</>
+                            ) : (
+                                <>You have missing logs (<span className="font-bold text-rose-600 dark:text-rose-400">{selectedLog.actual_time_in === '--:--' ? 'Time In' : ''}{selectedLog.actual_time_in === '--:--' && selectedLog.actual_time_out === '--:--' ? ' and ' : ''}{selectedLog.actual_time_out === '--:--' ? 'Time Out' : ''}</span>) on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.</>
+                            )}
+                            {canEditJustification(selectedLog, justifyType) && !selectedLog?.[justifyType === 'undertime' ? 'undertime_status' : 'missing_time_status'] && ' Please provide a reason to request approval from the Head of Academic Program.'}
+                            {canEditJustification(selectedLog, justifyType) && selectedLog?.[justifyType === 'undertime' ? 'undertime_status' : 'missing_time_status'] === 'pending' && <span className="block mt-1 font-medium text-amber-600 dark:text-amber-500">You can edit your justification for up to 15 minutes after submitting.</span>}
                         </p>
                     )}
 
@@ -462,22 +499,22 @@ export default function FacultyAttendance({ attendanceLogs }) {
                         <textarea
                             id="justification"
                             rows={4}
-                            className={`block w-full rounded-xl shadow-sm sm:text-sm resize-none ${!canEditJustification(selectedLog) ? 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-600 dark:text-gray-400 focus:border-transparent focus:ring-0 cursor-not-allowed' : 'border-gray-300 focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}
-                            placeholder="Briefly explain your undertime..."
+                            className={`block w-full rounded-xl shadow-sm sm:text-sm resize-none ${!canEditJustification(selectedLog, justifyType) ? 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-600 dark:text-gray-400 focus:border-transparent focus:ring-0 cursor-not-allowed' : 'border-gray-300 focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}
+                            placeholder={justifyType === 'undertime' ? "Briefly explain your undertime..." : "Briefly explain why logs are missing..."}
                             value={justifyForm.data.justification}
                             onChange={(e) => justifyForm.setData('justification', e.target.value)}
-                            readOnly={!canEditJustification(selectedLog)}
+                            readOnly={!canEditJustification(selectedLog, justifyType)}
                         />
                         <InputError message={justifyForm.errors.justification} className="mt-2" />
                     </div>
 
                     <div className="mt-6 flex justify-end gap-3">
-                        <SecondaryButton onClick={() => setShowUndertimeModal(false)}>
-                            {!canEditJustification(selectedLog) ? 'Close' : 'Cancel'}
+                        <SecondaryButton onClick={() => setShowJustifyModal(false)}>
+                            {!canEditJustification(selectedLog, justifyType) ? 'Close' : 'Cancel'}
                         </SecondaryButton>
-                        {canEditJustification(selectedLog) && (
+                        {canEditJustification(selectedLog, justifyType) && (
                             <PrimaryButton disabled={justifyForm.processing}>
-                                {justifyForm.processing ? 'Submitting...' : selectedLog?.undertime_status ? 'Update Request' : 'Submit Request'}
+                                {justifyForm.processing ? 'Submitting...' : (selectedLog?.[justifyType === 'undertime' ? 'undertime_status' : 'missing_time_status'] ? 'Update Request' : 'Submit Request')}
                             </PrimaryButton>
                         )}
                     </div>
