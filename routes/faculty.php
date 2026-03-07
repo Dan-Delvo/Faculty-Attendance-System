@@ -12,6 +12,7 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/schedule', [FacultyDashboardController::class, 'schedule'])->name('faculty.schedule');
     Route::get('/faculty/attendance', [FacultyDashboardController::class, 'attendance'])->name('faculty.attendance');
     Route::post('/faculty/attendance/{id}/justification', [FacultyDashboardController::class, 'submitUndertimeJustification'])->name('faculty.attendance.justify');
+    Route::post('/faculty/attendance/{id}/missing-justification', [FacultyDashboardController::class, 'submitMissingTimeJustification'])->name('faculty.attendance.missing-justify');
 
     // ── Schedule Change Requests ───────────────────────────────────────────
     Route::get('/faculty/schedule-change-requests', [ScheduleChangeRequestController::class, 'index'])

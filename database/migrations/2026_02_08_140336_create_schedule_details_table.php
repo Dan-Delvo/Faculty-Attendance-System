@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -17,7 +16,7 @@ return new class extends Migration
             $table->bigInteger('schedule_id')->unsigned();
             $table->string('day_of_week');
             $table->timestamp('time_in');
-            $table->timestamp('time_out');
+            $table->timestamp('time_out')->nullable();
             $table->string('subject_code')->nullable();
             $table->string('subject_desc')->nullable();
             $table->string('room')->nullable();
