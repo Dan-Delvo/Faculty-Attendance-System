@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
+use App\Http\Controllers\Admin\AdminOnlineRequestController;
 use App\Http\Controllers\Admin\AdminSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -73,6 +74,19 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::patch('/schedule-change-requests/{scheduleChangeRequest}/reject', [AdminScheduleChangeRequestController::class, 'reject'])
         ->name('admin.schedule-change-requests.reject');
+
+    // ── Online Attendance Requests ─────────────────────────────────────────
+    Route::get('/online-requests', [AdminOnlineRequestController::class, 'index'])
+        ->name('admin.online-requests.index');
+
+    Route::get('/api/online-requests', [AdminOnlineRequestController::class, 'filter'])
+        ->name('admin.online-requests.filter');
+
+    Route::patch('/online-requests/{onlineRequest}/approve', [AdminOnlineRequestController::class, 'approve'])
+        ->name('admin.online-requests.approve');
+
+    Route::patch('/online-requests/{onlineRequest}/reject', [AdminOnlineRequestController::class, 'reject'])
+        ->name('admin.online-requests.reject');
 
     // ── Holiday Management ─────────────────────────────────────────────────
     Route::get('/holidays', [AdminHolidayController::class, 'index'])
