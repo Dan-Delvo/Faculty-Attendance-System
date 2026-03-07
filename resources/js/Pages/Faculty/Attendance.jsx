@@ -153,9 +153,33 @@ export default function FacultyAttendance({ attendanceLogs }) {
         currentPage * perPage
     );
 
+    // Count missing logs that have no justification submitted yet
+    const pendingMissingLogsCount = attendanceLogs.filter(log =>
+        (log.actual_time_in === '--:--' || log.actual_time_out === '--:--') &&
+        !log.missing_time_status
+    ).length;
+
     return (
         <AuthenticatedLayout>
             <Head title="Attendance History" />
+
+            {pendingMissingLogsCount > 0 && (
+                <div className="mb-6 flex items-center justify-between p-4 rounded-2xl bg-rose-50 border border-rose-200 dark:bg-rose-900/20 dark:border-rose-800/50 transition-all animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-center gap-4">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-rose-900 dark:text-rose-300">Action Required: Missing Time Logs</h3>
+                            <p className="text-xs text-rose-700 dark:text-rose-400/80 mt-0.5">
+                                You have <span className="font-bold underline">{pendingMissingLogsCount}</span> {pendingMissingLogsCount === 1 ? 'record' : 'records'} with missing time-in or time-out. Please provide a justification to avoid deductions.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="mb-8">
                 <Link
