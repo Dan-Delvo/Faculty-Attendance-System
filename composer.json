@@ -13,6 +13,8 @@
         "laravel/tinker": "^2.10.1",
         "laravel/ui": "^4.6",
         "phpoffice/phpspreadsheet": "^2.2",
+        "spatie/browsershot": "^5.2",
+        "spatie/laravel-pdf": "^2.2",
         "spatie/laravel-permission": "^6.24",
         "tightenco/ziggy": "^2.0"
     },
