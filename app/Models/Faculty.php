@@ -230,19 +230,13 @@ class Faculty extends Model
         // All checks passed — create
         $this->scheduleChangeRequests()->create([
             'schedule_detail_id' => $data['schedule_detail_id'],
-            'schedule_detail_id' => $data['schedule_detail_id'],
             'requested_day_of_week' => $data['requested_day_of_week'],
             'requested_time_in' => $data['requested_time_in'],
             'requested_time_out' => $data['requested_time_out'],
             'requested_room' => $data['requested_room'] ?? null,
             'effective_date' => $data['effective_date'],
             'reason' => $data['reason'],
-            'status' => 'pending',
-            'requested_time_in' => $data['requested_time_in'],
-            'requested_time_out' => $data['requested_time_out'],
-            'requested_room' => $data['requested_room'] ?? null,
-            'effective_date' => $data['effective_date'],
-            'reason' => $data['reason'],
+            'supporting_document_path' => $data['supporting_document_path'] ?? null,
             'status' => 'pending',
         ]);
 

@@ -27,7 +27,6 @@ class FacultyDashboardController extends Controller
                 'stats' => [],
                 'todaySchedule' => [],
                 'recentAttendance' => [],
-                'biometricLogs' => [],
                 'checkInTrend' => [],
                 'monthlyAverages' => ['avgCheckIn' => '--:--', 'avgCheckOut' => '--:--'],
                 'currentDate' => Carbon::now()->format('l, F j, Y'),
@@ -61,7 +60,6 @@ class FacultyDashboardController extends Controller
             'stats' => $faculty->getDashboardStats(),
             'todaySchedule' => $faculty->getTodayScheduleDetails(),
             'recentAttendance' => $recentAttendance,
-            'biometricLogs' => $faculty->getFormattedBiometricLogs(),
             'checkInTrend' => $faculty->getCheckInTrend($months),
             'monthlyAverages' => $faculty->getMonthlyAverages(),
             'currentDate' => Carbon::now()->format('l, F j, Y'),
@@ -98,15 +96,7 @@ class FacultyDashboardController extends Controller
     /**
      * Display the full biometric logs page.
      */
-    public function biometricLogs(Request $request)
-    {
-        $faculty = $request->user()->faculty;
 
-        return Inertia::render('Faculty/BiometricLogs', [
-            'biometricLogs' => $faculty ? $faculty->getFormattedBiometricLogs(100) : [],
-            'monthlyAverages' => $faculty ? $faculty->getMonthlyAverages() : ['avgCheckIn' => '--:--', 'avgCheckOut' => '--:--'],
-        ]);
-    }
 
     /**
      * Display the schedule & attendance page.
@@ -165,6 +155,7 @@ class FacultyDashboardController extends Controller
                 $totalHours = ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm';
 
                 return [
+                    'id' => $record->id,
                     'date' => $record->attendance_date->format('M d, Y'),
                     'raw_date' => $record->attendance_date->toDateString(),
                     'dayOfWeek' => $record->attendance_date->format('l'),
@@ -181,6 +172,9 @@ class FacultyDashboardController extends Controller
                         ? $record->actual_time_out->format('h:i A') : '--:--',
                     'late_minutes' => $record->late_minutes ?? 0,
                     'undertime_minutes' => $record->undertime_minutes ?? 0,
+                    'undertime_justification' => $record->undertime_justification,
+                    'undertime_status' => $record->undertime_status,
+                    'updated_at' => $record->updated_at ? $record->updated_at->toIso8601String() : null,
                     'overtime_minutes' => $record->overtime_minutes ?? 0,
                     'night_minutes' => $record->night_minutes ?? 0,
                     'overtime_night_minutes' => $record->overtime_night_minutes ?? 0,
@@ -212,5 +206,46 @@ class FacultyDashboardController extends Controller
         }
 
         return 'Good Evening';
+    }
+
+    /**
+     * Submit undertime justification.
+     */
+    public function submitUndertimeJustification(Request $request, $id)
+    {
+        $request->validate([
+            'justification' => 'required|string|max:1000',
+        ]);
+
+        $faculty = $request->user()->faculty;
+        if (!$faculty)
+            abort(403);
+
+        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
+            ->findOrFail($id);
+
+        if ($record->undertime_minutes <= 0) {
+            return back()->with('error', 'No undertime to justify for this record.');
+        }
+
+        if (in_array($record->undertime_status, ['approved', 'rejected'])) {
+            return back()->with('error', 'Cannot edit a justification that has already been reviewed.');
+        }
+
+        $isUpdate = $record->undertime_status === 'pending';
+
+        if ($isUpdate && $record->updated_at) {
+            $diffInMinutes = now()->diffInMinutes($record->updated_at);
+            if ($diffInMinutes > 15) {
+                return back()->with('error', 'The 15-minute window to edit this justification has expired.');
+            }
+        }
+
+        $record->update([
+            'undertime_justification' => $request->justification,
+            'undertime_status' => 'pending',
+        ]);
+
+        return back()->with('success', $isUpdate ? 'Justification updated successfully.' : 'Justification submitted. Pending approval from Head.');
     }
 }

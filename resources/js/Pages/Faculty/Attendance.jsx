@@ -1,7 +1,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import Pagination from '@/Components/Pagination';
+import Modal from '@/Components/Modal';
+import InputLabel from '@/Components/InputLabel';
+import InputError from '@/Components/InputError';
+import PrimaryButton from '@/Components/PrimaryButton';
+import SecondaryButton from '@/Components/SecondaryButton';
+import toast from 'react-hot-toast';
 
 // ── Status badge colour helper ──────────────────────────────────────────────
 function statusStyle(status = '') {
@@ -34,8 +40,44 @@ export default function FacultyAttendance({ attendanceLogs }) {
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [sourceFilter, setSourceFilter] = useState('all');
 
+    // Justification Modal
+    const [showUndertimeModal, setShowUndertimeModal] = useState(false);
+    const [selectedLog, setSelectedLog] = useState(null);
+
+    const justifyForm = useForm({
+        justification: '',
+    });
+
+    const canEditJustification = (log) => {
+        if (!log) return false;
+        if (!log.undertime_status) return true; // Can always add new
+        if (log.undertime_status !== 'pending' || !log.updated_at) return false;
+        const updatedTime = new Date(log.updated_at).getTime();
+        const now = new Date().getTime();
+        return (now - updatedTime) <= 15 * 60 * 1000;
+    };
+
+    const openJustifyModal = (log) => {
+        setSelectedLog(log);
+        justifyForm.setData('justification', log.undertime_justification || '');
+        justifyForm.clearErrors();
+        setShowUndertimeModal(true);
+    };
+
+    const submitJustification = (e) => {
+        e.preventDefault();
+        justifyForm.post(route('faculty.attendance.justify', selectedLog.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowUndertimeModal(false);
+            },
+        });
+    };
+
+    const [summaryFilter, setSummaryFilter] = useState('all');
+
     // Filter logs based on date picker and source
-    const filteredLogs = attendanceLogs.filter(log => {
+    const baseFilteredLogs = attendanceLogs.filter(log => {
         if (sourceFilter === 'online' && !log.online_attendance) return false;
         if (sourceFilter === 'biometric' && log.online_attendance) return false;
 
@@ -49,7 +91,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
     });
 
     // ── Summary stats (over filtered window) ───────────────────────────────
-    const summary = filteredLogs.reduce((acc, log) => {
+    const summary = baseFilteredLogs.reduce((acc, log) => {
         const s = (log.status || '').toLowerCase();
         if (s === 'absent') acc.daysAbsent++;
         if (s.includes('late') || s.includes('tardy')) {
@@ -80,6 +122,18 @@ export default function FacultyAttendance({ attendanceLogs }) {
         timesNight: 0, totalNightMinutes: 0,
         timesOvertime: 0, totalOvertimeMinutes: 0,
         timesOvertimeNight: 0, totalOvertimeNightMinutes: 0,
+    });
+
+    const filteredLogs = baseFilteredLogs.filter((log) => {
+        if (summaryFilter === 'all') return true;
+        const s = (log.status || '').toLowerCase();
+        if (summaryFilter === 'absent' && s === 'absent') return true;
+        if (summaryFilter === 'late' && (s.includes('late') || s.includes('tardy'))) return true;
+        if (summaryFilter === 'undertime' && (s.includes('early') || s.includes('undertime'))) return true;
+        if (summaryFilter === 'night' && (log.night_minutes || 0) > 0) return true;
+        if (summaryFilter === 'overtime' && (log.overtime_minutes || 0) > 0) return true;
+        if (summaryFilter === 'overtimeNight' && (log.overtime_night_minutes || 0) > 0) return true;
+        return false;
     });
 
     const fmtMins = (m) => {
@@ -165,21 +219,49 @@ export default function FacultyAttendance({ attendanceLogs }) {
 
             {/* ── Summary Panel ────────────────────────────────────────── */}
             <div className="mb-6 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40">
-                    <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Summary</h2>
+                <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40 flex justify-between items-center">
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                        Summary
+                        {summaryFilter !== 'all' && (
+                            <span className="ml-2 text-[10px] bg-[#7a1315] text-white px-2 py-0.5 rounded-full capitalize">
+                                Filtering: {summaryFilter.replace(/([A-Z])/g, ' $1').trim()}
+                            </span>
+                        )}
+                    </h2>
+                    {summaryFilter !== 'all' && (
+                        <button
+                            onClick={() => { setSummaryFilter('all'); setCurrentPage(1); }}
+                            className="text-[10px] font-bold text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors uppercase tracking-wider"
+                        >
+                            Clear Filter
+                        </button>
+                    )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y divide-gray-100 dark:divide-gray-700/50">
                     {[
-                        { label: 'Days Absent', value: summary.daysAbsent, sub: null, color: 'text-red-600 dark:text-red-400' },
-                        { label: 'Times Tardy', value: summary.timesLate, sub: fmtMins(summary.totalLateMinutes), color: 'text-amber-600 dark:text-amber-400' },
-                        { label: 'Under Time', value: summary.timesUndertime, sub: fmtMins(summary.totalUndertimeMinutes), color: 'text-orange-600 dark:text-orange-400' },
-                        { label: 'Nights Rendered', value: summary.timesNight, sub: fmtMins(summary.totalNightMinutes), color: 'text-violet-600 dark:text-violet-400' },
-                        { label: 'Overtime Rendered', value: summary.timesOvertime, sub: fmtMins(summary.totalOvertimeMinutes), color: 'text-emerald-600 dark:text-emerald-400' },
-                        { label: 'OT Nights', value: summary.timesOvertimeNight, sub: fmtMins(summary.totalOvertimeNightMinutes), color: 'text-indigo-600 dark:text-indigo-400' },
-                    ].map(({ label, value, sub, color }) => (
-                        <div key={label} className="px-4 py-4">
-                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 leading-tight">{label}</p>
-                            <p className={`mt-1 text-2xl font-extrabold tabular-nums ${color}`}>{value}</p>
+                        { id: 'absent', label: 'Days Absent', value: summary.daysAbsent, sub: null, color: 'text-red-600 dark:text-red-400' },
+                        { id: 'late', label: 'Times Tardy', value: summary.timesLate, sub: fmtMins(summary.totalLateMinutes), color: 'text-amber-600 dark:text-amber-400' },
+                        { id: 'undertime', label: 'Under Time', value: summary.timesUndertime, sub: fmtMins(summary.totalUndertimeMinutes), color: 'text-orange-600 dark:text-orange-400' },
+                        { id: 'night', label: 'Nights Rendered', value: summary.timesNight, sub: fmtMins(summary.totalNightMinutes), color: 'text-violet-600 dark:text-violet-400' },
+                        { id: 'overtime', label: 'Overtime Rendered', value: summary.timesOvertime, sub: fmtMins(summary.totalOvertimeMinutes), color: 'text-emerald-600 dark:text-emerald-400' },
+                        { id: 'overtimeNight', label: 'OT Nights', value: summary.timesOvertimeNight, sub: fmtMins(summary.totalOvertimeNightMinutes), color: 'text-indigo-600 dark:text-indigo-400' },
+                    ].map(({ id, label, value, sub, color }) => (
+                        <div
+                            key={id}
+                            onClick={() => { setSummaryFilter(summaryFilter === id ? 'all' : id); setCurrentPage(1); }}
+                            className={`px-4 py-4 cursor-pointer transition-all duration-200 hover:bg-gray-50 dark:hover:bg-slate-700/40 relative group ${summaryFilter === id ? 'bg-gray-50/80 dark:bg-slate-700/60 ring-inset ring-2 ring-gray-200 dark:ring-slate-600' : ''}`}
+                            title={`Click to filter table by ${label}`}
+                        >
+                            {summaryFilter === id && (
+                                <div className="absolute top-2 right-2 flex space-x-1">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#7a1315] dark:bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[#7a1315] dark:bg-red-500"></span>
+                                    </span>
+                                </div>
+                            )}
+                            <p className={`text-xs font-semibold leading-tight transition-colors ${summaryFilter === id ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'}`}>{label}</p>
+                            <p className={`mt-1 text-2xl font-extrabold tabular-nums transition-transform duration-300 group-hover:scale-105 origin-left ${color}`}>{value}</p>
                             {sub && <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">({sub})</p>}
                         </div>
                     ))}
@@ -207,7 +289,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                     Actual (In - Out)
                                 </th>
                                 <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-gray-500 dark:text-slate-300 uppercase tracking-widest">
-                                    Deductions
+                                    Deductions & Status
                                 </th>
                                 <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-500 dark:text-slate-300 uppercase tracking-widest">
                                     Rendered
@@ -273,7 +355,28 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                             ) : (
                                                 <div className="flex flex-col gap-1 items-center">
                                                     {log.late_minutes > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300">{log.late_minutes}m Late</span>}
-                                                    {log.undertime_minutes > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{log.undertime_minutes}m Early</span>}
+                                                    {log.undertime_minutes > 0 && (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{log.undertime_minutes}m Early</span>
+                                                            {((log.status || '').toLowerCase().includes('undertime') || (log.status || '').toLowerCase().includes('early')) && (
+                                                                log.undertime_status ? (
+                                                                    <button type="button" onClick={() => openJustifyModal(log)} className={`mt-0.5 group flex items-center gap-1 text-[11px] font-extrabold uppercase transition-colors ${log.undertime_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800' : log.undertime_status === 'rejected' ? 'text-red-600 dark:text-red-400 hover:text-red-800' : 'text-amber-600 dark:text-amber-400 hover:text-amber-800'}`}>
+                                                                        <span>{log.undertime_status}</span>
+                                                                        <svg className="h-3 w-3 opacity-50 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Zm3.75 11.625a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                                                                        </svg>
+                                                                    </button>
+                                                                ) : (
+                                                                    <button type="button" onClick={() => openJustifyModal(log)} className="mt-0.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline transition-colors flex items-center gap-1">
+                                                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                                                        </svg>
+                                                                        Justify
+                                                                    </button>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
@@ -294,14 +397,23 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                 </svg>
                                             </div>
                                             <h3 className="mt-2 text-base font-bold text-gray-900 dark:text-white">
-                                                {sourceFilter === 'online' ? 'No Online Attendance' : sourceFilter === 'biometric' ? 'No Biometric Records' : 'No Attendance Records'}
+                                                {summaryFilter !== 'all'
+                                                    ? `No ${summaryFilter.replace(/([A-Z])/g, ' $1').trim().replace(/^[a-z]/, m => m.toUpperCase())} Records`
+                                                    : sourceFilter === 'online'
+                                                        ? 'No Online Attendance'
+                                                        : sourceFilter === 'biometric'
+                                                            ? 'No Biometric Records'
+                                                            : 'No Attendance Records'
+                                                }
                                             </h3>
                                             <p className="mt-1 text-sm text-gray-500 dark:text-slate-400 max-w-sm">
-                                                {sourceFilter === 'online'
-                                                    ? 'You don\'t have any approved online attendance records for this period.'
-                                                    : sourceFilter === 'biometric'
-                                                        ? 'You don\'t have any matched schedules mapped to your biometrics for this period.'
-                                                        : 'You don\'t have any attendance records for this period.'}
+                                                {summaryFilter !== 'all'
+                                                    ? `You don't have any records matching the "${summaryFilter.replace(/([A-Z])/g, ' $1').trim()}" filter for this period.`
+                                                    : sourceFilter === 'online'
+                                                        ? 'You don\'t have any approved online attendance records for this period.'
+                                                        : sourceFilter === 'biometric'
+                                                            ? 'You don\'t have any matched schedules mapped to your biometrics for this period.'
+                                                            : 'You don\'t have any attendance records for this period.'}
                                             </p>
                                         </div>
                                     </td>
@@ -330,6 +442,47 @@ export default function FacultyAttendance({ attendanceLogs }) {
                 />
 
             </div>
+
+            {/* Justification Modal */}
+            <Modal show={showUndertimeModal} onClose={() => setShowUndertimeModal(false)} maxWidth="md">
+                <form onSubmit={submitJustification} className="p-6">
+                    <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mt-2">
+                        {!canEditJustification(selectedLog) ? 'View Justification' : selectedLog?.undertime_status ? 'Edit Justification' : 'Justify Undertime'}
+                    </h2>
+                    {selectedLog && (
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            You recorded <span className="font-bold text-red-600 dark:text-red-400">{selectedLog.undertime_minutes} minutes</span> of undertime on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.
+                            {canEditJustification(selectedLog) && !selectedLog.undertime_status && ' Please provide a reason to request approval from the Head of Academic Program.'}
+                            {canEditJustification(selectedLog) && selectedLog.undertime_status === 'pending' && <span className="block mt-1 font-medium text-amber-600 dark:text-amber-500">You can edit your justification for up to 15 minutes after submitting.</span>}
+                        </p>
+                    )}
+
+                    <div className="mt-6">
+                        <InputLabel value="Reason / Justification" htmlFor="justification" className="mb-2" />
+                        <textarea
+                            id="justification"
+                            rows={4}
+                            className={`block w-full rounded-xl shadow-sm sm:text-sm resize-none ${!canEditJustification(selectedLog) ? 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-600 dark:text-gray-400 focus:border-transparent focus:ring-0 cursor-not-allowed' : 'border-gray-300 focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}
+                            placeholder="Briefly explain your undertime..."
+                            value={justifyForm.data.justification}
+                            onChange={(e) => justifyForm.setData('justification', e.target.value)}
+                            readOnly={!canEditJustification(selectedLog)}
+                        />
+                        <InputError message={justifyForm.errors.justification} className="mt-2" />
+                    </div>
+
+                    <div className="mt-6 flex justify-end gap-3">
+                        <SecondaryButton onClick={() => setShowUndertimeModal(false)}>
+                            {!canEditJustification(selectedLog) ? 'Close' : 'Cancel'}
+                        </SecondaryButton>
+                        {canEditJustification(selectedLog) && (
+                            <PrimaryButton disabled={justifyForm.processing}>
+                                {justifyForm.processing ? 'Submitting...' : selectedLog?.undertime_status ? 'Update Request' : 'Submit Request'}
+                            </PrimaryButton>
+                        )}
+                    </div>
+                </form>
+            </Modal>
         </AuthenticatedLayout>
     );
 }

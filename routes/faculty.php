@@ -8,9 +8,10 @@ use App\Http\Controllers\Faculty\OnlineAttendanceController;
 Route::middleware(['auth', 'auth.faculty'])->group(function () {
     Route::get('/faculty/dashboard', [FacultyDashboardController::class, 'index'])->name('faculty.dashboard');
     Route::get('/faculty/api/analytics', [FacultyDashboardController::class, 'getAnalyticsData'])->name('faculty.api.analytics');
-    Route::get('/faculty/biometric-logs', [FacultyDashboardController::class, 'biometricLogs'])->name('faculty.biometric-logs');
+
     Route::get('/faculty/schedule', [FacultyDashboardController::class, 'schedule'])->name('faculty.schedule');
     Route::get('/faculty/attendance', [FacultyDashboardController::class, 'attendance'])->name('faculty.attendance');
+    Route::post('/faculty/attendance/{id}/justification', [FacultyDashboardController::class, 'submitUndertimeJustification'])->name('faculty.attendance.justify');
 
     // ── Schedule Change Requests ───────────────────────────────────────────
     Route::get('/faculty/schedule-change-requests', [ScheduleChangeRequestController::class, 'index'])

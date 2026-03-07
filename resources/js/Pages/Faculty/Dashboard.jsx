@@ -252,7 +252,7 @@ function ChartTooltip({ active, payload, label }) {
 /* ──────────────────────────────────────────────
    Main Faculty Dashboard page
    ────────────────────────────────────────────── */
-export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, checkInTrend, monthlyAverages, currentDate, greeting, filters, recentAttendance }) {
+export default function FacultyDashboard({ stats, todaySchedule, checkInTrend, monthlyAverages, currentDate, greeting, filters, recentAttendance }) {
     const { auth } = usePage().props;
 
     //Faculty Fullname
@@ -287,15 +287,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
         }
     };
 
-    // Biometric logs pagination
-    const LOGS_PER_PAGE = 5;
-    const [logPage, setLogPage] = useState(1);
-    const totalLogPages = Math.ceil(biometricLogs.length / LOGS_PER_PAGE);
 
-    const paginatedLogs = biometricLogs.slice(
-        (logPage - 1) * LOGS_PER_PAGE,
-        logPage * LOGS_PER_PAGE,
-    );
 
     return (
         <AuthenticatedLayout>
@@ -369,7 +361,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
 
             {/* ── Analytics Grid ─────────────────────────── */}
             <section className="mt-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 gap-5">
 
                     {/* Card 1: Average Check-In/Out Time */}
                     <div className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-6 shadow-sm flex flex-col justify-between">
@@ -414,7 +406,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                             Monitor daily attendance and track overall workforce performance trends.
                         </p>
 
-                        <div className="grid grid-cols-1 gap-6 h-full items-end">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-full items-end">
                             {/* Left side: Times */}
                             <div className="md:col-span-2 flex flex-col justify-end gap-10">
                                 <div>
@@ -497,142 +489,7 @@ export default function FacultyDashboard({ stats, todaySchedule, biometricLogs, 
                         </div>
                     </div>
 
-                    {/* Card 2: Biometric Logs */}
-                    <div className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-6 shadow-sm flex flex-col">
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-sm">
-                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Biometric Logs</h3>
-                            </div>
-                            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-1">
-                                {biometricLogs.length} {biometricLogs.length === 1 ? 'entry' : 'entries'}
-                            </span>
-                        </div>
 
-                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                            Your recent biometric check-in and check-out records.
-                        </p>
-
-                        {/* Log List */}
-                        <div className="mt-5 flex-1 space-y-2">
-                            {paginatedLogs.length > 0 ? (
-                                paginatedLogs.map((log) => {
-                                    const isCheckIn = log.type === 'check-in';
-                                    const statusStyles = {
-                                        'on-time': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-                                        'late': 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-                                        'early-out': 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-                                    };
-                                    const statusLabels = {
-                                        'on-time': 'On Time',
-                                        'late': 'Late',
-                                        'early-out': 'Early Out',
-                                    };
-
-                                    return (
-                                        <div
-                                            key={log.id}
-                                            className="group flex items-center gap-3 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3 transition-all duration-200 hover:bg-gray-100/80 dark:hover:bg-gray-700/40"
-                                        >
-                                            {/* Direction Icon */}
-                                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isCheckIn
-                                                ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                                : 'bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400'
-                                                }`}>
-                                                {isCheckIn ? (
-                                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-                                                    </svg>
-                                                ) : (
-                                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
-                                                    </svg>
-                                                )}
-                                            </div>
-
-                                            {/* Info */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                                        {isCheckIn ? 'Check In' : 'Check Out'}
-                                                    </span>
-                                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusStyles[log.status] ?? statusStyles['on-time']}`}>
-                                                        {statusLabels[log.status] ?? log.status}
-                                                    </span>
-                                                </div>
-                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate">
-                                                    {log.device}
-                                                </p>
-                                            </div>
-
-                                            {/* Time & Date */}
-                                            <div className="shrink-0 text-right">
-                                                <p className="text-sm font-bold text-gray-900 dark:text-white">{log.timestamp}</p>
-                                                <p className="text-[11px] text-gray-400 dark:text-gray-500">{log.date}</p>
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <div className="flex flex-col items-center justify-center py-12 text-center">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-3">
-                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">No biometric logs yet</p>
-                                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Logs will appear once you scan in.</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Pagination Controls */}
-                        {totalLogPages > 1 && (
-                            <div className="mt-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-700/50 pt-4">
-                                <button
-                                    onClick={() => setLogPage((p) => Math.max(1, p - 1))}
-                                    disabled={logPage === 1}
-                                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-                                >
-                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                                    </svg>
-                                    Prev
-                                </button>
-
-                                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                    Page {logPage} of {totalLogPages}
-                                </span>
-
-                                <button
-                                    onClick={() => setLogPage((p) => Math.min(totalLogPages, p + 1))}
-                                    disabled={logPage === totalLogPages}
-                                    className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-                                >
-                                    Next
-                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                                    </svg>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* See More Link */}
-                        <Link
-                            href={route('faculty.biometric-logs')}
-                            className="mt-4 flex items-center justify-center gap-1 rounded-xl py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-all duration-200"
-                        >
-                            See all logs
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                            </svg>
-                        </Link>
-
-                    </div>
                 </div>
             </section>
 
