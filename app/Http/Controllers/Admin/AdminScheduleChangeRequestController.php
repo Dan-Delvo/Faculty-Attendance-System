@@ -156,4 +156,65 @@ class AdminScheduleChangeRequestController extends Controller
 
         return back()->with('success', 'Schedule change request has been rejected.');
     }
+
+    /**
+     * AJAX endpoint for search autocomplete suggestions.
+     */
+    public function searchSuggestions(Request $request)
+    {
+        $query = $request->query('q', '');
+
+        if (strlen($query) < 2) {
+            return response()->json([]);
+        }
+
+        $results = ScheduleChangeRequest::with(['faculty', 'scheduleDetail.schedule'])
+            ->where(function ($q) use ($query) {
+                $q->whereHas('faculty', function ($fq) use ($query) {
+                    $fq->where('first_name', 'like', "%{$query}%")
+                       ->orWhere('last_name', 'like', "%{$query}%")
+                       ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$query}%"])
+                       ->orWhere('faculty_code', 'like', "%{$query}%");
+                })->orWhereHas('scheduleDetail.schedule', function ($sq) use ($query) {
+                    $sq->where('schedule_code', 'like', "%{$query}%");
+                })->orWhereHas('scheduleDetail', function ($dq) use ($query) {
+                    $dq->where('subject_code', 'like', "%{$query}%");
+                });
+            })
+            ->limit(20)
+            ->get();
+
+        $suggestions = collect();
+
+        foreach ($results as $req) {
+            $faculty = $req->faculty;
+            if ($faculty) {
+                $name = trim($faculty->first_name . ' ' . $faculty->last_name);
+                $key  = 'f:' . strtolower($name);
+                if (! $suggestions->contains('id', $key) &&
+                    (stripos($name, $query) !== false || stripos($faculty->faculty_code ?? '', $query) !== false)) {
+                    $suggestions->push(['id' => $key, 'label' => $name . ' (' . ($faculty->faculty_code ?? '') . ')', 'value' => $name]);
+                }
+            }
+
+            $detail = $req->scheduleDetail;
+            $code   = $detail?->schedule?->schedule_code;
+            if ($code) {
+                $key = 's:' . strtolower($code);
+                if (! $suggestions->contains('id', $key) && stripos($code, $query) !== false) {
+                    $suggestions->push(['id' => $key, 'label' => 'Schedule: ' . $code, 'value' => $code]);
+                }
+            }
+
+            $subj = $detail?->subject_code;
+            if ($subj) {
+                $key = 'subj:' . strtolower($subj);
+                if (! $suggestions->contains('id', $key) && stripos($subj, $query) !== false) {
+                    $suggestions->push(['id' => $key, 'label' => 'Subject: ' . $subj, 'value' => $subj]);
+                }
+            }
+        }
+
+        return response()->json($suggestions->take(8)->values());
+    }
 }

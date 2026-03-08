@@ -5,8 +5,10 @@ import InputLabel from '@/Components/InputLabel';
 import InputError from '@/Components/InputError';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
+import Pagination from '@/Components/Pagination';
 import { Head, useForm } from '@inertiajs/react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import axios from 'axios';
 import {
     CHANGE_REQUEST_STATUS_STYLES as STATUS_STYLES,
     DAY_AVATAR_COLORS,
@@ -53,6 +55,13 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const [searchInput, setSearchInput] = useState(filters.search || '');
     const [isFiltering, setIsFiltering] = useState(false);
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
+    const [perPage, setPerPage] = useState(initialRequests.per_page || 15);
+
+    // ── Search suggestions ──────────────────────────────────────────────
+    const [suggestions, setSuggestions]       = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchRef        = useRef(null);
+    const suggestionsTimeout = useRef(null);
 
     // ── Modals + selected request ────────────────────────────────────────
     const [showApproveModal, setShowApproveModal] = useState(false);
@@ -64,13 +73,14 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const rejectForm = useForm({ review_remarks: '' });
 
     /* ── AJAX filtering ──────────────────────────────────────────────── */
-    const fetchRequests = useCallback((status, search, page = 1) => {
+    const fetchRequests = useCallback((status, search, page = 1, newPerPage) => {
         setIsFiltering(true);
 
         const params = new URLSearchParams();
         if (status) params.set('status', status);
         if (search) params.set('search', search);
         params.set('page', page);
+        if (newPerPage) params.set('per_page', newPerPage);
 
         fetch(route('admin.schedule-change-requests.filter') + '?' + params.toString(), {
             credentials: 'same-origin',
@@ -110,12 +120,58 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const clearSearch = () => {
         setSearchInput('');
         setSearchQuery('');
+        setSuggestions([]);
+        setShowSuggestions(false);
         fetchRequests(filterStatus, '', 1);
     };
 
     const goToPage = (page) => {
-        fetchRequests(filterStatus, searchQuery, page);
+        fetchRequests(filterStatus, searchQuery, page, perPage);
     };
+
+    const handlePerPageChange = (newPerPage) => {
+        setPerPage(newPerPage);
+        fetchRequests(filterStatus, searchQuery, 1, newPerPage);
+    };
+
+    // ── Search Suggestions (AJAX) ──
+    const handleSearchInput = (val) => {
+        setSearchInput(val);
+        if (suggestionsTimeout.current) clearTimeout(suggestionsTimeout.current);
+        if (val.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+        suggestionsTimeout.current = setTimeout(async () => {
+            try {
+                const res = await axios.get(route('admin.schedule-change-requests.suggestions'), { params: { q: val } });
+                setSuggestions(res.data);
+                setShowSuggestions(res.data.length > 0);
+            } catch {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        }, 300);
+    };
+
+    const pickSuggestion = (sug) => {
+        setSearchInput(sug.value);
+        setSearchQuery(sug.value);
+        setShowSuggestions(false);
+        fetchRequests(filterStatus, sug.value, 1);
+    };
+
+    // Close suggestions when clicking outside the search box
+    useEffect(() => {
+        const handler = (e) => {
+            if (searchRef.current && !searchRef.current.contains(e.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
 
     /* ── Approve ─────────────────────────────────────────────────────── */
     const openApprove = (req) => {
@@ -188,15 +244,16 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
                 {/* Search */}
                 <form onSubmit={applySearch} className="flex-1 flex gap-2">
-                    <div className="relative flex-1">
+                    <div className="relative flex-1" ref={searchRef}>
                         <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                         <input
                             type="text"
-                            placeholder="Search by faculty name or code…"
+                            placeholder="Search by faculty name, schedule code, subject, room, department, reason…"
                             value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
+                            onChange={(e) => handleSearchInput(e.target.value)}
+                            onFocus={() => searchInput.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
                             className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 py-2.5 pl-9 pr-4 text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 focus:border-[#7a1315] focus:ring-[#7a1315] focus:outline-none"
                         />
                         {searchInput && (
@@ -209,6 +266,20 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
+                        )}
+                        {showSuggestions && (
+                            <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl max-h-60 overflow-y-auto">
+                                {suggestions.map((s) => (
+                                    <button
+                                        key={s.id}
+                                        type="button"
+                                        onClick={() => pickSuggestion(s)}
+                                        className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                                    >
+                                        {s.label}
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </div>
                     <button
@@ -259,33 +330,14 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                     ))}
 
                     {/* Pagination */}
-                    {requestsData.last_page > 1 && (
-                        <div className="flex items-center justify-between pt-4">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Page {requestsData.current_page} of {requestsData.last_page} ({requestsData.total} total)
-                            </p>
-                            <div className="flex gap-2">
-                                {requestsData.current_page > 1 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToPage(requestsData.current_page - 1)}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                    >
-                                        Previous
-                                    </button>
-                                )}
-                                {requestsData.current_page < requestsData.last_page && (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToPage(requestsData.current_page + 1)}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                    >
-                                        Next
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    <Pagination
+                        currentPage={requestsData.current_page}
+                        totalItems={requestsData.total}
+                        perPage={requestsData.per_page}
+                        onPageChange={goToPage}
+                        onPerPageChange={handlePerPageChange}
+                        perPageOptions={[5, 10, 25, 50]}
+                    />
                 </div>
             ) : !isFiltering ? (
                 <EmptyState filterStatus={filterStatus} searchQuery={searchQuery} />
