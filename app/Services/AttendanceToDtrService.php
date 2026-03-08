@@ -7,7 +7,7 @@ use App\Models\Holiday;
 use Carbon\Carbon;
 
 // Converts each biometric log to a DTR record
-class BiometricLogsToDtrService
+class AttendanceToDtrService
 {
     //Start at attendance records
     public function convertToDtr(int $facultyId, int $month, int $year): array

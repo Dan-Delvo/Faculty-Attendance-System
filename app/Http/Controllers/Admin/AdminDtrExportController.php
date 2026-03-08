@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\GenerateDtrPdfJob;
 use App\Models\AttendanceAdjustment;
 use App\Models\Faculty;
-use App\Services\BiometricLogsToDtrService;
+use App\Services\AttendanceToDtrService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +19,7 @@ class AdminDtrExportController extends Controller
     /**
      * Return a JSON preview of the DTR data (rows + summary) for the modal.
      */
-    public function preview(Request $request, BiometricLogsToDtrService $service): JsonResponse
+    public function preview(Request $request, AttendanceToDtrService $service): JsonResponse
     {
         $validated = $request->validate([
             'faculty_id' => ['required', 'integer', 'exists:faculties,id'],

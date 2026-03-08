@@ -5,7 +5,7 @@ namespace App\Jobs;
 use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Models\AttendanceAdjustment;
 use App\Models\Faculty;
-use App\Services\BiometricLogsToDtrService;
+use App\Services\AttendanceToDtrService;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -32,7 +32,7 @@ class GenerateDtrPdfJob implements ShouldQueue
         public string $fileName,
     ) {}
 
-    public function handle(BiometricLogsToDtrService $service): void
+    public function handle(AttendanceToDtrService $service): void
     {
         $faculty = Faculty::query()
             ->with('department:id,name')
