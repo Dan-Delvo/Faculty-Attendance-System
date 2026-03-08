@@ -20,16 +20,16 @@ class ScheduleChangeRequestController extends Controller
 
         if (!$faculty) {
             return Inertia::render('Faculty/ScheduleChangeRequests', [
-                'requests'        => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
+                'requests' => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
                 'scheduleDetails' => [],
-                'filters'         => ['status' => ''],
+                'filters' => ['status' => ''],
             ]);
         }
 
         return Inertia::render('Faculty/ScheduleChangeRequests', [
-            'requests'        => ScheduleChangeRequest::getForFaculty($faculty->id, $request),
+            'requests' => ScheduleChangeRequest::getForFaculty($faculty->id, $request),
             'scheduleDetails' => $faculty->getScheduleDetailsForChangeRequest(),
-            'filters'         => [
+            'filters' => [
                 'status' => $request->query('status', ''),
             ],
         ]);
@@ -44,7 +44,11 @@ class ScheduleChangeRequestController extends Controller
 
         if (!$faculty) {
             return response()->json([
-                'data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1,
+                'data' => [],
+                'total' => 0,
+                'per_page' => 10,
+                'current_page' => 1,
+                'last_page' => 1,
             ]);
         }
 
@@ -65,14 +69,19 @@ class ScheduleChangeRequestController extends Controller
         }
 
         $validated = $request->validate([
-            'schedule_detail_id'    => 'required|exists:schedule_details,id',
+            'schedule_detail_id' => 'required|exists:schedule_details,id',
             'requested_day_of_week' => 'required|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
-            'requested_time_in'     => 'required|date_format:H:i',
-            'requested_time_out'    => 'required|date_format:H:i|after:requested_time_in',
-            'requested_room'        => 'nullable|string|max:100',
-            'effective_date'        => 'required|date|after_or_equal:today',
-            'reason'                => 'required|string|max:1000',
+            'requested_time_in' => 'required|date_format:H:i',
+            'requested_time_out' => 'required|date_format:H:i|after:requested_time_in',
+            'requested_room' => 'nullable|string|max:100',
+            'effective_date' => 'required|date|after_or_equal:today',
+            'reason' => 'required|string|max:1000',
+            'supporting_document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
+
+        if ($request->hasFile('supporting_document')) {
+            $validated['supporting_document_path'] = $request->file('supporting_document')->store('supporting_documents', 'public');
+        }
 
         $result = $faculty->createScheduleChangeRequest($validated);
 
@@ -109,32 +118,32 @@ class ScheduleChangeRequestController extends Controller
     public function checkConflict(Request $request)
     {
         $validated = $request->validate([
-            'schedule_detail_id'    => 'required|integer',
+            'schedule_detail_id' => 'required|integer',
             'requested_day_of_week' => 'required|string',
-            'requested_time_in'     => 'required|date_format:H:i',
-            'requested_time_out'    => 'required|date_format:H:i|after:requested_time_in',
-            'requested_room'        => 'nullable|string|max:100',
+            'requested_time_in' => 'required|date_format:H:i',
+            'requested_time_out' => 'required|date_format:H:i|after:requested_time_in',
+            'requested_room' => 'nullable|string|max:100',
         ]);
 
         $faculty = $request->user()->faculty;
         $conflicts = [];
 
-        $reqDay  = $validated['requested_day_of_week'];
-        $reqIn   = $validated['requested_time_in'];
-        $reqOut  = $validated['requested_time_out'];
+        $reqDay = $validated['requested_day_of_week'];
+        $reqIn = $validated['requested_time_in'];
+        $reqOut = $validated['requested_time_out'];
         $reqRoom = trim($validated['requested_room'] ?? '');
 
         // Check room + time conflicts against ALL faculties' schedules (same room AND overlapping time)
         if ($reqRoom !== '') {
             $roomConflict = ScheduleDetail::whereHas('schedule', function ($q) {
-                    $q->where('status', 'active');
-                })
+                $q->where('status', 'active');
+            })
                 ->where('id', '!=', $validated['schedule_detail_id'])
                 ->where('day_of_week', $reqDay)
                 ->where('room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->whereRaw("TIME(time_in) < ?", [$reqOut])
-                      ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                        ->whereRaw("TIME(time_out) > ?", [$reqIn]);
                 })
                 ->with('schedule.faculty')
                 ->first();
@@ -142,10 +151,10 @@ class ScheduleChangeRequestController extends Controller
             if ($roomConflict) {
                 $occupant = $roomConflict->schedule?->faculty?->full_name ?? 'another faculty';
                 $conflicts[] = [
-                    'type'    => 'room',
+                    'type' => 'room',
                     'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->subject_code} ("
-                               . Carbon::parse($roomConflict->time_in)->format('H:i') . '–'
-                               . Carbon::parse($roomConflict->time_out)->format('H:i') . ") on {$reqDay}.",
+                        . Carbon::parse($roomConflict->time_in)->format('H:i') . '–'
+                        . Carbon::parse($roomConflict->time_out)->format('H:i') . ") on {$reqDay}.",
                 ];
             }
 
@@ -156,7 +165,7 @@ class ScheduleChangeRequestController extends Controller
                 ->where('requested_room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->where('requested_time_in', '<', $reqOut)
-                      ->where('requested_time_out', '>', $reqIn);
+                        ->where('requested_time_out', '>', $reqIn);
                 })
                 ->with('faculty')
                 ->first();
@@ -164,7 +173,7 @@ class ScheduleChangeRequestController extends Controller
             if ($roomChangeConflict) {
                 $changeOccupant = $roomChangeConflict->faculty?->full_name ?? 'another faculty';
                 $conflicts[] = [
-                    'type'    => 'room_request',
+                    'type' => 'room_request',
                     'message' => "Room {$reqRoom} has a pending request by {$changeOccupant} ({$roomChangeConflict->requested_time_in}–{$roomChangeConflict->requested_time_out}) on {$reqDay}.",
                 ];
             }
@@ -172,7 +181,7 @@ class ScheduleChangeRequestController extends Controller
 
         return response()->json([
             'has_conflict' => count($conflicts) > 0,
-            'conflicts'    => $conflicts,
+            'conflicts' => $conflicts,
         ]);
     }
 }

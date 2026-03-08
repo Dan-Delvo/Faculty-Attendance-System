@@ -11,3 +11,10 @@
         @apply w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3.5 py-2 text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-red-400 dark:focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:focus:ring-red-800/30 focus:outline-none transition-colors [color-scheme:light] dark:[color-scheme:dark];
     }
 }
+
+@layer utilities {
+    .dark .flatpickr-calendar {
+        filter: invert(0.9) hue-rotate(180deg);
+        background: #fff;
+    }
+}

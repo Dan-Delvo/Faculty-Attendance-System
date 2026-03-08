@@ -27,7 +27,6 @@ class FacultyDashboardController extends Controller
                 'stats' => [],
                 'todaySchedule' => [],
                 'recentAttendance' => [],
-                'biometricLogs' => [],
                 'checkInTrend' => [],
                 'monthlyAverages' => ['avgCheckIn' => '--:--', 'avgCheckOut' => '--:--'],
                 'currentDate' => Carbon::now()->format('l, F j, Y'),
@@ -61,7 +60,6 @@ class FacultyDashboardController extends Controller
             'stats' => $faculty->getDashboardStats(),
             'todaySchedule' => $faculty->getTodayScheduleDetails(),
             'recentAttendance' => $recentAttendance,
-            'biometricLogs' => $faculty->getFormattedBiometricLogs(),
             'checkInTrend' => $faculty->getCheckInTrend($months),
             'monthlyAverages' => $faculty->getMonthlyAverages(),
             'currentDate' => Carbon::now()->format('l, F j, Y'),
@@ -98,15 +96,7 @@ class FacultyDashboardController extends Controller
     /**
      * Display the full biometric logs page.
      */
-    public function biometricLogs(Request $request)
-    {
-        $faculty = $request->user()->faculty;
 
-        return Inertia::render('Faculty/BiometricLogs', [
-            'biometricLogs' => $faculty ? $faculty->getFormattedBiometricLogs(100) : [],
-            'monthlyAverages' => $faculty ? $faculty->getMonthlyAverages() : ['avgCheckIn' => '--:--', 'avgCheckOut' => '--:--'],
-        ]);
-    }
 
     /**
      * Display the schedule & attendance page.
@@ -142,7 +132,7 @@ class FacultyDashboardController extends Controller
 
         if ($faculty) {
             $records = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
-                ->with('scheduleDetail')
+                ->with(['scheduleDetail', 'justifications'])
                 ->orderBy('attendance_date', 'desc')
                 ->get();
 
@@ -164,11 +154,35 @@ class FacultyDashboardController extends Controller
                 $mins = $totalMinutes % 60;
                 $totalHours = ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm';
 
+                // Find undertime justification if any
+                $undertimeJustification = $record->justifications
+                    ->where('type', 'undertime')
+                    ->first();
+
+                $missingTimeJustification = $record->justifications
+                    ->where('type', 'missing_time')
+                    ->first();
+
+                // Calculate undertime minutes on the fly for UI consistency if DB column is out of sync
+                $undertimeMinutes = $record->undertime_minutes ?? 0;
+                if ($record->actual_time_out && $record->operational_time_out && $undertimeMinutes == 0) {
+                    if ($record->actual_time_out->lt($record->operational_time_out)) {
+                        $undertimeMinutes = $record->actual_time_out->diffInMinutes($record->operational_time_out);
+                    }
+                }
+
+                // Dynamically adjust status for UI consistency if DB status is out of sync
+                $displayStatus = $record->status;
+                if ($undertimeMinutes > 0 && strtolower($displayStatus) === 'present') {
+                    $displayStatus = 'UNDERTIME';
+                }
+
                 return [
+                    'id' => $record->id,
                     'date' => $record->attendance_date->format('M d, Y'),
                     'raw_date' => $record->attendance_date->toDateString(),
                     'dayOfWeek' => $record->attendance_date->format('l'),
-                    'status' => $record->status,
+                    'status' => $displayStatus,
                     'expected_time_in' => $record->operational_time_in
                         ? $record->operational_time_in->format('h:i A')
                         : ($record->official_time_in ? $record->official_time_in->format('h:i A') : '--:--'),
@@ -180,7 +194,14 @@ class FacultyDashboardController extends Controller
                     'actual_time_out' => $record->actual_time_out
                         ? $record->actual_time_out->format('h:i A') : '--:--',
                     'late_minutes' => $record->late_minutes ?? 0,
-                    'undertime_minutes' => $record->undertime_minutes ?? 0,
+                    'undertime_minutes' => (int) $undertimeMinutes,
+                    'undertime_justification' => $undertimeJustification?->justification,
+                    'undertime_status' => $undertimeJustification?->status,
+                    'missing_time_justification' => $missingTimeJustification?->justification,
+                    'missing_time_status' => $missingTimeJustification?->status,
+                    'updated_at' => ($undertimeJustification || $missingTimeJustification)
+                        ? ($undertimeJustification?->updated_at ?? $missingTimeJustification->updated_at)->toIso8601String()
+                        : ($record->updated_at ? $record->updated_at->toIso8601String() : null),
                     'overtime_minutes' => $record->overtime_minutes ?? 0,
                     'night_minutes' => $record->night_minutes ?? 0,
                     'overtime_night_minutes' => $record->overtime_night_minutes ?? 0,
@@ -212,5 +233,119 @@ class FacultyDashboardController extends Controller
         }
 
         return 'Good Evening';
+    }
+
+    /**
+     * Submit undertime justification.
+     */
+    public function submitUndertimeJustification(Request $request, $id)
+    {
+        $request->validate([
+            'justification' => 'required|string|max:1000',
+        ]);
+
+        $faculty = $request->user()->faculty;
+        if (!$faculty)
+            abort(403);
+
+        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
+            ->findOrFail($id);
+
+        // Check if there is actually undertime (dynamically check if DB is out of sync)
+        $hasUndertime = ($record->undertime_minutes > 0);
+        if (!$hasUndertime && $record->actual_time_out && $record->operational_time_out) {
+            $hasUndertime = $record->actual_time_out->lt($record->operational_time_out);
+        }
+
+        if (!$hasUndertime) {
+            return back()->with('error', 'No undertime to justify for this record.');
+        }
+
+        $justification = $record->justifications()
+            ->where('type', 'undertime')
+            ->first();
+
+        if ($justification && in_array($justification->status, ['approved', 'rejected'])) {
+            return back()->with('error', 'Cannot edit a justification that has already been reviewed.');
+        }
+
+        $isUpdate = $justification && $justification->status === 'pending';
+
+        if ($isUpdate && $justification->updated_at) {
+            $diffInMinutes = now()->diffInMinutes($justification->updated_at);
+            if ($diffInMinutes > 15) {
+                return back()->with('error', 'The 15-minute window to edit this justification has expired.');
+            }
+        }
+
+        $record->justifications()->updateOrCreate(
+            ['type' => 'undertime'],
+            [
+                'faculty_id' => $faculty->id,
+                'justification' => $request->justification,
+                'status' => 'pending',
+            ]
+        );
+
+        return back()->with('success', $isUpdate ? 'Justification updated successfully.' : 'Justification submitted. Pending approval from Head.');
+    }
+
+    /**
+     * Submit missing time justification.
+     */
+    public function submitMissingTimeJustification(Request $request, $id)
+    {
+        $request->validate([
+            'justification' => 'required|string|max:1000',
+        ]);
+
+        $faculty = $request->user()->faculty;
+        if (!$faculty)
+            abort(403);
+
+        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
+            ->findOrFail($id);
+
+        // Check if there is actually a missing time in or out
+        $isMissing = !$record->actual_time_in || !$record->actual_time_out
+            || $record->actual_time_in->format('H:i:s') === '00:00:00' // Assuming --:-- might be stored as midnight in some cases, but actually controller shows format check
+        ;
+
+        // Re-check based on what we send to frontend
+        $actualIn = $record->actual_time_in ? $record->actual_time_in->format('h:i A') : '--:--';
+        $actualOut = $record->actual_time_out ? $record->actual_time_out->format('h:i A') : '--:--';
+        $isMissing = ($actualIn === '--:--' || $actualOut === '--:--');
+
+        if (!$isMissing) {
+            return back()->with('error', 'No missing time in or out to justify for this record.');
+        }
+
+        $justification = $record->justifications()
+            ->where('type', 'missing_time')
+            ->first();
+
+        if ($justification && in_array($justification->status, ['approved', 'rejected'])) {
+            return back()->with('error', 'Cannot edit a justification that has already been reviewed.');
+        }
+
+        $isUpdate = $justification && $justification->status === 'pending';
+
+        if ($isUpdate && $justification->updated_at) {
+            $diffInMinutes = now()->diffInMinutes($justification->updated_at);
+            if ($diffInMinutes > 15) {
+                return back()->with('error', 'The 15-minute window to edit this justification has expired.');
+            }
+        }
+
+        $record->justifications()->updateOrCreate(
+            ['type' => 'missing_time'],
+            [
+                'faculty_id' => $faculty->id,
+                'justification' => $request->justification,
+                'status' => 'pending',
+            ]
+        );
+
+        return back()->with('success', $isUpdate ? 'Justification updated successfully.' : 'Justification submitted. Pending approval from Head.');
     }
 }

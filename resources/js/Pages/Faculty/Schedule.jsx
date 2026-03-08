@@ -226,6 +226,9 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                                                         Changed
                                                                     </span>
                                                                 )}
+                                                                <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                                    {item.code}
+                                                                </p>
                                                             </div>
                                                         </div>
                                                         <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
@@ -242,6 +245,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                                             </div>
                                                             <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{item.requiredHours} hrs req.</div>
                                                         </div>
+                                                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">Room: {item.room}</div>
                                                     </div>
                                                 </div>
                                             );
