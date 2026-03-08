@@ -19,6 +19,17 @@ const STATUS_STYLES = {
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+const formatTime12 = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    let h = parseInt(hours);
+    const m = minutes || '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12; // the hour '0' should be '12'
+    return `${h}:${m} ${ampm}`;
+};
+
 export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -459,7 +470,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                 <option value="">— Choose a schedule —</option>
                                 {scheduleDetails.map((d) => (
                                     <option key={d.id} value={d.id}>
-                                        [{d.schedule_code}] {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} ({d.room})
+                                        [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
                             </select>
@@ -469,11 +480,13 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                         {/* Preview current schedule */}
                         {selectedDetail && (
                             <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                    {selectedDetail.is_changed ? 'Current Operational Schedule' : 'Official Schedule'}
+                                </p>
                                 <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Day:</span> {selectedDetail.day_of_week}</p>
-                                    <p><span className="font-semibold">Subject:</span> {selectedDetail.subject_code}</p>
-                                    <p><span className="font-semibold">Time:</span> {selectedDetail.time_in} – {selectedDetail.time_out}</p>
+                                    <p><span className="font-semibold">Subject:</span> {selectedDetail.subject_code} - {selectedDetail.subject_desc}</p>
+                                    <p><span className="font-semibold">Time:</span> {formatTime12(selectedDetail.time_in)} – {formatTime12(selectedDetail.time_out)}</p>
                                     <p><span className="font-semibold">Room:</span> {selectedDetail.room}</p>
                                 </div>
                             </div>
