@@ -18,7 +18,13 @@ class AdminHolidayController extends Controller
         $query = Holiday::query()->orderBy('holiday_date', 'asc');
 
         if ($search = $request->query('search')) {
-            $query->where('name', 'like', '%' . $search . '%');
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('type', 'like', '%' . $search . '%')
+                  ->orWhereRaw('DATE_FORMAT(holiday_date, "%M %d, %Y") LIKE ?', ['%' . $search . '%'])
+                  ->orWhereRaw('DATE_FORMAT(holiday_date, "%Y") LIKE ?', ['%' . $search . '%'])
+                  ->orWhereRaw('DATE_FORMAT(holiday_date, "%Y-%m-%d") LIKE ?', ['%' . $search . '%']);
+            });
         }
 
         if ($type = $request->query('type')) {
@@ -96,5 +102,29 @@ class AdminHolidayController extends Controller
         $holiday->delete();
 
         return back()->with('success', 'Holiday "' . $name . '" has been removed.');
+    }
+
+    /**
+     * AJAX endpoint for search autocomplete suggestions.
+     */
+    public function searchSuggestions(Request $request)
+    {
+        $query = $request->query('q', '');
+
+        if (strlen($query) < 2) {
+            return response()->json([]);
+        }
+
+        $holidays = Holiday::where('name', 'like', "%{$query}%")
+            ->orWhere('type', 'like', "%{$query}%")
+            ->orderBy('holiday_date')
+            ->limit(8)
+            ->get(['id', 'name', 'type', 'holiday_date']);
+
+        return response()->json($holidays->map(fn ($h) => [
+            'id'    => $h->id,
+            'label' => $h->name . ' · ' . ucfirst($h->type),
+            'value' => $h->name,
+        ]));
     }
 }

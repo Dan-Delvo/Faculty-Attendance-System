@@ -306,6 +306,28 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
             }
         });
 
+        // Cross-entry conflict check: a faculty cannot teach two classes at the same time
+        const count = form.details.length;
+        for (let i = 0; i < count; i++) {
+            for (let j = i + 1; j < count; j++) {
+                if (form.details[i].day_of_week !== form.details[j].day_of_week) continue;
+                const iStart = toMinutes(form.details[i].time_in);
+                const iEnd   = toMinutes(form.details[i].time_out);
+                const jStart = toMinutes(form.details[j].time_in);
+                const jEnd   = toMinutes(form.details[j].time_out);
+                if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
+                if (iStart >= iEnd || jStart >= jEnd) continue;
+                if (iStart < jEnd && iEnd > jStart) {
+                    if (!localErrors[`details.${i}.time_in`]) {
+                        localErrors[`details.${i}.time_in`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${form.details[i].day_of_week}.`;
+                    }
+                    if (!localErrors[`details.${j}.time_in`]) {
+                        localErrors[`details.${j}.time_in`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${form.details[j].day_of_week}.`;
+                    }
+                }
+            }
+        }
+
         return localErrors;
     };
 
@@ -313,7 +335,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = validateDetailTimeRanges();
         if (Object.keys(localErrors).length > 0) {
             setErrors(localErrors);
-            toast.error('Please fix invalid time ranges before creating the schedule.');
+            const hasConflict = Object.values(localErrors).some((msg) => msg.includes('overlaps with'));
+            toast.error(hasConflict
+                ? 'Two or more class entries conflict on the same day and time. Please resolve the overlaps.'
+                : 'Please fix invalid time ranges before creating the schedule.');
             return;
         }
 
@@ -337,7 +362,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = validateDetailTimeRanges();
         if (Object.keys(localErrors).length > 0) {
             setErrors(localErrors);
-            toast.error('Please fix invalid time ranges before saving changes.');
+            const hasConflict = Object.values(localErrors).some((msg) => msg.includes('overlaps with'));
+            toast.error(hasConflict
+                ? 'Two or more class entries conflict on the same day and time. Please resolve the overlaps.'
+                : 'Please fix invalid time ranges before saving changes.');
             return;
         }
 
@@ -434,7 +462,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                 onChange={(e) => handleSearchInput(e.target.value)}
                                 onFocus={() => search.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
-                                placeholder="Search by code, faculty name..."
+                                placeholder="Search by schedule code, faculty name, subject, room…"
                                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 pl-10 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-[#7a1315]/30 focus:border-[#7a1315] outline-none transition-all"
                             />
                             <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -813,6 +841,40 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
 
+    // Real-time cross-entry conflict detection
+    useEffect(() => {
+        const details = form.details;
+        const count = details.length;
+        const conflicts = {};
+
+        for (let i = 0; i < count; i++) {
+            for (let j = i + 1; j < count; j++) {
+                if (details[i].day_of_week !== details[j].day_of_week) continue;
+                const iStart = toMinutes(details[i].time_in);
+                const iEnd   = toMinutes(details[i].time_out);
+                const jStart = toMinutes(details[j].time_in);
+                const jEnd   = toMinutes(details[j].time_out);
+                if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
+                if (iStart >= iEnd || jStart >= jEnd) continue;
+                if (iStart < jEnd && iEnd > jStart) {
+                    conflicts[`details.${i}.time_in`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${details[i].day_of_week}.`;
+                    conflicts[`details.${j}.time_in`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${details[j].day_of_week}.`;
+                }
+            }
+        }
+
+        setErrors((prev) => {
+            const next = { ...prev };
+            // Clear stale conflict errors (only those previously set by this logic)
+            details.forEach((_, i) => {
+                if (next[`details.${i}.time_in`]?.includes('overlaps with')) {
+                    delete next[`details.${i}.time_in`];
+                }
+            });
+            return { ...next, ...conflicts };
+        });
+    }, [form.details]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const applyRowTimeValidation = (index, timeInValue, timeOutValue) => {
         const timeInMinutes = toMinutes(timeInValue);
         const timeOutMinutes = toMinutes(timeOutValue);
@@ -920,7 +982,13 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
     return (
         <div className="mt-5 space-y-6">
-            {/* Top fields grid */}
+        {errors.general && (
+                    <div className="mb-4 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3">
+                        <p className="text-sm font-semibold text-red-700 dark:text-red-400">{errors.general}</p>
+                    </div>
+                )}
+
+                {/* Top fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Faculty" error={errors.faculty_id}>
                     <select
