@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
+use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
@@ -45,6 +46,18 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
 
     Route::get('/api/dashboard', [AdminDashboardController::class, 'liveStats'])
         ->name('admin.api.dashboard');
+
+    Route::get('/dtr-export/preview', [AdminDtrExportController::class, 'preview'])
+        ->name('admin.dtr-export.preview');
+
+    Route::post('/dtr-export/dispatch', [AdminDtrExportController::class, 'dispatch'])
+        ->name('admin.dtr-export.dispatch');
+
+    Route::get('/dtr-export/status', [AdminDtrExportController::class, 'status'])
+        ->name('admin.dtr-export.status');
+
+    Route::get('/dtr-export/download-file', [AdminDtrExportController::class, 'downloadFile'])
+        ->name('admin.dtr-export.download-file');
 
     // ── Schedule Management ────────────────────────────────────────────────
     Route::get('/schedules', [AdminScheduleController::class, 'index'])
