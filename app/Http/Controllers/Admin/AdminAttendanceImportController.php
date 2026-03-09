@@ -68,21 +68,12 @@ class AdminAttendanceImportController extends Controller
             $duplicateRecords = 0;
             $errors = [];
 
-            $existingFaculty = Faculty::query()
-                ->pluck('id', 'biometric_id');
-
             DB::beginTransaction();
 
             foreach ($parsedRows as $row) {
                 if ($row['biometric_id'] === '' || $row['log_datetime'] === '' || $row['log_type'] === '') {
                     $failedRecords++;
                     $errors[] = "Line {$row['line']}: biometric_id, log_datetime, and log_type are required.";
-                    continue;
-                }
-
-                if (! $existingFaculty->has($row['biometric_id'])) {
-                    $failedRecords++;
-                    $errors[] = "Line {$row['line']}: biometric_id '{$row['biometric_id']}' does not exist in faculties.";
                     continue;
                 }
 
@@ -169,10 +160,16 @@ class AdminAttendanceImportController extends Controller
             ->orderBy('log_datetime')
             ->orderBy('id');
 
-        $paginated = $logsQuery->paginate($perPage)->through(function (BiometricLog $log): array {
+        // Pre-load the set of known biometric IDs to determine which logs have unrecognised faculty.
+        $knownBiometricIds = Faculty::query()->pluck('biometric_id')->flip();
+
+        $paginated = $logsQuery->paginate($perPage)->through(function (BiometricLog $log) use ($knownBiometricIds): array {
+            $facultyExists = $knownBiometricIds->has($log->biometric_id);
+
             return [
                 'id' => $log->id,
-                'faculty_name' => $log->faculty?->full_name ?? $log->biometric_id,
+                'faculty_name' => $log->faculty?->full_name ?? null,
+                'faculty_exists' => $facultyExists,
                 'biometric_id' => $log->biometric_id,
                 'log_datetime' => optional($log->log_datetime)->format('Y-m-d H:i:s'),
                 'log_type' => $log->log_type,
@@ -187,6 +184,11 @@ class AdminAttendanceImportController extends Controller
         $totalLogs = (int) ($counts->total ?? 0);
         $syncedLogs = (int) ($counts->synced ?? 0);
 
+        // Count logs whose biometric_id has no matching faculty record.
+        $unrecognizedLogs = BiometricLog::where('import_batch_id', $batch->id)
+            ->whereNotIn('biometric_id', Faculty::query()->select('biometric_id'))
+            ->count();
+
         return response()->json([
             'batch' => [
                 'id' => $batch->id,
@@ -196,6 +198,7 @@ class AdminAttendanceImportController extends Controller
                 'total_logs' => $totalLogs,
                 'synced_logs' => $syncedLogs,
                 'unsynced_logs' => $totalLogs - $syncedLogs,
+                'unrecognized_logs' => $unrecognizedLogs,
             ],
             'logs' => $paginated,
         ]);
@@ -209,9 +212,11 @@ class AdminAttendanceImportController extends Controller
             ], 409);
         }
 
+        // Only mark logs with a recognised faculty as synced; unrecognised IDs remain unprocessed.
         $syncedCount = BiometricLog::query()
             ->where('import_batch_id', $batch->id)
             ->where('is_processed', false)
+            ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
             ->update([
                 'is_processed' => true,
                 'updated_at' => now(),
