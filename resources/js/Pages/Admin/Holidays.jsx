@@ -8,7 +8,8 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
 import { Head, router, useForm } from '@inertiajs/react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import axios from 'axios';
 
 /* ─────────────────────────────────────
    Constants
@@ -163,6 +164,12 @@ export default function AdminHolidays({ holidays, filters }) {
     const [yearFilter, setYearFilter] = useState(filters.year || '');
     const [perPage, setPerPage]       = useState(Number(filters.per_page) || 15);
 
+    // ── Search suggestions ──────────────────────────────────────────────
+    const [suggestions, setSuggestions]       = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchRef        = useRef(null);
+    const suggestionsTimeout = useRef(null);
+
     // ── Modals ────────────────────────────────────────────────────────────
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal,   setShowEditModal]   = useState(false);
@@ -209,6 +216,45 @@ export default function AdminHolidays({ holidays, filters }) {
         setPerPage(size);
         reload({ per_page: size, page: 1 });
     };
+
+    // ── Search Suggestions (AJAX) ──
+    const handleSearchInput = (val) => {
+        setSearchInput(val);
+        if (suggestionsTimeout.current) clearTimeout(suggestionsTimeout.current);
+        if (val.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+        suggestionsTimeout.current = setTimeout(async () => {
+            try {
+                const res = await axios.get(route('admin.holidays.suggestions'), { params: { q: val } });
+                setSuggestions(res.data);
+                setShowSuggestions(res.data.length > 0);
+            } catch {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        }, 300);
+    };
+
+    const pickSuggestion = (sug) => {
+        setSearchInput(sug.value);
+        setSearch(sug.value);
+        setShowSuggestions(false);
+        reload({ search: sug.value, page: 1 });
+    };
+
+    // Close suggestions when clicking outside the search box
+    useEffect(() => {
+        const handler = (e) => {
+            if (searchRef.current && !searchRef.current.contains(e.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
 
     /* ── Create ───────────────────────────────────────────────────────── */
     const openCreate = () => {
@@ -295,7 +341,7 @@ export default function AdminHolidays({ holidays, filters }) {
             <div className="mb-6 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm p-4">
                 <form onSubmit={handleFilter} className="flex flex-wrap gap-3 items-end">
                     {/* Search */}
-                    <div className="flex-1 min-w-48">
+                    <div className="flex-1 min-w-48" ref={searchRef}>
                         <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
                             Search
                         </label>
@@ -305,11 +351,26 @@ export default function AdminHolidays({ holidays, filters }) {
                             </svg>
                             <input
                                 type="text"
-                                placeholder="Search holiday name…"
+                                placeholder="Search by holiday name, type, or date…"
                                 className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 pl-9 pr-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-[#7a1315] focus:ring-[#7a1315]"
                                 value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
+                                onChange={(e) => handleSearchInput(e.target.value)}
+                                onFocus={() => searchInput.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
                             />
+                            {showSuggestions && (
+                                <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl max-h-60 overflow-y-auto">
+                                    {suggestions.map((s) => (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={() => pickSuggestion(s)}
+                                            className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                                        >
+                                            {s.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -343,22 +404,6 @@ export default function AdminHolidays({ holidays, filters }) {
                             <option value="">All Years</option>
                             {yearOptions.map((y) => (
                                 <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Rows per page */}
-                    <div className="min-w-28">
-                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
-                            Per Page
-                        </label>
-                        <select
-                            className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-[#7a1315] focus:ring-[#7a1315]"
-                            value={perPage}
-                            onChange={(e) => handlePerPageChange(Number(e.target.value))}
-                        >
-                            {[10, 15, 25, 50].map((n) => (
-                                <option key={n} value={n}>{n} rows</option>
                             ))}
                         </select>
                     </div>
@@ -508,14 +553,18 @@ export default function AdminHolidays({ holidays, filters }) {
                         </div>
                     </>
                 )}
-            </div>
-
-            {/* ── Pagination ───────────────────────────────────────────────── */}
-            {holidays.last_page > 1 && (
-                <div className="mt-6 flex justify-center">
-                    <Pagination links={holidays.links} />
+                {/* ── Pagination ────────────────────────────────────────────────────── */}
+                <div className="px-4 border-t border-gray-200 dark:border-gray-700">
+                    <Pagination
+                        currentPage={holidays.current_page}
+                        totalItems={holidays.total}
+                        perPage={holidays.per_page}
+                        onPageChange={(page) => reload({ page })}
+                        onPerPageChange={handlePerPageChange}
+                        perPageOptions={[10, 15, 25, 50]}
+                    />
                 </div>
-            )}
+            </div>
 
             {/* ═══════════════════════════════
                   CREATE MODAL

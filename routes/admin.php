@@ -69,6 +69,9 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/api/schedule-change-requests', [AdminScheduleChangeRequestController::class, 'filter'])
         ->name('admin.schedule-change-requests.filter');
 
+    Route::get('/api/schedule-change-requests/suggestions', [AdminScheduleChangeRequestController::class, 'searchSuggestions'])
+        ->name('admin.schedule-change-requests.suggestions');
+
     Route::patch('/schedule-change-requests/{scheduleChangeRequest}/approve', [AdminScheduleChangeRequestController::class, 'approve'])
         ->name('admin.schedule-change-requests.approve');
 
@@ -89,6 +92,9 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
         ->name('admin.online-requests.reject');
 
     // ── Holiday Management ─────────────────────────────────────────────────
+    Route::get('/holidays/suggestions', [AdminHolidayController::class, 'searchSuggestions'])
+        ->name('admin.holidays.suggestions');
+
     Route::get('/holidays', [AdminHolidayController::class, 'index'])
         ->name('admin.holidays.index');
 

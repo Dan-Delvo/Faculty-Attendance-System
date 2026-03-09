@@ -286,8 +286,9 @@ class AdminScheduleController extends Controller
         } catch (ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
         } catch (\Throwable $e) {
-            return redirect()->route('admin.schedules.index')
-                ->with('error', 'Failed to update schedule. Please try again.');
+            return back()
+                ->withErrors(['general' => 'Failed to update schedule. An unexpected error occurred.'])
+                ->withInput();
         }
 
         return redirect()->route('admin.schedules.index')
@@ -345,6 +346,30 @@ class AdminScheduleController extends Controller
         }
 
         $detailCount = count($validated['details']);
+
+        // Check for intra-schedule time overlaps (same day, overlapping times, any room).
+        // A faculty member cannot teach two classes simultaneously, regardless of room.
+        for ($i = 0; $i < $detailCount; $i++) {
+            for ($j = $i + 1; $j < $detailCount; $j++) {
+                if ($validated['details'][$i]['day_of_week'] !== $validated['details'][$j]['day_of_week']) {
+                    continue;
+                }
+
+                $iStart = Carbon::createFromFormat('H:i', $validated['details'][$i]['time_in'])->format('H:i:s');
+                $iEnd   = Carbon::createFromFormat('H:i', $validated['details'][$i]['time_out'])->format('H:i:s');
+                $jStart = Carbon::createFromFormat('H:i', $validated['details'][$j]['time_in'])->format('H:i:s');
+                $jEnd   = Carbon::createFromFormat('H:i', $validated['details'][$j]['time_out'])->format('H:i:s');
+
+                if ($iStart < $jEnd && $iEnd > $jStart) {
+                    if (! isset($errors["details.$i.time_in"])) {
+                        $errors["details.$i.time_in"] = 'Entry #' . ($i + 1) . ' overlaps with entry #' . ($j + 1) . ' on ' . $validated['details'][$i]['day_of_week'] . '.';
+                    }
+                    if (! isset($errors["details.$j.time_in"])) {
+                        $errors["details.$j.time_in"] = 'Entry #' . ($j + 1) . ' overlaps with entry #' . ($i + 1) . ' on ' . $validated['details'][$j]['day_of_week'] . '.';
+                    }
+                }
+            }
+        }
 
         for ($i = 0; $i < $detailCount; $i++) {
             $currentDetail = $validated['details'][$i];
