@@ -164,6 +164,9 @@ export default function AttendanceImports({ batches, filters }) {
     };
 
     const unsyncedLogsCount = Number(batchDetails?.batch?.unsynced_logs ?? 0);
+    const unrecognizedLogsCount = Number(batchDetails?.batch?.unrecognized_logs ?? 0);
+    // Logs that are unsynced AND have a recognized faculty (can actually be synced).
+    const syncableLogsCount = Math.max(0, unsyncedLogsCount - unrecognizedLogsCount);
 
     return (
         <AuthenticatedLayout
@@ -323,7 +326,7 @@ export default function AttendanceImports({ batches, filters }) {
 
                     {!detailsLoading && !detailsError && batchDetails && (
                         <>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
                                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Logs</p>
                                     <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{batchDetails.batch?.total_logs ?? 0}</p>
@@ -336,7 +339,17 @@ export default function AttendanceImports({ batches, filters }) {
                                     <p className="text-xs text-amber-700 dark:text-amber-400 uppercase tracking-wider">Not Synced</p>
                                     <p className="mt-1 text-lg font-semibold text-amber-700 dark:text-amber-300">{batchDetails.batch?.unsynced_logs ?? 0}</p>
                                 </div>
+                                <div className="rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/10 p-3">
+                                    <p className="text-xs text-red-700 dark:text-red-400 uppercase tracking-wider">Unrecognized IDs</p>
+                                    <p className="mt-1 text-lg font-semibold text-red-700 dark:text-red-300">{batchDetails.batch?.unrecognized_logs ?? 0}</p>
+                                </div>
                             </div>
+
+                            {(batchDetails.batch?.unrecognized_logs ?? 0) > 0 && (
+                                <div className="rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                                    <span className="font-semibold">{batchDetails.batch.unrecognized_logs}</span> log {batchDetails.batch.unrecognized_logs === 1 ? 'entry has' : 'entries have'} a biometric ID that does not exist in the system. These entries are saved as an audit trail but will not be synced to attendance records until the faculty is registered.
+                                </div>
+                            )}
 
                             <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
                                 <table className="w-full min-w-[780px] text-sm">
@@ -346,20 +359,41 @@ export default function AttendanceImports({ batches, filters }) {
                                             <th className="py-3 px-3">Date</th>
                                             <th className="py-3 px-3">Time</th>
                                             <th className="py-3 px-3">Type</th>
+                                            <th className="py-3 px-3">ID Status</th>
                                             <th className="py-3 px-3">Synced</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {batchDetails.logs?.data?.length > 0 ? (
                                             batchDetails.logs.data.map((log) => (
-                                                <tr key={log.id} className="border-b border-gray-100 dark:border-gray-700/80 text-gray-700 dark:text-gray-200">
+                                                <tr key={log.id} className={`border-b border-gray-100 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 ${!log.faculty_exists ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}>
                                                     <td className="py-3 px-3 align-top">
-                                                        <p className="font-semibold text-gray-800 dark:text-gray-100">{log.faculty_name}</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{log.biometric_id}</p>
+                                                        {log.faculty_exists ? (
+                                                            <>
+                                                                <p className="font-semibold text-gray-800 dark:text-gray-100">{log.faculty_name}</p>
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{log.biometric_id}</p>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <p className="font-semibold text-red-700 dark:text-red-400">{log.biometric_id}</p>
+                                                                <p className="text-xs text-red-500 dark:text-red-500 mt-0.5">Not found in system</p>
+                                                            </>
+                                                        )}
                                                     </td>
                                                     <td className="py-3 px-3 align-top">{formatDate(log.log_datetime)}</td>
                                                     <td className="py-3 px-3 align-top">{formatTime(log.log_datetime)}</td>
                                                     <td className="py-3 px-3 align-top">{formatLogType(log.log_type)}</td>
+                                                    <td className="py-3 px-3 align-top">
+                                                        {log.faculty_exists ? (
+                                                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                                Recognized
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-300">
+                                                                Unknown ID
+                                                            </span>
+                                                        )}
+                                                    </td>
                                                     <td className="py-3 px-3 align-top">
                                                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${log.is_processed
                                                             ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300'
@@ -373,7 +407,7 @@ export default function AttendanceImports({ batches, filters }) {
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={5} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                                <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                                                     No biometric logs found for this batch.
                                                 </td>
                                             </tr>
@@ -395,9 +429,11 @@ export default function AttendanceImports({ batches, filters }) {
 
                                 <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <p className="text-sm text-gray-600 dark:text-gray-300">
-                                        {unsyncedLogsCount > 0
-                                            ? <>Ready to sync <span className="font-semibold">{unsyncedLogsCount}</span> log {unsyncedLogsCount === 1 ? 'entry' : 'entries'}.</>
-                                            : 'All logs in this batch are already synced.'}
+                                        {syncableLogsCount > 0
+                                            ? <>Ready to sync <span className="font-semibold">{syncableLogsCount}</span> log {syncableLogsCount === 1 ? 'entry' : 'entries'}.</>
+                                            : (unrecognizedLogsCount > 0
+                                                ? 'All recognized logs in this batch have been synced.'
+                                                : 'All logs in this batch are already synced.')}
                                     </p>
 
                                     <PrimaryButton
@@ -431,9 +467,11 @@ export default function AttendanceImports({ batches, filters }) {
 
                 <div className="px-6 py-5">
                     <p className="text-sm text-gray-700 dark:text-gray-300">
-                        {unsyncedLogsCount > 0
-                            ? <>Sync <span className="font-semibold">{unsyncedLogsCount}</span> unsynced log {unsyncedLogsCount === 1 ? 'entry' : 'entries'} now?</>
-                            : 'No unsynced logs were found. You can still continue to verify the batch status.'}
+                        {syncableLogsCount > 0
+                            ? <>Sync <span className="font-semibold">{syncableLogsCount}</span> unsynced log {syncableLogsCount === 1 ? 'entry' : 'entries'} now?</>
+                            : (unrecognizedLogsCount > 0
+                                ? 'No syncable logs remaining. Unrecognized entries cannot be synced.'
+                                : 'No unsynced logs were found. You can still continue to verify the batch status.')}
                     </p>
                 </div>
 
