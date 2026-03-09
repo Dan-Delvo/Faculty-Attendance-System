@@ -115,63 +115,54 @@ class Faculty extends Model
         $activeScheduleIds = $activeSchedules->pluck('id');
         $scheduleMeta = $activeSchedules->keyBy('id');
 
-        $internals = InternalSchedule::where('faculty_id', $this->id)
-            ->whereIn('schedule_id', $activeScheduleIds)
+        // 1. Get all official details for active schedules (unique source of truth for class slots)
+        $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
-            ->orderBy('device_time_in', 'asc')
+            ->orderBy('time_in', 'asc')
             ->get();
 
-        $detailsByScheduleAndDay = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
-            ->get()
-            ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
-
+        // 2. Get all approved change requests to determine the "effective" current slot
         $approvedRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
-            ->with('scheduleDetail')
             ->where('status', 'approved')
-            ->orderBy('created_at', 'asc')
             ->get()
-            ->keyBy(function ($req) {
-                return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
-            });
+            ->keyBy('schedule_detail_id');
 
-        // Filter out internal entries that represent the "original" day for a class that was moved elsewhere
-        $internals = $internals->filter(function ($entry) use ($approvedRequests, $detailsByScheduleAndDay) {
-            $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
-            if (!$detail)
-                return true;
+        $results = [];
 
-            return !$approvedRequests->contains(function ($req) use ($detail, $entry) {
-                return $req->schedule_detail_id == $detail->id && $req->requested_day_of_week !== $entry->day_of_week;
-            });
-        });
+        foreach ($allDetails as $detail) {
+            $meta = $scheduleMeta->get($detail->schedule_id);
+            $change = $approvedRequests->get($detail->id);
 
-        return $internals->map(function (InternalSchedule $entry) use ($detailsByScheduleAndDay, $scheduleMeta, $approvedRequests) {
-            $changeReq = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
-
-            if ($changeReq && $changeReq->scheduleDetail) {
-                $detail = $changeReq->scheduleDetail;
-                $isChanged = true;
-                $room = $changeReq->requested_room ?: $detail->room;
+            if ($change) {
+                // If a move was approved, show the currently effective (moved) state
+                $results[] = [
+                    'id' => $detail->id,
+                    'day_of_week' => $change->requested_day_of_week,
+                    'time_in' => Carbon::parse($change->requested_time_in)->format('H:i'),
+                    'time_out' => Carbon::parse($change->requested_time_out)->format('H:i'),
+                    'subject_code' => $detail->subject_code,
+                    'subject_desc' => $detail->subject_desc,
+                    'room' => $change->requested_room ?: $detail->room,
+                    'schedule_code' => $meta?->schedule_code,
+                    'is_changed' => true,
+                ];
             } else {
-                $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
-                $isChanged = false;
-                $room = $detail?->room ?? 'TBA';
+                // Otherwise show the official detail
+                $results[] = [
+                    'id' => $detail->id,
+                    'day_of_week' => $detail->day_of_week,
+                    'time_in' => Carbon::parse($detail->time_in)->format('H:i'),
+                    'time_out' => Carbon::parse($detail->time_out)->format('H:i'),
+                    'subject_code' => $detail->subject_code,
+                    'subject_desc' => $detail->subject_desc,
+                    'room' => $detail->room,
+                    'schedule_code' => $meta?->schedule_code,
+                    'is_changed' => false,
+                ];
             }
+        }
 
-            $meta = $scheduleMeta->get($entry->schedule_id);
-
-            return [
-                'id' => $detail?->id, // We need the ScheduleDetail ID for creating the request
-                'day_of_week' => $entry->day_of_week,
-                'time_in' => Carbon::parse($entry->device_time_in)->format('H:i'),
-                'time_out' => Carbon::parse($entry->device_time_out)->format('H:i'),
-                'subject_code' => $detail?->subject_code ?? '',
-                'subject_desc' => $detail?->subject_desc ?? 'Operational Duty',
-                'room' => $room,
-                'schedule_code' => $meta?->schedule_code,
-                'is_changed' => $isChanged,
-            ];
-        })->filter(fn($item) => $item['id'] !== null)->values()->toArray();
+        return $results;
     }
 
     /**
@@ -201,17 +192,29 @@ class Faculty extends Model
             return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'You already have a pending request for this schedule.'];
         }
 
-        // Block duplicate approved request (same parameters)
-        $existingApproved = $this->scheduleChangeRequests()
+        // Block duplicate request if it matches the current ACTIVE schedule (either Latest Approved or Official)
+        $latestApproved = $this->scheduleChangeRequests()
             ->where('schedule_detail_id', $data['schedule_detail_id'])
             ->where('status', 'approved')
-            ->where('requested_day_of_week', $data['requested_day_of_week'])
-            ->where('requested_time_in', $data['requested_time_in'])
-            ->where('requested_time_out', $data['requested_time_out'])
-            ->exists();
+            ->orderBy('created_at', 'desc')
+            ->first();
 
-        if ($existingApproved) {
-            return ['success' => false, 'error_field' => 'schedule_detail_id', 'error_message' => 'This schedule change has already been approved.'];
+        $currDay = $latestApproved ? $latestApproved->requested_day_of_week : $scheduleDetail->day_of_week;
+        $currIn = $latestApproved ? Carbon::parse($latestApproved->requested_time_in)->format('H:i') : Carbon::parse($scheduleDetail->time_in)->format('H:i');
+        $currOut = $latestApproved ? Carbon::parse($latestApproved->requested_time_out)->format('H:i') : Carbon::parse($scheduleDetail->time_out)->format('H:i');
+        $currRoom = $latestApproved ? ($latestApproved->requested_room ?: $scheduleDetail->room) : $scheduleDetail->room;
+
+        $reqDay = $data['requested_day_of_week'];
+        $reqIn = $data['requested_time_in'];
+        $reqOut = $data['requested_time_out'];
+        $reqRoom = trim($data['requested_room'] ?? '') ?: $scheduleDetail->room;
+
+        if ($reqDay === $currDay && $reqIn === $currIn && $reqOut === $currOut && $reqRoom === $currRoom) {
+            return [
+                'success' => false,
+                'error_field' => 'schedule_detail_id',
+                'error_message' => "The requested schedule for {$reqDay} is identical to your current active schedule. Please specify a different day, time, or room.",
+            ];
         }
 
         // Room + schedule conflict checks (only block when same room AND overlapping time)
@@ -952,7 +955,9 @@ class Faculty extends Model
                         'room' => $detail->room ?? 'TBA',
                         'startTime' => Carbon::parse($detail->time_in)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->time_out)->format('h:i A'),
-                        'hours' => $detail->hours_required,
+                        'hours' => ($detail->hours_required <= 0)
+                            ? max(0, (int) round(Carbon::parse($detail->time_out)->diffInMinutes(Carbon::parse($detail->time_in)) / 60))
+                            : $detail->hours_required,
                         'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                         'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                         'scheduleCode' => $meta?->schedule_code,
@@ -1106,7 +1111,9 @@ class Faculty extends Model
                     ? Carbon::parse($record->operational_time_out)->format('h:i A')
                     : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                 'hoursRendered' => (float) $record->total_hours_rendered,
-                'requiredHours' => (float) $record->required_hours,
+                'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
+                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
+                    : (float) $record->required_hours,
                 'lateMinutes' => $record->late_minutes,
                 'undertimeMinutes' => $record->undertime_minutes,
                 'status' => $record->status,
