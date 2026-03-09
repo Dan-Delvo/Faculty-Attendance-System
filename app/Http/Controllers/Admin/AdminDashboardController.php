@@ -17,13 +17,23 @@ class AdminDashboardController extends Controller
      */
     public function index(Request $request)
     {
+        $activeFaculty = Faculty::getActiveFacultyList();
+        $now = Carbon::now();
+
         return Inertia::render('Admin/Dashboard', [
             'stats'             => Faculty::getAdminDashboardStats(),
             'timedInFaculties'  => Faculty::getCurrentlyTimedIn(),
             'timedOutFaculties' => Faculty::getCurrentlyTimedOut(),
             'weeklyGraph'       => Faculty::getWeeklyTimedInGraph(),
-            'currentDate'       => Carbon::now()->format('l, F j, Y'),
+            'currentDate'       => $now->format('l, F j, Y'),
             'greeting'          => $this->getGreeting(),
+            'facultyOptions'    => $activeFaculty,
+            'dtrExportDefaults' => [
+                'faculty_id' => $activeFaculty[0]['id'] ?? null,
+                'month' => $now->month,
+                'year' => $now->year,
+            ],
+            'dtrExportYears'    => array_values(array_reverse(range($now->year - 5, $now->year + 1))),
         ]);
     }
 

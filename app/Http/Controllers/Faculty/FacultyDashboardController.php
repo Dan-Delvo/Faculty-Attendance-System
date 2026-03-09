@@ -205,7 +205,9 @@ class FacultyDashboardController extends Controller
                     'overtime_minutes' => $record->overtime_minutes ?? 0,
                     'night_minutes' => $record->night_minutes ?? 0,
                     'overtime_night_minutes' => $record->overtime_night_minutes ?? 0,
-                    'required_hours' => (float) $record->required_hours,
+                    'required_hours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
+                        ? (float) max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
+                        : (float) $record->required_hours,
                     'total_hours' => $totalHours,
                     'online_attendance' => false,
                     'subjects' => $subjects,
@@ -217,7 +219,6 @@ class FacultyDashboardController extends Controller
             'attendanceLogs' => $attendanceLogs,
         ]);
     }
-
 
     /**
      * Return a time-aware greeting string.
