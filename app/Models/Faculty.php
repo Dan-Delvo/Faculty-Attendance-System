@@ -952,7 +952,9 @@ class Faculty extends Model
                         'room' => $detail->room ?? 'TBA',
                         'startTime' => Carbon::parse($detail->time_in)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->time_out)->format('h:i A'),
-                        'hours' => $detail->hours_required,
+                        'hours' => ($detail->hours_required <= 0)
+                            ? max(0, (int) round(Carbon::parse($detail->time_out)->diffInMinutes(Carbon::parse($detail->time_in)) / 60))
+                            : $detail->hours_required,
                         'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                         'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                         'scheduleCode' => $meta?->schedule_code,
@@ -1106,7 +1108,9 @@ class Faculty extends Model
                     ? Carbon::parse($record->operational_time_out)->format('h:i A')
                     : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                 'hoursRendered' => (float) $record->total_hours_rendered,
-                'requiredHours' => (float) $record->required_hours,
+                'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
+                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
+                    : (float) $record->required_hours,
                 'lateMinutes' => $record->late_minutes,
                 'undertimeMinutes' => $record->undertime_minutes,
                 'status' => $record->status,
