@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ScrollToTop from '@/Components/ScrollToTop';
+import DtrPreviewModal from '@/Components/Admin/DtrPreviewModal';
 import { Head, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -157,7 +158,17 @@ function ChartTooltip({ active, payload, label }) {
 /* ──────────────────────────────────────────────
    Main Admin Dashboard page
    ────────────────────────────────────────────── */
-export default function AdminDashboard({ stats, timedInFaculties, timedOutFaculties, weeklyGraph, currentDate, greeting }) {
+export default function AdminDashboard({
+    stats,
+    timedInFaculties,
+    timedOutFaculties,
+    weeklyGraph,
+    currentDate,
+    greeting,
+    facultyOptions = [],
+    dtrExportDefaults = {},
+    dtrExportYears = [],
+}) {
     const { auth } = usePage().props;
     const userName = auth.user.username ?? auth.user.email.split('@')[0];
 
@@ -166,6 +177,12 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
     const [timedOut, setTimedOut] = useState(timedOutFaculties);
     const [graphData, setGraphData] = useState(weeklyGraph);
     const [activeTab, setActiveTab] = useState('in');
+    const [selectedFacultyId, setSelectedFacultyId] = useState(
+        dtrExportDefaults.faculty_id ?? facultyOptions[0]?.id ?? ''
+    );
+    const [selectedMonth, setSelectedMonth] = useState(dtrExportDefaults.month ?? new Date().getMonth() + 1);
+    const [selectedYear, setSelectedYear] = useState(dtrExportDefaults.year ?? new Date().getFullYear());
+    const [showDtrPreview, setShowDtrPreview] = useState(false);
 
     // Pagination for faculty lists
     const [inPage, setInPage] = useState(1);
@@ -194,7 +211,25 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
         return () => clearInterval(interval);
     }, []);
 
-    const maxCount = Math.max(...graphData.map(d => d.count), 1);
+    const monthOptions = [
+        { value: 1, label: 'January' },
+        { value: 2, label: 'February' },
+        { value: 3, label: 'March' },
+        { value: 4, label: 'April' },
+        { value: 5, label: 'May' },
+        { value: 6, label: 'June' },
+        { value: 7, label: 'July' },
+        { value: 8, label: 'August' },
+        { value: 9, label: 'September' },
+        { value: 10, label: 'October' },
+        { value: 11, label: 'November' },
+        { value: 12, label: 'December' },
+    ];
+
+    const handleExportDtr = () => {
+        if (!selectedFacultyId) return;
+        setShowDtrPreview(true);
+    };
 
     return (
         <AuthenticatedLayout>
@@ -226,6 +261,66 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
                 ))}
             </section>
 
+            <section className="mt-8 rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+                            Export Monthly Time Record
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Choose employee, month, and year to download a PDF DTR.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 w-full lg:w-auto">
+                        <select
+                            value={selectedFacultyId}
+                            onChange={(e) => setSelectedFacultyId(e.target.value)}
+                            className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:ring-[#7a1315] focus:border-[#7a1315]"
+                        >
+                            {facultyOptions.length === 0 && <option value="">No faculty available</option>}
+                            {facultyOptions.map((faculty) => (
+                                <option key={faculty.id} value={faculty.id}>
+                                    {faculty.name} ({faculty.department})
+                                </option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                            className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:ring-[#7a1315] focus:border-[#7a1315]"
+                        >
+                            {monthOptions.map((month) => (
+                                <option key={month.value} value={month.value}>
+                                    {month.label}
+                                </option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(Number(e.target.value))}
+                            className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:ring-[#7a1315] focus:border-[#7a1315]"
+                        >
+                            {dtrExportYears.map((year) => (
+                                <option key={year} value={year}>
+                                    {year}
+                                </option>
+                            ))}
+                        </select>
+
+                        <button
+                            type="button"
+                            onClick={handleExportDtr}
+                            disabled={!selectedFacultyId}
+                            className="rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Download PDF
+                        </button>
+                    </div>
+                </div>
+            </section>
             {/* ── Analytics Grid ─────────────────────────── */}
             <section className="mt-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -400,6 +495,14 @@ export default function AdminDashboard({ stats, timedInFaculties, timedOutFacult
                 </div>
             </section>
 
+            <DtrPreviewModal
+                open={showDtrPreview}
+                onClose={() => setShowDtrPreview(false)}
+                facultyId={selectedFacultyId}
+                month={selectedMonth}
+                year={selectedYear}
+            />
+
             <ScrollToTop />
         </AuthenticatedLayout>
     );
@@ -452,3 +555,4 @@ function ListPagination({ page, total, onChange }) {
         </div>
     );
 }
+

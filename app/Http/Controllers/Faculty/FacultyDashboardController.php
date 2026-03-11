@@ -220,7 +220,6 @@ class FacultyDashboardController extends Controller
         ]);
     }
 
-
     /**
      * Return a time-aware greeting string.
      */
