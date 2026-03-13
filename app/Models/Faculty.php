@@ -8,15 +8,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
-use App\Models\AttendanceRecord;
-use App\Models\BiometricLog;
+use Illuminate\Support\Facades\Storage;
 
 class Faculty extends Model
 {
     use HasFactory, SoftDeletes;
 
     protected $table = 'faculties';
+
     protected $primaryKey = 'id';
 
     protected $fillable = [
@@ -42,7 +43,7 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Relationships                                                     */
+    /*  Relationships */
     /* ------------------------------------------------------------------ */
 
     public function user(): BelongsTo
@@ -96,7 +97,7 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Schedule Change Request Methods                                    */
+    /*  Schedule Change Request Methods */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -230,8 +231,8 @@ class Faculty extends Model
                 ->where('day_of_week', $reqDay)
                 ->where('room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
-                    $q->whereRaw("TIME(time_in) < ?", [$reqOut])
-                        ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                    $q->whereRaw('TIME(time_in) < ?', [$reqOut])
+                        ->whereRaw('TIME(time_out) > ?', [$reqIn]);
                 })
                 ->first();
 
@@ -310,7 +311,7 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Online Attendance Request Methods                                  */
+    /*  Online Attendance Request Methods */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -343,9 +344,9 @@ class Faculty extends Model
     /**
      * Create an online attendance request with duplicate check.
      *
-     * @param  array  $data       Validated form data.
-     * @param  string $screenshotInPath  Storage path for time-in screenshot.
-     * @param  string $screenshotOutPath Storage path for time-out screenshot.
+     * @param  array  $data  Validated form data.
+     * @param  string  $screenshotInPath  Storage path for time-in screenshot.
+     * @param  string  $screenshotOutPath  Storage path for time-out screenshot.
      * @return array{success: bool, error_field?: string, error_message?: string}
      */
     public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, string $screenshotOutPath): array
@@ -411,10 +412,10 @@ class Faculty extends Model
 
         // Delete uploaded screenshots
         if ($request->screenshot_in) {
-            \Illuminate\Support\Facades\Storage::disk('public')->delete($request->screenshot_in);
+            Storage::disk('public')->delete($request->screenshot_in);
         }
         if ($request->screenshot_out) {
-            \Illuminate\Support\Facades\Storage::disk('public')->delete($request->screenshot_out);
+            Storage::disk('public')->delete($request->screenshot_out);
         }
 
         $request->delete();
@@ -423,7 +424,7 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Accessors                                                          */
+    /*  Accessors */
     /* ------------------------------------------------------------------ */
 
     public function getFullNameAttribute(): string
@@ -432,7 +433,7 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Dashboard Query Methods                                           */
+    /*  Dashboard Query Methods */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -540,19 +541,18 @@ class Faculty extends Model
         $now = Carbon::now();
         $todayName = $now->format('l');
 
-        // Fetch ALL active schedules — no date-range filter so every developer/
-        // tester sees the correct schedule regardless of the current date.
-        $activeSchedules = $this->schedules()
+        // Fetch ONLY the latest active schedule to avoid duplicates during transitions.
+        $latestActiveSchedule = $this->schedules()
             ->where('status', 'active')
             ->orderBy('effective_from', 'desc')
-            ->get();
+            ->first();
 
-        if ($activeSchedules->isEmpty()) {
+        if (!$latestActiveSchedule) {
             return [];
         }
 
-        $activeScheduleIds = $activeSchedules->pluck('id');
-        $scheduleMeta = $activeSchedules->keyBy('id'); // id => Schedule model
+        $activeScheduleIds = [$latestActiveSchedule->id];
+        $scheduleMeta = collect([$latestActiveSchedule->id => $latestActiveSchedule]); // id => Schedule model
 
         // Try internal schedule first (operational/biometric times)
         $internals = InternalSchedule::where('faculty_id', $this->id)
@@ -567,28 +567,37 @@ class Faculty extends Model
                 ->get()
                 ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
 
-            $approvedRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
+            $allApproved = ScheduleChangeRequest::where('faculty_id', $this->id)
                 ->with('scheduleDetail')
                 ->where('status', 'approved')
-                ->orderBy('created_at', 'asc')
-                ->get()
-                ->keyBy(function ($req) {
-                    return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
-                });
+                ->orderBy('created_at', 'desc')
+                ->get();
+            
+            // Only keep the latest approved request per class slot
+            $latestApprovedRequests = $allApproved->unique('schedule_detail_id');
 
-            // Filter out internal entries that represent "original" days for moved classes
-            $internals = $internals->filter(function ($entry) use ($approvedRequests, $detailsByScheduleAndDay) {
+            // Filter out internal entries that represent "original" days or "stale" moves
+            $internals = $internals->filter(function ($entry) use ($latestApprovedRequests, $detailsByScheduleAndDay) {
                 $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
-                if (!$detail)
-                    return true;
+                
+                if (!$detail) {
+                    // For records not on their official day, only keep if they match a CURRENT active move
+                    return $latestApprovedRequests->contains(function ($req) use ($entry) {
+                        return $req->scheduleDetail && $req->scheduleDetail->schedule_id == $entry->schedule_id && $req->requested_day_of_week == $entry->day_of_week;
+                    });
+                }
 
-                // If this class has an approved request moving it AWAY from this day, hide it
-                return !$approvedRequests->contains(function ($req) use ($detail, $entry) {
+                // If this is the official day, hide it if the class has been moved elsewhere
+                return !$latestApprovedRequests->contains(function ($req) use ($detail, $entry) {
                     return $req->schedule_detail_id == $detail->id && $req->requested_day_of_week !== $entry->day_of_week;
                 });
             });
 
-            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay, $scheduleMeta, $approvedRequests) {
+            $keyedRequests = $latestApprovedRequests->keyBy(function ($req) {
+                return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
+            });
+
+            return $internals->map(function (InternalSchedule $entry) use ($now, $detailsByScheduleAndDay, $scheduleMeta, $keyedRequests) {
                 $timeIn = Carbon::parse($entry->device_time_in);
                 $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
 
@@ -605,7 +614,7 @@ class Faculty extends Model
                     $status = 'upcoming';
                 }
 
-                $changeReq = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
+                $changeReq = $keyedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
 
                 if ($changeReq && $changeReq->scheduleDetail) {
                     $detail = $changeReq->scheduleDetail;
@@ -680,7 +689,6 @@ class Faculty extends Model
         })->values()->toArray();
     }
 
-
     /**
      * Get recent biometric logs formatted for the dashboard.
      *
@@ -702,9 +710,13 @@ class Faculty extends Model
         // Falls back to official schedule details if no internal schedule exists.
         $now = Carbon::now();
         $now = Carbon::now();
-        $activeScheduleIds = $this->schedules()
+        // Use only the latest active schedule for validation
+        $latestActiveSchedule = $this->schedules()
             ->where('status', 'active')
-            ->pluck('id');
+            ->orderBy('effective_from', 'desc')
+            ->first();
+
+        $activeScheduleIds = $latestActiveSchedule ? [$latestActiveSchedule->id] : [];
 
         // Build a lookup: day_of_week => [time_in, time_out]
         $scheduleLookup = [];
@@ -735,7 +747,7 @@ class Faculty extends Model
                     }
                 }
             }
-        } elseif ($activeScheduleIds->isNotEmpty()) {
+        } elseif (!empty($activeScheduleIds)) {
             // Fallback to official schedule details
             $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             foreach ($details as $detail) {
@@ -828,6 +840,7 @@ class Faculty extends Model
             if ($inLogs->isNotEmpty()) {
                 $totalMinutes = $inLogs->sum(function ($log) {
                     $dt = Carbon::parse($log->log_datetime);
+
                     return $dt->hour * 60 + $dt->minute;
                 });
                 $avgCheckIn = (int) round($totalMinutes / $inLogs->count());
@@ -838,6 +851,7 @@ class Faculty extends Model
             if ($outLogs->isNotEmpty()) {
                 $totalMinutes = $outLogs->sum(function ($log) {
                     $dt = Carbon::parse($log->log_datetime);
+
                     return $dt->hour * 60 + $dt->minute;
                 });
                 $avgCheckOut = (int) round($totalMinutes / $outLogs->count());
@@ -845,12 +859,14 @@ class Faculty extends Model
 
             // Format label for tooltip
             $formatTime = function (?int $mins): string {
-                if ($mins === null)
+                if ($mins === null) {
                     return '--:--';
+                }
                 $h = intdiv($mins, 60);
                 $m = $mins % 60;
                 $ampm = $h >= 12 ? 'PM' : 'AM';
                 $h12 = $h % 12 ?: 12;
+
                 return sprintf('%02d:%02d %s', $h12, $m, $ampm);
             };
 
@@ -887,6 +903,7 @@ class Faculty extends Model
 
             $totalMinutes = $logs->sum(function ($log) {
                 $dt = Carbon::parse($log->log_datetime);
+
                 return $dt->hour * 60 + $dt->minute;
             });
 
@@ -912,25 +929,22 @@ class Faculty extends Model
      */
     public function getWeeklySchedule(): array
     {
-        // Show ALL active schedules regardless of today's date so faculty (and
-        // testers/developers on any date) always see their schedule.
-        $activeSchedules = $this->schedules()
+        // Use ONLY the latest active schedule to avoid duplicates.
+        $latestActiveSchedule = $this->schedules()
             ->where('status', 'active')
-            ->orderBy('effective_from', 'desc')   // most recent first if multiple
-            ->get();
+            ->orderBy('effective_from', 'desc')
+            ->first();
 
-        if ($activeSchedules->isEmpty()) {
+        if (!$latestActiveSchedule) {
             return [];
         }
 
-        $activeScheduleIds = $activeSchedules->pluck('id');
-
-        // Build a lookup: schedule_id => { effective_from, effective_until, schedule_code }
-        $scheduleMeta = $activeSchedules->keyBy('id');
+        $activeScheduleIds = [$latestActiveSchedule->id];
+        $scheduleMeta = collect([$latestActiveSchedule->id => $latestActiveSchedule]);
 
         $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
             ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
-            ->orderByRaw('TIME(time_in) ASC')
+            ->orderBy('time_in', 'asc')
             ->get();
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -948,6 +962,7 @@ class Faculty extends Model
                 'shortDay' => substr($day, 0, 3),
                 'classes' => $dayDetails->map(function (ScheduleDetail $detail) use ($scheduleMeta) {
                     $meta = $scheduleMeta->get($detail->schedule_id);
+
                     return [
                         'id' => $detail->id,
                         'subject' => $detail->subject_desc ?? 'Untitled Subject',
@@ -956,8 +971,8 @@ class Faculty extends Model
                         'startTime' => Carbon::parse($detail->time_in)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->time_out)->format('h:i A'),
                         'hours' => ($detail->hours_required <= 0)
-                            ? max(0, (int) round(Carbon::parse($detail->time_out)->diffInMinutes(Carbon::parse($detail->time_in)) / 60))
-                            : $detail->hours_required,
+                            ? max(0, round(Carbon::parse($detail->time_out)->diffInMinutes(Carbon::parse($detail->time_in)) / 60, 2))
+                            : (float) $detail->hours_required,
                         'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                         'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                         'scheduleCode' => $meta?->schedule_code,
@@ -979,16 +994,17 @@ class Faculty extends Model
     {
         $now = Carbon::now();
 
-        $activeSchedules = $this->schedules()
+        $latestActiveSchedule = $this->schedules()
             ->where('status', 'active')
-            ->get();
+            ->orderBy('effective_from', 'desc')
+            ->first();
 
-        if ($activeSchedules->isEmpty()) {
+        if (!$latestActiveSchedule) {
             return [];
         }
 
-        $activeScheduleIds = $activeSchedules->pluck('id');
-        $scheduleMeta = $activeSchedules->keyBy('id');
+        $activeScheduleIds = [$latestActiveSchedule->id];
+        $scheduleMeta = collect([$latestActiveSchedule->id => $latestActiveSchedule]);
 
         $internals = InternalSchedule::where('faculty_id', $this->id)
             ->whereIn('schedule_id', $activeScheduleIds)
@@ -1000,26 +1016,32 @@ class Faculty extends Model
             ->get()
             ->keyBy(fn($d) => $d->schedule_id . '-' . $d->day_of_week);
 
-        $approvedRequests = ScheduleChangeRequest::where('faculty_id', $this->id)
+        $allApproved = ScheduleChangeRequest::where('faculty_id', $this->id)
             ->with('scheduleDetail')
             ->where('status', 'approved')
-            ->orderBy('created_at', 'asc')
-            ->get()
-            ->keyBy(function ($req) {
-                return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
-            });
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        $latestApprovedRequests = $allApproved->unique('schedule_detail_id');
 
-        // Filter out internal entries that represent the "original" day for a class that was moved elsewhere
-        $internals = $internals->filter(function ($entry) use ($approvedRequests, $detailsByScheduleAndDay) {
+        // Filter out internal entries that represent the "original" day or stale move
+        $internals = $internals->filter(function ($entry) use ($latestApprovedRequests, $detailsByScheduleAndDay) {
             $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
-            if (!$detail)
-                return true;
+            if (!$detail) {
+                // For records not on their official day, only keep if they match a CURRENT active move
+                return $latestApprovedRequests->contains(function ($req) use ($entry) {
+                    return $req->scheduleDetail && $req->scheduleDetail->schedule_id == $entry->schedule_id && $req->requested_day_of_week == $entry->day_of_week;
+                });
+            }
 
-            // If there's an approved request for this class detail that moves it to a DIFFERENT day, 
-            // then we should hide this specific entry on the original day.
-            return !$approvedRequests->contains(function ($req) use ($detail, $entry) {
+            // Hide official day entries if the class has been moved elsewhere
+            return !$latestApprovedRequests->contains(function ($req) use ($detail, $entry) {
                 return $req->schedule_detail_id == $detail->id && $req->requested_day_of_week !== $entry->day_of_week;
             });
+        });
+
+        $keyedRequests = $latestApprovedRequests->keyBy(function ($req) {
+            return $req->scheduleDetail ? $req->scheduleDetail->schedule_id . '-' . $req->requested_day_of_week : '';
         });
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1035,17 +1057,17 @@ class Faculty extends Model
             $schedule[] = [
                 'day' => $day,
                 'shortDay' => substr($day, 0, 3),
-                'entries' => $dayEntries->map(function (InternalSchedule $entry) use ($detailsByScheduleAndDay, $scheduleMeta, $approvedRequests) {
+                'entries' => $dayEntries->map(function (InternalSchedule $entry) use ($detailsByScheduleAndDay, $scheduleMeta, $keyedRequests) {
                     $timeIn = Carbon::parse($entry->device_time_in);
                     $timeOut = $entry->device_time_out ? Carbon::parse($entry->device_time_out) : null;
 
                     // If required_hours is 0 but we have valid times, derive it from the diff
                     $storedHours = (float) $entry->required_hours;
                     $requiredHours = ($storedHours <= 0 && $timeOut)
-                        ? max(0, (int) round($timeOut->diffInMinutes($timeIn) / 60))
+                        ? max(0, round($timeOut->diffInMinutes($timeIn) / 60, 2))
                         : $storedHours;
 
-                    $changeReq = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
+                    $changeReq = $keyedRequests->get($entry->schedule_id . '-' . $entry->day_of_week);
 
                     if ($changeReq && $changeReq->scheduleDetail) {
                         $detail = $changeReq->scheduleDetail;
@@ -1112,7 +1134,7 @@ class Faculty extends Model
                     : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                 'hoursRendered' => (float) $record->total_hours_rendered,
                 'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
-                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
+                    ? max(0, round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60, 2))
                     : (float) $record->required_hours,
                 'lateMinutes' => $record->late_minutes,
                 'undertimeMinutes' => $record->undertime_minutes,
@@ -1123,7 +1145,7 @@ class Faculty extends Model
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Admin Dashboard Query Methods (static)                            */
+    /*  Admin Dashboard Query Methods (static) */
     /* ------------------------------------------------------------------ */
 
     /**
@@ -1193,10 +1215,8 @@ class Faculty extends Model
     /**
      * Subquery: for a given date, return the latest biometric_log row
      * (biometric_id, log_type, log_datetime) per faculty using MAX(id).
-     *
-     * @return \Illuminate\Database\Query\Builder
      */
-    private static function latestLogsSubquery(\DateTimeInterface $date): \Illuminate\Database\Query\Builder
+    private static function latestLogsSubquery(\DateTimeInterface $date): Builder
     {
         $latestLogIds = DB::table('biometric_logs')
             ->selectRaw('MAX(id) as id')
