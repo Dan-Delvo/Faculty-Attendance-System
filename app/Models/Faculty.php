@@ -1015,7 +1015,7 @@ class Faculty extends Model
             if (!$detail)
                 return true;
 
-            // If there's an approved request for this class detail that moves it to a DIFFERENT day, 
+            // If there's an approved request for this class detail that moves it to a DIFFERENT day,
             // then we should hide this specific entry on the original day.
             return !$approvedRequests->contains(function ($req) use ($detail, $entry) {
                 return $req->schedule_detail_id == $detail->id && $req->requested_day_of_week !== $entry->day_of_week;
@@ -1127,19 +1127,21 @@ class Faculty extends Model
     /* ------------------------------------------------------------------ */
 
     /**
-     * Get admin dashboard stat cards: total faculty, timed-in today,
-     * timed-out today, and average hours this month.
+     * Get admin dashboard stat cards: total faculty, timed-in this month,
+     * and average hours this month.
      */
     public static function getAdminDashboardStats(): array
     {
         $now = Carbon::now();
-        $today = $now->toDateString();
 
         $totalFaculty = static::where('is_active', true)->count();
 
-        // Faculty who have checked IN today (latest log = IN)
-        $timedInCount = static::countTimedInToday();
-        $timedOutCount = $totalFaculty - $timedInCount;
+        // Total IN logs this month (counts repeated timed-ins)
+        $timedInThisMonth = BiometricLog::query()
+            ->whereRaw('UPPER(log_type) = ?', ['IN'])
+            ->whereMonth('log_datetime', $now->month)
+            ->whereYear('log_datetime', $now->year)
+            ->count();
 
         // Average hours rendered this month across all faculty
         $avgHours = AttendanceRecord::whereMonth('attendance_date', $now->month)
@@ -1164,20 +1166,12 @@ class Faculty extends Model
                 'icon' => 'users',
             ],
             [
-                'label' => 'Currently Timed In',
-                'value' => (string) $timedInCount,
+                'label' => 'Total Timed In (This Month)',
+                'value' => (string) $timedInThisMonth,
                 'unit' => '',
-                'change' => $timedInCount > 0 ? 'Faculty on campus' : 'No one timed in',
-                'changeType' => $timedInCount > 0 ? 'positive' : 'neutral',
+                'change' => $timedInThisMonth > 0 ? 'All time in logs counted this month' : 'No time in logs yet this month',
+                'changeType' => $timedInThisMonth > 0 ? 'positive' : 'neutral',
                 'icon' => 'login',
-            ],
-            [
-                'label' => 'Currently Timed Out',
-                'value' => (string) $timedOutCount,
-                'unit' => '',
-                'change' => $timedOutCount > 0 ? 'Off campus' : 'All timed in',
-                'changeType' => 'neutral',
-                'icon' => 'logout',
             ],
             [
                 'label' => 'Avg Hours / Month',
@@ -1274,23 +1268,23 @@ class Faculty extends Model
     }
 
     /**
-     * Get the weekly timed-in graph data (Monday to Friday of current week).
+     * Get the weekly timed-in graph data (Monday to Saturday of current week).
      *
-     * Returns an array of { day, shortDay, count } for each weekday.
+     * Returns an array of { day, shortDay, count } for each day.
      */
     public static function getWeeklyTimedInGraph(): array
     {
         $now = Carbon::now();
         $startOfWeek = $now->copy()->startOfWeek(Carbon::MONDAY);
 
-        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         $graph = [];
 
         foreach ($days as $index => $day) {
             $date = $startOfWeek->copy()->addDays($index);
 
             // Count distinct faculty who had at least one IN log on this day
-            $count = BiometricLog::where('log_type', 'IN')
+            $count = BiometricLog::whereRaw('UPPER(log_type) = ?', ['IN'])
                 ->whereDate('log_datetime', $date)
                 ->distinct('biometric_id')
                 ->count('biometric_id');
