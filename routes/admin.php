@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
 use App\Http\Controllers\Admin\AdminDtrExportController;
+use App\Http\Controllers\Admin\AdminDtrExportPageController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
@@ -53,14 +54,23 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/dtr-export/preview', [AdminDtrExportController::class, 'preview'])
         ->name('admin.dtr-export.preview');
 
+    Route::post('/dtr-export/preview-batch', [AdminDtrExportController::class, 'previewBatch'])
+        ->name('admin.dtr-export.preview-batch');
+
     Route::post('/dtr-export/dispatch', [AdminDtrExportController::class, 'dispatch'])
         ->name('admin.dtr-export.dispatch');
+
+    Route::post('/dtr-export/dispatch-batch', [AdminDtrExportController::class, 'dispatchBatch'])
+        ->name('admin.dtr-export.dispatch-batch');
 
     Route::get('/dtr-export/status', [AdminDtrExportController::class, 'status'])
         ->name('admin.dtr-export.status');
 
     Route::get('/dtr-export/download-file', [AdminDtrExportController::class, 'downloadFile'])
         ->name('admin.dtr-export.download-file');
+
+    Route::get('/dtr-export', [AdminDtrExportPageController::class, 'index'])
+        ->name('admin.dtr-export.index');
 
     // ── Schedule Management ────────────────────────────────────────────────
     Route::get('/schedules', [AdminScheduleController::class, 'index'])

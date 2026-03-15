@@ -196,6 +196,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                         >
                                             Attendance Imports
                                         </NavLink>
+
+                                        <NavLink
+                                            href={route('admin.dtr-export.index')}
+                                            active={route().current('admin.dtr-export.*')}
+                                        >
+                                            DTR Export
+                                        </NavLink>
                                     </>
                                 )}
                             </div>
@@ -425,6 +432,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                     active={route().current('admin.attendance-imports.*')}
                                 >
                                     Attendance Imports
+                                </ResponsiveNavLink>
+
+                                <ResponsiveNavLink
+                                    href={route('admin.dtr-export.index')}
+                                    active={route().current('admin.dtr-export.*')}
+                                >
+                                    DTR Export
                                 </ResponsiveNavLink>
                             </>
                         )}

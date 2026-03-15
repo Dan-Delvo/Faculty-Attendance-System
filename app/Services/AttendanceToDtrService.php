@@ -28,6 +28,7 @@ class AttendanceToDtrService
             'totalOvertimeMinutes' => 0,
             'timesOvertimeNight' => 0,
             'totalOvertimeNightMinutes' => 0,
+            'totalHoursRendered' => 0,
         ];
 
         foreach ($finalizedAttendance as $dayData) {
@@ -45,6 +46,7 @@ class AttendanceToDtrService
             $nightMinutes = (int) ($record->night_minutes ?? 0);
             $overtimeMinutes = (int) ($record->overtime_minutes ?? 0);
             $overtimeNightMinutes = (int) ($record->overtime_night_minutes ?? 0);
+            $hasActualAttendance = !empty($record->actual_time_in) || !empty($record->actual_time_out);
 
             if ($lateMinutes > 0) {
                 $summary['timesLate']++;
@@ -69,6 +71,10 @@ class AttendanceToDtrService
             if ($overtimeNightMinutes > 0) {
                 $summary['timesOvertimeNight']++;
                 $summary['totalOvertimeNightMinutes'] += $overtimeNightMinutes;
+            }
+
+            if ($hasActualAttendance) {
+                $summary['totalHoursRendered'] += (float) ($record->total_hours_rendered ?? 0);
             }
         }
 
@@ -183,20 +189,30 @@ class AttendanceToDtrService
         $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
 
         for($day = 1; $day <= $daysInMonth; $day++){
-            if(!array_key_exists($day, $attendance)) {
+            if(array_key_exists($day, $attendance)) {
                 if (array_key_exists($day, $holidaysByDay)) {
-                    $attendance[$day] = [
-                        'status' => 'holiday',
-                        'record' => null,
-                        'holidays' => $holidaysByDay[$day],
-                    ];
-                } else {
-                    $attendance[$day] = [
-                        'status' => 'none',
-                        'record' => null,
-                        'holidays' => [],
-                    ];
+                    $record = $attendance[$day]['record'] ?? null;
+                    $hasActualAttendance = !empty($record?->actual_time_in) || !empty($record?->actual_time_out);
+
+                    $attendance[$day]['holidays'] = $holidaysByDay[$day];
+                    $attendance[$day]['status'] = $hasActualAttendance ? 'holiday_present' : 'holiday';
                 }
+
+                continue;
+            }
+
+            if (array_key_exists($day, $holidaysByDay)) {
+                $attendance[$day] = [
+                    'status' => 'holiday',
+                    'record' => null,
+                    'holidays' => $holidaysByDay[$day],
+                ];
+            } else {
+                $attendance[$day] = [
+                    'status' => 'none',
+                    'record' => null,
+                    'holidays' => [],
+                ];
             }
         }
 
