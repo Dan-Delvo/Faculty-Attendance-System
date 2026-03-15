@@ -180,18 +180,57 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
             .map(e => e.originalScheduleDetailId)
     );
 
-    // Combine both schedules
     const daysArr = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    // Filter internal schedule: show only approved schedule change requests (avoid duplicates per course+section)
+    const filteredInternalSchedule = (() => {
+        const allEntries = internalSchedule.flatMap(dayData => 
+            dayData.entries
+                .filter(entry => entry.isApproved) // Only approved schedule change requests
+                .map(entry => ({ ...entry, day: dayData.day }))
+        );
+
+        // Deduplicate by course+section for entries with course codes
+        const seen = new Map();
+        const courseEntries = [];
+        const operationalEntries = [];
+
+        allEntries.forEach(entry => {
+            if (entry.code) {
+                // Has course code - deduplicate
+                const key = `${entry.code}-${entry.sectionName || ''}`;
+                const existing = seen.get(key);
+                if (!existing || entry.id > existing.id) {
+                    seen.set(key, entry);
+                    courseEntries.push(entry);
+                }
+            } else {
+                // No course code - operational duty, keep all
+                operationalEntries.push(entry);
+            }
+        });
+
+        // Combine course entries (already deduplicated) + operational entries
+        const uniqueEntries = [...courseEntries, ...operationalEntries];
+
+        // Group back by day
+        return daysArr.map(day => ({
+            day,
+            shortDay: day.substring(0, 3),
+            entries: uniqueEntries.filter(e => e.day === day)
+        })).filter(d => d.entries.length > 0);
+    })();
+
+    // Combine both schedules with deduplication
     const combinedSchedule = daysArr.map(day => {
         const officialDay = sortedSchedule.find(d => d.day === day) || { classes: [] };
-        const internalDay = internalSchedule.find(d => d.day === day) || { entries: [] };
+        const internalDay = filteredInternalSchedule.find(d => d.day === day) || { entries: [] };
 
         const combinedItems = [
             ...officialDay.classes
                 .filter(c => !changedOfficialClassIds.has(c.id))
                 .map(c => ({ ...c, type: 'official' })),
             ...internalDay.entries
-                .filter(e => e.isChanged)
                 .map(e => ({ ...e, type: 'internal' }))
         ].sort((a, b) => toMin(a.startTime) - toMin(b.startTime));
 
@@ -207,39 +246,6 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
         (sum, day) => sum + day.classes.reduce((s, c) => s + c.hours, 0),
         0,
     );
-
-    // Filter internal schedule: only show entries that are approved OR have request history
-    // Deduplicate by course code to show only one entry per subject
-    const filteredInternalSchedule = internalSchedule.map(dayData => {
-        const filteredEntries = dayData.entries.filter(entry => {
-            return entry.isApproved || entry.hasRequestHistory;
-        });
-
-        // Deduplicate: keep only the entry with the highest ID per course code
-        const seen = new Map();
-        const finalEntries = [];
-
-        filteredEntries.forEach(entry => {
-            const key = entry.code || `no-code-${entry.id}`;
-            const existing = seen.get(key);
-            if (!existing || entry.id > existing.id) {
-                // Replace existing with this newer entry
-                if (existing) {
-                    // Remove the old entry from finalEntries
-                    const idx = finalEntries.indexOf(existing);
-                    if (idx > -1) finalEntries.splice(idx, 1);
-                }
-                seen.set(key, entry);
-                finalEntries.push(entry);
-            }
-            // Otherwise, skip this entry (it's a duplicate with lower ID)
-        });
-
-        return {
-            ...dayData,
-            entries: finalEntries
-        };
-    }).filter(dayData => dayData.entries.length > 0);
 
     return (
         <AuthenticatedLayout>
