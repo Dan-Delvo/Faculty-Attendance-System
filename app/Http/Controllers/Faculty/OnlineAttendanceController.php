@@ -67,9 +67,9 @@ class OnlineAttendanceController extends Controller
             'class_type'         => 'required|in:synchronous,asynchronous',
             'attendance_date'    => 'required|date|before_or_equal:today',
             'time_in'            => 'required|date_format:H:i',
-            'time_out'           => 'required|date_format:H:i|after:time_in',
+            'time_out'           => 'nullable|date_format:H:i|after:time_in',
             'screenshot_in'      => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'screenshot_out'     => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'screenshot_out'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'remarks'            => 'nullable|string|max:1000',
         ]);
 
@@ -77,13 +77,14 @@ class OnlineAttendanceController extends Controller
         $screenshotInPath  = $request->file('screenshot_in')
             ->store("online-attendance/{$faculty->id}", 'public');
         $screenshotOutPath = $request->file('screenshot_out')
-            ->store("online-attendance/{$faculty->id}", 'public');
+            ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
+            : null;
 
         $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath);
 
         if (!$result['success']) {
             // Clean up uploaded files on failure
-            \Illuminate\Support\Facades\Storage::disk('public')->delete([$screenshotInPath, $screenshotOutPath]);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete(array_filter([$screenshotInPath, $screenshotOutPath]));
             return back()->withErrors([$result['error_field'] => $result['error_message']]);
         }
 
@@ -108,5 +109,40 @@ class OnlineAttendanceController extends Controller
         }
 
         return back()->with('success', 'Online attendance request cancelled.');
+    }
+
+    /**
+     * Check if attendance already exists for a given date.
+     */
+    public function checkAttendance(Request $request)
+    {
+        $faculty = $request->user()->faculty;
+
+        if (!$faculty) {
+            return response()->json(['error' => 'Faculty profile not found.'], 404);
+        }
+
+        $date = $request->query('date');
+
+        if (!$date) {
+            return response()->json(['error' => 'Date is required.'], 400);
+        }
+
+        // Check for existing attendance record
+        $hasAttendance = $faculty->attendanceRecords()
+            ->where('attendance_date', $date)
+            ->exists();
+
+        // Check for pending online attendance request
+        $hasPendingRequest = $faculty->onlineAttendanceRequests()
+            ->where('attendance_date', $date)
+            ->where('status', 'pending')
+            ->exists();
+
+        return response()->json([
+            'has_attendance' => $hasAttendance,
+            'has_pending_request' => $hasPendingRequest,
+            'can_submit' => !$hasAttendance && !$hasPendingRequest,
+        ]);
     }
 }

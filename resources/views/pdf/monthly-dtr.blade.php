@@ -118,21 +118,33 @@
             <th style="font-size:6.5px; font-weight:400;">Depar-<br>ture</th>
         </tr>
 
-        {{-- Day rows --}}
-        @for ($d = 0; $d < $totalDays; $d++)
-            @php
-                $r   = $rows[$d];
-                $st  = $r['status'] ?? 'none';
-                $hol = $st === 'holiday';
-            @endphp
-            <tr>
-                <td style="font-size:8px; font-weight:700;">{{ $r['day'] }}</td>
-                @if ($hol && empty($r['morning_in']) && empty($r['afternoon_in']))
-                    <td colspan="6" style="font-size:7px; font-style:italic;">{{ $r['holiday_label'] ?: 'HOLIDAY' }}</td>
-                @else
-                    <td style="font-size:7.5px;">{{ $r['morning_in'] }}</td>
-                    <td style="font-size:7.5px;">{{ $r['morning_out'] }}</td>
-                    <td style="font-size:7.5px;">{{ $r['afternoon_in'] }}</td>
+    {{-- Day rows --}}
+    @for ($d = 0; $d < $totalDays; $d++)
+        @php
+            $r   = $rows[$d];
+            $st  = $r['status'] ?? 'none';
+            $isHoliday = $r['is_holiday'] ?? false;
+            $holidayLabel = $r['holiday_label'] ?? '';
+            $hasTimes = !empty($r['morning_in'])
+                || !empty($r['morning_out'])
+                || !empty($r['afternoon_in'])
+                || !empty($r['afternoon_out'])
+                || !empty($r['night_in'])
+                || !empty($r['night_out']);
+        @endphp
+        <tr>
+            <td style="font-size:8px; font-weight:700;">
+                <div>{{ $r['day'] }}</div>
+                @if ($isHoliday)
+                    <div style="font-size:6px; font-style:italic;">{{ $holidayLabel ?: 'HOLIDAY' }}</div>
+                @endif
+            </td>
+            @if ($isHoliday && ! $hasTimes)
+                <td colspan="6" style="font-size:7px; font-style:italic;">{{ $holidayLabel ?: 'HOLIDAY' }}</td>
+            @else
+                <td style="font-size:7.5px;">{{ $r['morning_in'] }}</td>
+                <td style="font-size:7.5px;">{{ $r['morning_out'] }}</td>
+                <td style="font-size:7.5px;">{{ $r['afternoon_in'] }}</td>
                     <td style="font-size:7.5px;">{{ $r['afternoon_out'] }}</td>
                     <td style="font-size:7.5px;">{{ $r['night_in'] }}</td>
                     <td style="font-size:7.5px;">{{ $r['night_out'] }}</td>
@@ -142,8 +154,11 @@
 
         {{-- TOTAL row --}}
         <tr>
-            <td colspan="7" style="font-size:8px; font-weight:700; text-align:right; padding-right:8px; height:16px;">
-                Total
+            <td colspan="6" style="font-size:8px; font-weight:700; text-align:right; padding-right:8px; height:16px;">
+                Total Hours Attended
+            </td>
+            <td style="font-size:8px; font-weight:700; text-align:center;">
+                {{ number_format((float) ($summary['totalHoursRendered'] ?? 0), 2) }}
             </td>
         </tr>
     </table>

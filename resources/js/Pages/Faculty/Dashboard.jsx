@@ -63,6 +63,8 @@ function statusStyle(status = '') {
         return 'text-rose-700 bg-rose-100 dark:text-rose-400 dark:bg-rose-900/40 ring-rose-600/20';
     if (s === 'overtime')
         return 'text-indigo-700 bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/40 ring-indigo-600/20';
+    if (s.includes('undertime') && s.includes('overtime'))
+        return 'text-purple-700 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/40 ring-purple-600/20';
     // default
     return 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-gray-800 ring-gray-500/20';
 }
