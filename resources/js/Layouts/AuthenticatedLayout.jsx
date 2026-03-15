@@ -156,7 +156,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     type="button"
                                                     className={
                                                         'inline-flex items-center gap-1 border-b-2 px-1 pt-1 text-sm font-medium leading-5 transition-all duration-300 ease-in-out focus:outline-none h-16 ' +
-                                                        (route().current('admin.schedule-change-requests.*') || route().current('admin.online-requests.*')
+                                                        (route().current('admin.schedule-change-requests.*') || route().current('admin.online-requests.*') || route().current('admin.undertime-justifications.*')
                                                             ? 'border-[#7a1315] text-gray-900 font-bold dark:border-red-500 dark:text-white'
                                                             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-700 dark:hover:text-gray-300')
                                                     }
@@ -179,6 +179,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                                     className={route().current('admin.online-requests.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
                                                 >
                                                     Online Class Requests
+                                                </Dropdown.Link>
+                                                <Dropdown.Link
+                                                    href={route('admin.undertime-justifications.index')}
+                                                    className={route().current('admin.undertime-justifications.*') ? '!bg-red-50 !text-[#7a1315] dark:!bg-gray-700 dark:!text-white' : ''}
+                                                >
+                                                    Undertime Justifications
                                                 </Dropdown.Link>
                                             </Dropdown.Content>
                                         </Dropdown>
@@ -392,7 +398,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         onClick={() => setMobileAdminRequestsOpen(!mobileAdminRequestsOpen)}
                                         className={
                                             'flex w-full items-center justify-between border-l-4 py-2 pe-4 ps-3 text-start text-base font-medium transition-all duration-300 ' +
-                                            (route().current('admin.schedule-change-requests.*') || route().current('admin.online-requests.*')
+                                            (route().current('admin.schedule-change-requests.*') || route().current('admin.online-requests.*') || route().current('admin.undertime-justifications.*')
                                                 ? 'border-[#7a1315] bg-red-50 text-[#7a1315] dark:border-red-500 dark:bg-red-900/20 dark:text-red-400'
                                                 : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200')
                                         }
@@ -415,6 +421,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                                 active={route().current('admin.online-requests.*')}
                                             >
                                                 Online Class Requests
+                                            </ResponsiveNavLink>
+                                            <ResponsiveNavLink
+                                                href={route('admin.undertime-justifications.index')}
+                                                active={route().current('admin.undertime-justifications.*')}
+                                            >
+                                                Undertime Justifications
                                             </ResponsiveNavLink>
                                         </div>
                                     )}
