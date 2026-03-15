@@ -67,9 +67,9 @@ class OnlineAttendanceController extends Controller
             'class_type'         => 'required|in:synchronous,asynchronous',
             'attendance_date'    => 'required|date|before_or_equal:today',
             'time_in'            => 'required|date_format:H:i',
-            'time_out'           => 'required|date_format:H:i|after:time_in',
+            'time_out'           => 'nullable|date_format:H:i|after:time_in',
             'screenshot_in'      => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'screenshot_out'     => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'screenshot_out'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'remarks'            => 'nullable|string|max:1000',
         ]);
 
