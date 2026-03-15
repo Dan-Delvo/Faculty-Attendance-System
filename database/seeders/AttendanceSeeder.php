@@ -9,6 +9,7 @@ use App\Models\Faculty;
 use App\Models\InternalSchedule;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -20,7 +21,7 @@ class AttendanceSeeder extends Seeder
     {
         DB::beginTransaction();
         try {
-            $gracePeriod = 5;
+            $gracePeriod = (int) SystemSetting::where('setting_key', 'late_grace_period_minutes')->value('setting_value') ?? 5;
 
             $adminUser = User::where('username', 'admin')->first();
 
