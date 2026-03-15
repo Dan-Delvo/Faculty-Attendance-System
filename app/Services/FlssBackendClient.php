@@ -38,6 +38,10 @@ class FlssBackendClient
             'X-HMAC-Nonce' => $nonce,
         ])->acceptJson();
 
+        if (config('services.flss_backend.skip_ssl_verification', false)) {
+            $request = $request->withOptions(['verify' => false]);
+        }
+
         if ($body !== '') {
             $request = $request->withBody($body, 'application/json');
         }

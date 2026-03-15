@@ -139,11 +139,11 @@ class ScheduleChangeRequestController extends Controller
                 $q->where('status', 'active');
             })
                 ->where('id', '!=', $validated['schedule_detail_id'])
-                ->where('day_of_week', $reqDay)
+                ->where('day', $reqDay)
                 ->where('room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
-                    $q->whereRaw("TIME(time_in) < ?", [$reqOut])
-                        ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                    $q->whereRaw("TIME(start_time) < ?", [$reqOut])
+                        ->whereRaw("TIME(end_time) > ?", [$reqIn]);
                 })
                 ->with('schedule.faculty')
                 ->first();
@@ -152,9 +152,9 @@ class ScheduleChangeRequestController extends Controller
                 $occupant = $roomConflict->schedule?->faculty?->full_name ?? 'another faculty';
                 $conflicts[] = [
                     'type' => 'room',
-                    'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->subject_code} ("
-                        . Carbon::parse($roomConflict->time_in)->format('H:i') . '–'
-                        . Carbon::parse($roomConflict->time_out)->format('H:i') . ") on {$reqDay}.",
+                    'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->course_code} ("
+                        . Carbon::parse($roomConflict->start_time)->format('H:i') . '–'
+                        . Carbon::parse($roomConflict->end_time)->format('H:i') . ") on {$reqDay}.",
                 ];
             }
 

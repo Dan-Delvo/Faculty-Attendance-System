@@ -286,7 +286,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                             {req.original_day.slice(0, 3)}
                                         </div>
                                         <div>
-                                            <h3 className="font-bold text-gray-900 dark:text-white">
+                                            <h3 className="font-bold text-white">
                                                 {req.original_subject}
                                             </h3>
                                             <div className="flex items-center gap-2 mt-0.5">
@@ -298,6 +298,11 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                                 <p className="text-xs text-gray-500 dark:text-gray-400">
                                                     Submitted {req.created_at}
                                                 </p>
+                                                {(req.program_code || req.year_level || req.section_name) && (
+                                                    <p className="text-xs font-semibold text-amber-600 dark:text-amber-500">
+                                                        {[req.program_code, (req.year_level || req.section_name) ? [req.year_level, req.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -469,8 +474,8 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                             >
                                 <option value="">— Choose a schedule —</option>
                                 {scheduleDetails.map((d) => (
-                                    <option key={d.id} value={d.id}>
-                                        [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
+                                       <option key={d.id} value={d.id}>
+                                        [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} - {d.subject_desc} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
                             </select>
@@ -488,6 +493,7 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                                     <p><span className="font-semibold">Subject:</span> {selectedDetail.subject_code} - {selectedDetail.subject_desc}</p>
                                     <p><span className="font-semibold">Time:</span> {formatTime12(selectedDetail.time_in)} – {formatTime12(selectedDetail.time_out)}</p>
                                     <p><span className="font-semibold">Room:</span> {selectedDetail.room}</p>
+                                    <p className="col-span-2"><span className="font-semibold">For:</span> {[selectedDetail.program_code, (selectedDetail.year_level || selectedDetail.section_name) ? [selectedDetail.year_level, selectedDetail.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}</p>
                                 </div>
                             </div>
                         )}
