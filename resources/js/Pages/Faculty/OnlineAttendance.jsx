@@ -19,7 +19,7 @@ const STATUS_STYLES = {
 
 const CLASS_TYPE_STYLES = {
     synchronous: 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-400/10 dark:text-blue-400 dark:ring-blue-400/30',
-    asynchronous: 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-400/10 dark:text-purple-400 dark:ring-purple-400/30',
+    asynchronous: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
 };
 
 export default function OnlineAttendance({ requests: initialRequests, scheduleDetails, filters }) {
@@ -243,17 +243,22 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                     <div className="flex items-center gap-3">
                                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white font-bold text-xs shadow-sm ${req.class_type === 'synchronous'
                                                 ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                                                : 'bg-gradient-to-br from-purple-500 to-purple-600'
+                                                : 'bg-gradient-to-br from-amber-500 to-amber-600'
                                             }`}>
                                             {req.class_type === 'synchronous' ? 'SYN' : 'ASY'}
                                         </div>
                                         <div>
-                                            <h3 className="font-bold text-gray-900 dark:text-white">
+                                            <h3 className="font-bold text-white">
                                                 {req.subject_code || 'Online Class'}
                                                 {req.subject_desc && (
-                                                    <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
+                                                    <div className="mt-0.5 text-xs text-gray-400 dark:text-gray-100 leading-tight">
                                                         {req.subject_desc}
-                                                    </span>
+                                                    </div>
+                                                )}
+                                                {(req.program_code || req.year_level || req.section_name) && (
+                                                    <div className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-500">
+                                                        {[req.program_code, (req.year_level || req.section_name) ? [req.year_level, req.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
+                                                    </div>
                                                 )}
                                             </h3>
                                             <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -440,7 +445,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 <option value="">— No specific schedule —</option>
                                 {scheduleDetails.map((d) => (
                                     <option key={d.id} value={d.id}>
-                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} ({d.room})
+                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} · {d.program_code} {(d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : ''}
                                     </option>
                                 ))}
                             </select>

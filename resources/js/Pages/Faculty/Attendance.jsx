@@ -26,6 +26,8 @@ function statusStyle(status = '') {
         return 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400';
     if (s.includes('missing') || s.includes('check'))
         return 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-400';
+    if (s === 'overtime')
+        return 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-400';
     // default
     return 'bg-gray-50 text-gray-700 ring-gray-500/20 dark:bg-gray-800 dark:text-gray-300';
 }
@@ -144,8 +146,17 @@ export default function FacultyAttendance({ attendanceLogs }) {
     });
 
     const fmtMins = (m) => {
-        const h = Math.floor(m / 60), rem = m % 60;
-        return h > 0 ? `${h}h ${rem}m` : `${rem} mins.`;
+        if (!m || m <= 0) return '0m';
+        const d = Math.floor(m / 1440);
+        const h = Math.floor((m % 1440) / 60);
+        const rem = m % 60;
+
+        const parts = [];
+        if (d > 0) parts.push(`${d}d`);
+        if (h > 0) parts.push(`${h}h`);
+        if (rem > 0 || (d === 0 && h === 0)) parts.push(`${rem}m`);
+
+        return parts.join(' ');
     };
 
     const paginatedLogs = filteredLogs.slice(
@@ -341,12 +352,17 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                 <div className="flex flex-col gap-1">
                                                     {log.subjects.map((s, i) => (
                                                         <div key={i}>
-                                                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-300/50 dark:ring-indigo-500/30">
+                                                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-300/50 dark:ring-amber-500/30">
                                                                 {s.code}
                                                             </span>
                                                             {s.desc && (
-                                                                <div className="mt-0.5 text-[11px] text-gray-400 dark:text-slate-500 truncate max-w-[140px]" title={s.desc}>
+                                                                <div className="mt-0.5 text-[11px] text-white leading-tight" title={s.desc}>
                                                                     {s.desc}
+                                                                </div>
+                                                            )}
+                                                            {(s.program_code || s.year_level || s.section_name) && (
+                                                                <div className="mt-1 text-[10px] font-bold text-amber-600 dark:text-amber-500">
+                                                                    {[s.program_code, (s.year_level || s.section_name) ? [s.year_level, s.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -389,10 +405,10 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                 </span>
                                             ) : (
                                                 <div className="flex flex-col gap-1 items-center">
-                                                    {log.late_minutes > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300">{log.late_minutes}m Late</span>}
+                                                    {log.late_minutes > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300">{fmtMins(log.late_minutes)} Late</span>}
                                                     {log.undertime_minutes > 0 && (
                                                         <div className="flex flex-col items-center gap-1">
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{log.undertime_minutes}m Early</span>
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{fmtMins(log.undertime_minutes)} Early</span>
                                                             {log.undertime_status ? (
                                                                 <button type="button" onClick={() => openJustifyModal(log, 'undertime')} className={`mt-0.5 group flex items-center gap-1 text-[11px] font-extrabold uppercase transition-colors ${log.undertime_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800' : log.undertime_status === 'rejected' ? 'text-red-600 dark:text-red-400 hover:text-red-800' : 'text-amber-600 dark:text-amber-400 hover:text-amber-800'}`}>
                                                                     <span>{log.undertime_status}</span>
@@ -509,7 +525,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
                     {selectedLog && (
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                             {justifyType === 'undertime' ? (
-                                <>You recorded <span className="font-bold text-red-600 dark:text-red-400">{selectedLog.undertime_minutes} minutes</span> of undertime on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.</>
+                                <>You recorded <span className="font-bold text-red-600 dark:text-red-400">{fmtMins(selectedLog.undertime_minutes)}</span> of undertime on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.</>
                             ) : (
                                 <>You have missing logs (<span className="font-bold text-rose-600 dark:text-rose-400">{selectedLog.actual_time_in === '--:--' ? 'Time In' : ''}{selectedLog.actual_time_in === '--:--' && selectedLog.actual_time_out === '--:--' ? ' and ' : ''}{selectedLog.actual_time_out === '--:--' ? 'Time Out' : ''}</span>) on <span className="font-semibold text-gray-700 dark:text-gray-300">{selectedLog.date}</span>.</>
                             )}

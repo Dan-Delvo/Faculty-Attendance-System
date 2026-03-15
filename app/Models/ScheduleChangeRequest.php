@@ -171,6 +171,9 @@ class ScheduleChangeRequest extends Model
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks' => $req->review_remarks,
                 'created_at' => $req->created_at?->format('M d, Y h:i A'),
+                'program_code' => $detail?->program_code,
+                'year_level' => $detail?->year_level,
+                'section_name' => $detail?->section_name,
             ];
         })->toArray();
 
@@ -233,6 +236,9 @@ class ScheduleChangeRequest extends Model
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks' => $req->review_remarks,
                 'created_at' => $req->created_at?->format('M d, Y h:i A'),
+                'program_code' => $detail?->program_code,
+                'year_level' => $detail?->year_level,
+                'section_name' => $detail?->section_name,
             ];
         })->toArray();
 

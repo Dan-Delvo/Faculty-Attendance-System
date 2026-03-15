@@ -585,6 +585,11 @@ function RequestCard({ req, onApprove, onReject }) {
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                                 Submitted {req.created_at}
                             </p>
+                            {(req.program_code || req.year_level || req.section_name) && (
+                                <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
+                                    {[req.program_code, (req.year_level || req.section_name) ? [req.year_level, req.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
+                                </p>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
