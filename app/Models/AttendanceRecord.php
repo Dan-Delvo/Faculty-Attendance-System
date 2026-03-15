@@ -14,6 +14,7 @@ class AttendanceRecord extends Model
 
     protected $fillable = [
         'faculty_id',
+        'online_attendance_id',
         'schedule_detail_id',
         'internal_schedule_id',
         'attendance_date',
@@ -77,6 +78,11 @@ class AttendanceRecord extends Model
     public function internalSchedule(): BelongsTo
     {
         return $this->belongsTo(InternalSchedule::class);
+    }
+
+    public function onlineAttendanceRequest(): BelongsTo
+    {
+        return $this->belongsTo(OnlineAttendanceRequest::class, 'online_attendance_id');
     }
 
     public function attendanceAdjustments(): HasMany
