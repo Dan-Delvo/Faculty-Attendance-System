@@ -176,10 +176,16 @@ class FacultyDashboardController extends Controller
 
                 // Dynamically adjust status for UI consistency if DB status is out of sync
                 $displayStatus = $record->status;
+                $hasActualTimeIn = $record->actual_time_in !== null;
                 $isUndertime = ($undertimeMinutes > 0);
                 $isOvertime = ($record->overtime_minutes > 0);
 
-                if (strtolower($displayStatus) === 'present') {
+                // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
+                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
+                    $displayStatus = 'Absent';
+                }
+
+                if (strtolower($displayStatus) === 'present' && $hasActualTimeIn) {
                     if ($isUndertime && $isOvertime) {
                         $displayStatus = 'UNDERTIME / OVERTIME';
                     } elseif ($isUndertime) {

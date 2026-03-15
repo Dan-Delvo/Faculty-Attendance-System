@@ -209,31 +209,30 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
     );
 
     // Filter internal schedule: only show entries that are approved OR have request history
-    // And only show the latest approved entry per course and section to avoid duplication
+    // Deduplicate by course code to show only one entry per subject
     const filteredInternalSchedule = internalSchedule.map(dayData => {
         const filteredEntries = dayData.entries.filter(entry => {
             return entry.isApproved || entry.hasRequestHistory;
         });
 
-        // Group by course code + section to find latest approved per subject
-        const latestApprovedMap = new Map();
+        // Deduplicate: keep only the entry with the highest ID per course code
+        const seen = new Map();
+        const finalEntries = [];
+
         filteredEntries.forEach(entry => {
-            if (entry.isApproved && entry.code) {
-                const key = `${entry.code}-${entry.sectionName || ''}`;
-                const existing = latestApprovedMap.get(key);
-                if (!existing || entry.id > existing.id) {
-                    latestApprovedMap.set(key, entry);
+            const key = entry.code || `no-code-${entry.id}`;
+            const existing = seen.get(key);
+            if (!existing || entry.id > existing.id) {
+                // Replace existing with this newer entry
+                if (existing) {
+                    // Remove the old entry from finalEntries
+                    const idx = finalEntries.indexOf(existing);
+                    if (idx > -1) finalEntries.splice(idx, 1);
                 }
+                seen.set(key, entry);
+                finalEntries.push(entry);
             }
-        });
-
-        const latestApprovedIds = new Set(Array.from(latestApprovedMap.values()).map(e => e.id));
-
-        const finalEntries = filteredEntries.filter(entry => {
-            if (entry.isApproved) {
-                return latestApprovedIds.has(entry.id);
-            }
-            return true;
+            // Otherwise, skip this entry (it's a duplicate with lower ID)
         });
 
         return {

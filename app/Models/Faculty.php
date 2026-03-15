@@ -1261,6 +1261,27 @@ class Faculty extends Model
             ->get();
 
         return $records->map(function (AttendanceRecord $record) {
+            // Dynamically adjust status for UI consistency
+            $displayStatus = $record->status;
+            $hasActualTimeIn = $record->actual_time_in !== null;
+            $isUndertime = ($record->undertime_minutes ?? 0) > 0;
+            $isOvertime = ($record->overtime_minutes ?? 0) > 0;
+
+            // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
+            if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
+                $displayStatus = 'Absent';
+            }
+
+            if (strtolower($displayStatus) === 'present' && $hasActualTimeIn) {
+                if ($isUndertime && $isOvertime) {
+                    $displayStatus = 'UNDERTIME / OVERTIME';
+                } elseif ($isUndertime) {
+                    $displayStatus = 'UNDERTIME';
+                } elseif ($isOvertime) {
+                    $displayStatus = 'OVERTIME';
+                }
+            }
+
             return [
                 'id' => $record->id,
                 'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
@@ -1276,12 +1297,12 @@ class Faculty extends Model
                     ? Carbon::parse($record->operational_time_out)->format('h:i A')
                     : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                 'hoursRendered' => (float) $record->total_hours_rendered,
-                'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
-                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
+                'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
+                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->actual_time_in) / 60))
                     : (float) $record->required_hours,
                 'lateMinutes' => $record->late_minutes,
                 'undertimeMinutes' => $record->undertime_minutes,
-                'status' => $record->status,
+                'status' => $displayStatus,
                 'remarks' => $record->remarks,
             ];
         })->values()->toArray();
