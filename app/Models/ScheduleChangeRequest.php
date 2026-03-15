@@ -124,10 +124,10 @@ class ScheduleChangeRequest extends Model
                          });
                   })
                   ->orWhereHas('scheduleDetail', function ($sdq) use ($search) {
-                      $sdq->where('subject_code', 'like', "%{$search}%")
+                      $sdq->where('course_code', 'like', "%{$search}%")
                           ->orWhere('subject_desc', 'like', "%{$search}%")
-                          ->orWhere('room', 'like', "%{$search}%")
-                          ->orWhere('day_of_week', 'like', "%{$search}%")
+                          ->orWhere('room_code', 'like', "%{$search}%")
+                          ->orWhere('day', 'like', "%{$search}%")
                           ->orWhereHas('schedule', function ($sq) use ($search) {
                               $sq->where('schedule_code', 'like', "%{$search}%");
                           });
@@ -152,11 +152,11 @@ class ScheduleChangeRequest extends Model
                 'faculty_code' => $faculty?->faculty_code ?? 'N/A',
                 'department' => $faculty?->department?->name ?? 'N/A',
                 'schedule_detail_id' => $req->schedule_detail_id,
-                'original_day' => $detail?->day_of_week ?? 'N/A',
-                'original_time_in' => $detail ? Carbon::parse($detail->time_in)->format('H:i') : '--:--',
-                'original_time_out' => $detail ? Carbon::parse($detail->time_out)->format('H:i') : '--:--',
-                'original_room' => $detail?->room ?? 'N/A',
-                'original_subject' => $detail?->subject_code ?? 'N/A',
+                'original_day' => $detail?->day ?? 'N/A',
+                'original_time_in' => $detail ? Carbon::parse($detail->start_time)->format('H:i') : '--:--',
+                'original_time_out' => $detail ? Carbon::parse($detail->end_time)->format('H:i') : '--:--',
+                'original_room' => $detail?->room_code ?? 'N/A',
+                'original_subject' => $detail?->course_code ?? 'N/A',
                 'original_subject_desc' => $detail?->subject_desc ?? null,
                 'schedule_code' => $detail?->schedule?->schedule_code ?? null,
                 'requested_day' => $req->requested_day_of_week,
@@ -215,11 +215,11 @@ class ScheduleChangeRequest extends Model
             return [
                 'id' => $req->id,
                 'schedule_detail_id' => $req->schedule_detail_id,
-                'original_day' => $detail?->day_of_week ?? 'N/A',
-                'original_time_in' => $detail ? Carbon::parse($detail->time_in)->format('H:i') : '--:--',
-                'original_time_out' => $detail ? Carbon::parse($detail->time_out)->format('H:i') : '--:--',
-                'original_room' => $detail?->room ?? 'N/A',
-                'original_subject' => $detail?->subject_code ?? 'N/A',
+                'original_day' => $detail?->day ?? 'N/A',
+                'original_time_in' => $detail ? Carbon::parse($detail->start_time)->format('H:i') : '--:--',
+                'original_time_out' => $detail ? Carbon::parse($detail->end_time)->format('H:i') : '--:--',
+                'original_room' => $detail?->room_code ?? 'N/A',
+                'original_subject' => $detail?->course_code ?? 'N/A',
                 'schedule_code' => $detail?->schedule?->schedule_code ?? null,
                 'requested_day' => $req->requested_day_of_week,
                 'requested_time_in' => Carbon::parse($req->requested_time_in)->format('H:i'),

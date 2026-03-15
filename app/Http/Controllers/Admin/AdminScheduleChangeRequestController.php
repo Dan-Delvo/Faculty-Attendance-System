@@ -210,7 +210,7 @@ class AdminScheduleChangeRequestController extends Controller
             if ($subj) {
                 $key = 'subj:' . strtolower($subj);
                 if (! $suggestions->contains('id', $key) && stripos($subj, $query) !== false) {
-                    $suggestions->push(['id' => $key, 'label' => 'Subject: ' . $subj, 'value' => $subj]);
+                    $suggestions->push(['id' => $key, 'label' => 'Course Code: ' . $subj, 'value' => $subj]);
                 }
             }
         }
