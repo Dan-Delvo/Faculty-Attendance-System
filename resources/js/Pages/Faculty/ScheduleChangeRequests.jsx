@@ -33,7 +33,6 @@ const formatTime12 = (time24) => {
 export default function ScheduleChangeRequests({ requests: initialRequests, scheduleDetails, filters }) {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
-    const [showDetailModal, setShowDetailModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [filterStatus, setFilterStatus] = useState(filters.status || '');
 
@@ -274,133 +273,12 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
             {!isFiltering && requestsData.data && requestsData.data.length > 0 ? (
                 <div className="space-y-4">
                     {requestsData.data.map((req) => (
-                        <div
+                        <RequestCard
                             key={req.id}
-                            className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
-                        >
-                            <div className="p-5">
-                                {/* Top row: subject + status */}
-                                <div className="flex items-start justify-between gap-3 mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-xs shadow-sm">
-                                            {req.original_day.slice(0, 3)}
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-white">
-                                                {req.original_subject}
-                                            </h3>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                {req.schedule_code && (
-                                                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-300/50 dark:ring-gray-600/50">
-                                                        {req.schedule_code}
-                                                    </span>
-                                                )}
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                    Submitted {req.created_at}
-                                                </p>
-                                                {(req.program_code || req.year_level || req.section_name) && (
-                                                    <p className="text-xs font-semibold text-amber-600 dark:text-amber-500">
-                                                        {[req.program_code, (req.year_level || req.section_name) ? [req.year_level, req.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${STATUS_STYLES[req.status]}`}>
-                                        {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                                    </span>
-                                </div>
-
-                                {/* Change comparison */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Original */}
-                                    <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
-                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
-                                        <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                                            <p><span className="font-semibold">Day:</span> {req.original_day}</p>
-                                            <p><span className="font-semibold">Time:</span> {req.original_time_in} – {req.original_time_out}</p>
-                                            <p><span className="font-semibold">Room:</span> {req.original_room}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Requested */}
-                                    <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
-                                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Requested Change</p>
-                                        <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-                                            <p><span className="font-semibold">Day:</span> {req.requested_day}</p>
-                                            <p><span className="font-semibold">Time:</span> {req.requested_time_in} – {req.requested_time_out}</p>
-                                            <p><span className="font-semibold">Room:</span> {req.requested_room || 'Same'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Extra info row */}
-                                <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                                    <span className="inline-flex items-center gap-1">
-                                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-                                        </svg>
-                                        Effective: {req.effective_date}
-                                    </span>
-                                </div>
-
-                                {/* Reason */}
-                                <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/20 border border-gray-100 dark:border-gray-700/40">
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Reason</p>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
-                                </div>
-
-                                {/* Supporting Document */}
-                                {req.supporting_document_url && (
-                                    <div className="mt-4">
-                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Document</p>
-                                        <div
-                                            onClick={() => { setPreviewModalUrl(req.supporting_document_url); setShowPreviewModal(true); }}
-                                            className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-full sm:w-48 h-32 flex items-center justify-center"
-                                        >
-                                            {req.supporting_document_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                                                <img src={req.supporting_document_url} alt="Supporting Document" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                                            ) : (
-                                                <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors">
-                                                    <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                                    </svg>
-                                                    <span className="text-sm font-semibold">View Document</span>
-                                                </div>
-                                            )}
-                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <svg className="h-8 w-8 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Review info (if reviewed) */}
-                                {req.review_remarks && (
-                                    <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
-                                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
-                                            Admin Remarks — {req.reviewed_at}
-                                        </p>
-                                        <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
-                                    </div>
-                                )}
-
-                                {/* Actions */}
-                                {req.status === 'pending' && (
-                                    <div className="mt-4 flex justify-end">
-                                        <button
-                                            onClick={() => { setSelectedRequest(req); setShowCancelModal(true); }}
-                                            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                        >
-                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                            </svg>
-                                            Cancel Request
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                            req={req}
+                            onCancel={() => { setSelectedRequest(req); setShowCancelModal(true); }}
+                            onPreviewDocument={(url) => { setPreviewModalUrl(url); setShowPreviewModal(true); }}
+                        />
                     ))}
 
                     {/* Pagination */}
@@ -686,7 +564,6 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
                 </div>
             </Modal>
 
-            {/* Document Preview Modal */}
             <Modal show={showPreviewModal} onClose={() => setShowPreviewModal(false)} maxWidth="2xl">
                 <div className="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-700">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">Document Preview</h2>
@@ -713,5 +590,177 @@ export default function ScheduleChangeRequests({ requests: initialRequests, sche
 
             <ScrollToTop />
         </AuthenticatedLayout>
+    );
+}
+
+/* ──────────────────────────────────────────────
+   Request Card Component
+   ────────────────────────────────────────────── */
+function RequestCard({ req, onCancel, onPreviewDocument }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const toggleExpand = () => {
+        setIsExpanded((prev) => !prev);
+    };
+
+    const handleActionClick = (event, callback) => {
+        event.stopPropagation();
+        callback();
+    };
+
+    return (
+        <div
+            onClick={toggleExpand}
+            onKeyDown={(e) => { if (e.key === 'Enter') { toggleExpand(); } else if (e.key === ' ') { e.preventDefault(); toggleExpand(); } }}
+            role="button"
+            tabIndex={0}
+            className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+        >
+            <div className="p-5">
+                {/* Top row: subject + status */}
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-xs shadow-sm">
+                            {req.original_day.slice(0, 3)}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-900 dark:text-white">
+                                {req.original_subject}
+                                {req.original_subject_desc && (
+                                    <span className="ml-1.5 text-xs font-normal text-gray-500 dark:text-gray-400">
+                                        {req.original_subject_desc}
+                                    </span>
+                                )}
+                            </h3>
+                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                {req.schedule_code && (
+                                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 ring-1 ring-inset ring-gray-300/50 dark:ring-gray-600/50">
+                                        {req.schedule_code}
+                                    </span>
+                                )}
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Submitted {req.created_at}
+                                </p>
+                                {(req.program_code || req.year_level || req.section_name) && (
+                                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                                        {[req.program_code, (req.year_level || req.section_name) ? [req.year_level, req.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${STATUS_STYLES[req.status]}`}>
+                            {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </span>
+                        <svg
+                            className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                        </svg>
+                    </div>
+                </div>
+
+                {/* Action hint + buttons */}
+                <div className="mt-4 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                        Click card to {isExpanded ? 'hide' : 'show'} details
+                    </p>
+                    {req.status === 'pending' && (
+                        <button
+                            onClick={(event) => handleActionClick(event, onCancel)}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                            Cancel Request
+                        </button>
+                    )}
+                </div>
+
+                <div className={`grid transition-all duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] mt-4' : 'grid-rows-[0fr]'}`}>
+                    <div className="overflow-hidden">
+                        {/* Change comparison */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Original */}
+                            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Official Schedule</p>
+                                <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                    <p><span className="font-semibold">Day:</span> {req.original_day}</p>
+                                    <p><span className="font-semibold">Time:</span> {req.original_time_in} – {req.original_time_out}</p>
+                                    <p><span className="font-semibold">Room:</span> {req.original_room}</p>
+                                </div>
+                            </div>
+
+                            {/* Requested */}
+                            <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
+                                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Requested Change</p>
+                                <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                    <p><span className="font-semibold">Day:</span> {req.requested_day}</p>
+                                    <p><span className="font-semibold">Time:</span> {req.requested_time_in} – {req.requested_time_out}</p>
+                                    <p><span className="font-semibold">Room:</span> {req.requested_room || 'Same'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Extra info row */}
+                        <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                            <span className="inline-flex items-center gap-1">
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                                Effective: {req.effective_date}
+                            </span>
+                        </div>
+
+                        {/* Reason */}
+                        <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/20 border border-gray-100 dark:border-gray-700/40">
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Reason</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
+                        </div>
+
+                        {/* Supporting Document */}
+                        {req.supporting_document_url && (
+                            <div className="mt-4">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Document</p>
+                                <div
+                                    onClick={(e) => { e.stopPropagation(); onPreviewDocument(req.supporting_document_url); }}
+                                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-full sm:w-48 h-32 flex items-center justify-center"
+                                >
+                                    {req.supporting_document_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                        <img src={req.supporting_document_url} alt="Supporting Document" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors">
+                                            <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                            </svg>
+                                            <span className="text-sm font-semibold">View Document</span>
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <svg className="h-8 w-8 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Review info (if reviewed) */}
+                        {req.review_remarks && (
+                            <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
+                                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
+                                    Admin Remarks — {req.reviewed_at}
+                                </p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">{req.review_remarks}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 }
