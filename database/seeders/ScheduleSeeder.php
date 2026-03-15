@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Faculty;
-use App\Models\InternalSchedule;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
 use App\Models\User;
@@ -14,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 class ScheduleSeeder extends Seeder
 {
     /**
-     * Seeds schedules from the external API and mirrors entries to internal schedules.
+     * Seeds official schedules from the external API only.
      */
     public function run(): void
     {
@@ -59,8 +58,6 @@ class ScheduleSeeder extends Seeder
                     ]
                 );
 
-                $internalWindowsByDay = [];
-
                 foreach (($item['schedules'] ?? []) as $entry) {
                     $startTime = (string) ($entry['start_time'] ?? '08:00:00');
                     $endTime = (string) ($entry['end_time'] ?? '11:00:00');
@@ -92,41 +89,6 @@ class ScheduleSeeder extends Seeder
                             'room_code'      => $entry['room_code'] ?? null,
                             'subject_desc'   => $entry['course_title'] ?? null,
                             'hours_required' => $hours,
-                        ]
-                    );
-
-                    $window = $internalWindowsByDay[$dayOfWeek] ?? [
-                        'time_in' => $startTime,
-                        'time_out' => $endTime,
-                        'required_hours' => 0,
-                    ];
-
-                    if (strtotime($startTime) < strtotime($window['time_in'])) {
-                        $window['time_in'] = $startTime;
-                    }
-
-                    if (strtotime($endTime) > strtotime($window['time_out'])) {
-                        $window['time_out'] = $endTime;
-                    }
-
-                    $window['required_hours'] += (int) $detail->hours_required;
-                    $internalWindowsByDay[$dayOfWeek] = $window;
-                }
-
-                foreach ($internalWindowsByDay as $dayOfWeek => $window) {
-                    InternalSchedule::updateOrCreate(
-                        [
-                            'schedule_id' => $schedule->id,
-                            'faculty_id' => $faculty->id,
-                            'day_of_week' => $dayOfWeek,
-                        ],
-                        [
-                            'device_time_in' => '2026-01-01 ' . $window['time_in'],
-                            'device_time_out' => '2026-01-01 ' . $window['time_out'],
-                            'is_operational' => true,
-                            'required_hours' => max(1, (int) $window['required_hours']),
-                            'sync_status' => 'synced',
-                            'synced_at' => now(),
                         ]
                     );
                 }
