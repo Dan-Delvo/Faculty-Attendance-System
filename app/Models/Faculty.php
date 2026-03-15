@@ -1270,9 +1270,8 @@ class Faculty extends Model
             // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
             if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
                 $displayStatus = 'Absent';
-            }
-
-            if (strtolower($displayStatus) === 'present' && $hasActualTimeIn) {
+            } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
+                // Override status if has actual time-in and has undertime or overtime
                 if ($isUndertime && $isOvertime) {
                     $displayStatus = 'UNDERTIME / OVERTIME';
                 } elseif ($isUndertime) {
