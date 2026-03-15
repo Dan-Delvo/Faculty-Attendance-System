@@ -604,7 +604,7 @@ class Faculty extends Model
                 });
 
                 $hasMovedInClass = $flatApprovedRequests->contains(function($req) use ($entry) {
-                    return $req->scheduleDetail && 
+                    return $req->scheduleDetail &&
                            $req->scheduleDetail->schedule_id === $entry->schedule_id &&
                            $req->requested_day_of_week === $entry->day_of_week &&
                            $req->requested_day_of_week !== $req->scheduleDetail->day;
@@ -647,7 +647,7 @@ class Faculty extends Model
 
                 $matched = $candidates->filter(function($c) use ($timeIn, $timeOut) {
                     $cStart = Carbon::parse($c['start']);
-                    return $cStart->format('H:i') >= $timeIn->format('H:i') && 
+                    return $cStart->format('H:i') >= $timeIn->format('H:i') &&
                            (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
                 });
 
@@ -1113,7 +1113,7 @@ class Faculty extends Model
 
             // Also check if any classes were moved INTO this block today from another day
             $hasMovedInClass = $flatApprovedRequests->contains(function($req) use ($entry) {
-                return $req->scheduleDetail && 
+                return $req->scheduleDetail &&
                        $req->scheduleDetail->schedule_id === $entry->schedule_id &&
                        $req->requested_day_of_week === $entry->day_of_week &&
                        $req->requested_day_of_week !== $req->scheduleDetail->day;
@@ -1186,7 +1186,7 @@ class Faculty extends Model
 
                     $matched = $candidates->filter(function($c) use ($timeIn, $timeOut) {
                         $cStart = Carbon::parse($c['start']);
-                        return $cStart->format('H:i') >= $timeIn->format('H:i') && 
+                        return $cStart->format('H:i') >= $timeIn->format('H:i') &&
                                (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
                     });
 
