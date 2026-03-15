@@ -16,6 +16,7 @@ class Schedule extends Model
 
     protected $fillable = [
         'faculty_id',
+        'external_faculty_id',
         'schedule_code',
         'academic_year',
         'semester',
@@ -30,6 +31,7 @@ class Schedule extends Model
     protected function casts(): array
     {
         return [
+            'external_faculty_id' => 'integer',
             'academic_year' => 'integer',
             'semester' => 'integer',
             'effective_from' => 'date:Y-m-d',
@@ -100,10 +102,10 @@ class Schedule extends Model
                          ->orWhereRaw("CONCAT(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name) LIKE ?", ["%{$search}%"]);
                   })
                   ->orWhereHas('scheduleDetails', function ($dq) use ($search) {
-                      $dq->where('subject_code', 'like', "%{$search}%")
+                      $dq->where('course_code', 'like', "%{$search}%")
                          ->orWhere('subject_desc', 'like', "%{$search}%")
-                         ->orWhere('room', 'like', "%{$search}%")
-                         ->orWhere('day_of_week', 'like', "%{$search}%");
+                         ->orWhere('room_code', 'like', "%{$search}%")
+                         ->orWhere('day', 'like', "%{$search}%");
                   });
             });
         }
@@ -158,12 +160,12 @@ class Schedule extends Model
                 'details'        => $schedule->scheduleDetails->map(function (ScheduleDetail $d) {
                     return [
                         'id'             => $d->id,
-                        'day_of_week'    => $d->day_of_week,
-                        'time_in'        => Carbon::parse($d->time_in)->format('H:i'),
-                        'time_out'       => Carbon::parse($d->time_out)->format('H:i'),
-                        'subject_code'   => $d->subject_code,
+                        'day'            => $d->day,
+                        'start_time'     => Carbon::parse($d->start_time)->format('H:i'),
+                        'end_time'       => Carbon::parse($d->end_time)->format('H:i'),
+                        'course_code'    => $d->course_code,
                         'subject_desc'   => $d->subject_desc,
-                        'room'           => $d->room,
+                        'room_code'      => $d->room_code,
                         'hours_required' => $d->hours_required,
                     ];
                 })->toArray(),
@@ -197,8 +199,8 @@ class Schedule extends Model
                          ->orWhereRaw("CONCAT(last_name, ', ', first_name) LIKE ?", ["%{$query}%"]);
                   })
                   ->orWhereHas('scheduleDetails', function ($dq) use ($query) {
-                      $dq->where('subject_code', 'like', "%{$query}%")
-                         ->orWhere('room', 'like', "%{$query}%");
+                             $dq->where('course_code', 'like', "%{$query}%")
+                                 ->orWhere('room_code', 'like', "%{$query}%");
                   });
             })
             ->limit(8)

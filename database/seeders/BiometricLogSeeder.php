@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 class BiometricLogSeeder extends Seeder
 {
     /**
-     * 18 weeks × 15 faculty × 2 logs (IN + OUT) = 540 biometric entries.
+     * 18 weeks × N faculty × 2 logs (IN + OUT).
      *
      * Attendance day : Monday of each week (matching the Monday ScheduleDetail).
      * Scheduled slot : 08:00 – 11:00.
@@ -63,6 +63,8 @@ class BiometricLogSeeder extends Seeder
             $faculties = Faculty::orderBy('id')->get();
 
             foreach ($faculties as $fi => $faculty) {
+                $offsetIndex = $fi % count($checkInBase);
+
                 foreach ($mondays as $wi => $monday) {
 
                     // --- compute batch reference ---
@@ -71,11 +73,11 @@ class BiometricLogSeeder extends Seeder
 
                     // --- check-in time ---
                     $weekLate   = ($wi % 4 === 3) ? 20 : 0;                     // every 4th week
-                    $inOffset   = $checkInBase[$fi] + $weekLate;
+                    $inOffset   = $checkInBase[$offsetIndex] + $weekLate;
                     $checkIn    = Carbon::parse($monday . ' 08:00:00')->addMinutes($inOffset);
 
                     // --- check-out time ---
-                    $checkOut   = Carbon::parse($monday . ' 11:00:00')->addMinutes($checkOutBase[$fi]);
+                    $checkOut   = Carbon::parse($monday . ' 11:00:00')->addMinutes($checkOutBase[$offsetIndex]);
 
                     // Skip if record already exists (idempotent re-run)
                     $exists = BiometricLog::where('biometric_id', $faculty->biometric_id)

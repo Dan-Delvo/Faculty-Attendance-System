@@ -8,6 +8,7 @@ enum Role: string
     case SuperAdmin = 'super_admin';
     case Admin      = 'admin';
     case HrStaff    = 'hr_staff';
+    case HeadAcademicProgram = 'head_academic_program';
 
     // ── Web-guard roles ────────────────────────────────────────────────────
     case Faculty    = 'faculty';
@@ -36,6 +37,7 @@ enum Role: string
             self::SuperAdmin => 'Super Admin',
             self::Admin      => 'Admin',
             self::HrStaff    => 'HR Staff',
+            self::HeadAcademicProgram => 'Head of Academic Program',
             self::Faculty    => 'Faculty',
         };
     }
@@ -44,10 +46,11 @@ enum Role: string
     public function permissions(): array
     {
         return match ($this) {
-            self::SuperAdmin => Permission::adminPermissions(),
-            self::Admin      => Permission::adminPermissions(),
-            self::HrStaff    => Permission::hrStaffPermissions(),
-            self::Faculty    => Permission::webPermissions(),
+            self::SuperAdmin            => Permission::adminPermissions(),
+            self::Admin                 => Permission::adminPermissions(),
+            self::HrStaff               => Permission::hrStaffPermissions(),
+            self::HeadAcademicProgram   => Permission::headAcademicProgramPermissions(),
+            self::Faculty               => Permission::webPermissions(),
         };
     }
 }

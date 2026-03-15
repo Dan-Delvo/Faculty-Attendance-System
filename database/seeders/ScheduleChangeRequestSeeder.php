@@ -56,7 +56,7 @@ class ScheduleChangeRequestSeeder extends Seeder
                 }
 
                 $details = ScheduleDetail::where('schedule_id', $schedule->id)
-                    ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+                    ->orderByRaw("FIELD(day, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
                     ->get();
 
                 if ($details->isEmpty()) {
@@ -70,12 +70,12 @@ class ScheduleChangeRequestSeeder extends Seeder
                     $detail = $details[$i % $details->count()];
 
                     // Pick a different day than the current one
-                    $currentDay = $detail->day_of_week;
+                    $currentDay = $detail->day;
                     $availableDays = array_values(array_filter($alternateDays, fn($d) => $d !== $currentDay));
                     $requestedDay = $availableDays[$requestIndex % count($availableDays)];
 
                     // Shift the time by 1-2 hours
-                    $originalIn  = Carbon::parse($detail->time_in);
+                    $originalIn  = Carbon::parse($detail->start_time);
                     $shift       = ($i % 2 === 0) ? 1 : 2;
                     $requestedIn = $originalIn->copy()->addHours($shift)->format('H:i');
                     $requestedOut = $originalIn->copy()->addHours($shift + 3)->format('H:i');

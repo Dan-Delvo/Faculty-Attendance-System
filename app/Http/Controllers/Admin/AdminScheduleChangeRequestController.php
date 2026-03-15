@@ -69,8 +69,8 @@ class AdminScheduleChangeRequestController extends Controller
                 $detail = ScheduleDetail::findOrFail($locked->schedule_detail_id);
 
                 // Preserve the existing date part from the stored timestamps and apply the requested times
-                $existingTimeIn  = Carbon::parse($detail->time_in);
-                $existingTimeOut = Carbon::parse($detail->time_out);
+                $existingTimeIn  = Carbon::parse($detail->start_time);
+                $existingTimeOut = Carbon::parse($detail->end_time);
 
                 $timeIn  = (clone $existingTimeIn)->setTimeFromTimeString($locked->requested_time_in);
                 $timeOut = (clone $existingTimeOut)->setTimeFromTimeString($locked->requested_time_out);
@@ -178,7 +178,7 @@ class AdminScheduleChangeRequestController extends Controller
                 })->orWhereHas('scheduleDetail.schedule', function ($sq) use ($query) {
                     $sq->where('schedule_code', 'like', "%{$query}%");
                 })->orWhereHas('scheduleDetail', function ($dq) use ($query) {
-                    $dq->where('subject_code', 'like', "%{$query}%");
+                    $dq->where('course_code', 'like', "%{$query}%");
                 });
             })
             ->limit(20)
@@ -206,11 +206,11 @@ class AdminScheduleChangeRequestController extends Controller
                 }
             }
 
-            $subj = $detail?->subject_code;
+            $subj = $detail?->course_code;
             if ($subj) {
                 $key = 'subj:' . strtolower($subj);
                 if (! $suggestions->contains('id', $key) && stripos($subj, $query) !== false) {
-                    $suggestions->push(['id' => $key, 'label' => 'Subject: ' . $subj, 'value' => $subj]);
+                    $suggestions->push(['id' => $key, 'label' => 'Course Code: ' . $subj, 'value' => $subj]);
                 }
             }
         }

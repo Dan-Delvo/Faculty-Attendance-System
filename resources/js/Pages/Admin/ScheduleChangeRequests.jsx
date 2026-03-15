@@ -250,7 +250,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                         </svg>
                         <input
                             type="text"
-                            placeholder="Search by faculty name, schedule code, subject, room, department, reason…"
+                            placeholder="Search by faculty name, schedule code, course code, room code, department, reason…"
                             value={searchInput}
                             onChange={(e) => handleSearchInput(e.target.value)}
                             onFocus={() => searchInput.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}

@@ -59,12 +59,12 @@ class AdminScheduleController extends Controller
             'schedule_type'   => 'required|in:fixed,flexible',
             'notes'           => 'nullable|string|max:1000',
             'details'         => 'required|array|min:1',
-            'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
-            'details.*.time_in'       => 'required|date_format:H:i',
-            'details.*.time_out'      => 'required|date_format:H:i',
-            'details.*.subject_code'  => 'required|string|max:50|regex:/\S/',
+            'details.*.day'           => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'details.*.start_time'    => 'required|date_format:H:i',
+            'details.*.end_time'      => 'required|date_format:H:i',
+            'details.*.course_code'   => 'required|string|max:50|regex:/\S/',
             'details.*.subject_desc'  => 'nullable|string|max:255',
-            'details.*.room'          => 'required|string|max:100|regex:/\S/',
+            'details.*.room_code'     => 'required|string|max:100|regex:/\S/',
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
@@ -72,13 +72,13 @@ class AdminScheduleController extends Controller
         $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
 
         foreach ($validated['details'] as $index => $detail) {
-            $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
-            $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+            $timeIn = Carbon::createFromFormat('H:i', $detail['start_time']);
+            $timeOut = Carbon::createFromFormat('H:i', $detail['end_time']);
 
             if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
                 return back()
                     ->withErrors([
-                        "details.$index.time_in" => 'The time in must be between 07:00 AM and 09:00 PM.',
+                        "details.$index.start_time" => 'The start time must be between 07:00 AM and 09:00 PM.',
                     ])
                     ->withInput();
             }
@@ -86,7 +86,7 @@ class AdminScheduleController extends Controller
             if ($timeOut->lessThan($minAllowedTime) || $timeOut->greaterThan($maxAllowedTime)) {
                 return back()
                     ->withErrors([
-                        "details.$index.time_out" => 'The time out must be between 07:00 AM and 09:00 PM.',
+                        "details.$index.end_time" => 'The end time must be between 07:00 AM and 09:00 PM.',
                     ])
                     ->withInput();
             }
@@ -94,7 +94,7 @@ class AdminScheduleController extends Controller
             if ($timeOut->lessThanOrEqualTo($timeIn)) {
                 return back()
                     ->withErrors([
-                        "details.$index.time_out" => 'The time out must be after the time in.',
+                        "details.$index.end_time" => 'The end time must be after the start time.',
                     ])
                     ->withInput();
             }
@@ -124,12 +124,12 @@ class AdminScheduleController extends Controller
 
                 foreach ($validated['details'] as $detail) {
                     $schedule->scheduleDetails()->create([
-                        'day_of_week'    => $detail['day_of_week'],
-                        'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
-                        'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
-                        'subject_code'   => $detail['subject_code'] ?? null,
+                        'day'            => $detail['day'],
+                        'start_time'     => Carbon::createFromFormat('H:i', $detail['start_time'])->format('Y-m-d H:i:s'),
+                        'end_time'       => Carbon::createFromFormat('H:i', $detail['end_time'])->format('Y-m-d H:i:s'),
+                        'course_code'    => $detail['course_code'] ?? null,
                         'subject_desc'   => $detail['subject_desc'] ?? null,
-                        'room'           => $detail['room'] ?? null,
+                        'room_code'      => $detail['room_code'] ?? null,
                         'hours_required' => $detail['hours_required'],
                     ]);
                 }
@@ -160,12 +160,12 @@ class AdminScheduleController extends Controller
             'notes'           => 'nullable|string|max:1000',
             'details'         => 'required|array|min:1',
             'details.*.id'            => 'nullable|integer|min:1',
-            'details.*.day_of_week'   => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
-            'details.*.time_in'       => 'required|date_format:H:i',
-            'details.*.time_out'      => 'required|date_format:H:i',
-            'details.*.subject_code'  => 'required|string|max:50|regex:/\S/',
+            'details.*.day'           => 'required|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+            'details.*.start_time'    => 'required|date_format:H:i',
+            'details.*.end_time'      => 'required|date_format:H:i',
+            'details.*.course_code'   => 'required|string|max:50|regex:/\S/',
             'details.*.subject_desc'  => 'nullable|string|max:255',
-            'details.*.room'          => 'required|string|max:100|regex:/\S/',
+            'details.*.room_code'     => 'required|string|max:100|regex:/\S/',
             'details.*.hours_required' => 'required|integer|min:1|max:12',
         ]);
 
@@ -173,13 +173,13 @@ class AdminScheduleController extends Controller
         $maxAllowedTime = Carbon::createFromFormat('H:i', '21:00');
 
         foreach ($validated['details'] as $index => $detail) {
-            $timeIn = Carbon::createFromFormat('H:i', $detail['time_in']);
-            $timeOut = Carbon::createFromFormat('H:i', $detail['time_out']);
+            $timeIn = Carbon::createFromFormat('H:i', $detail['start_time']);
+            $timeOut = Carbon::createFromFormat('H:i', $detail['end_time']);
 
             if ($timeIn->lessThan($minAllowedTime) || $timeIn->greaterThan($maxAllowedTime)) {
                 return back()
                     ->withErrors([
-                        "details.$index.time_in" => 'The time in must be between 07:00 AM and 09:00 PM.',
+                        "details.$index.start_time" => 'The start time must be between 07:00 AM and 09:00 PM.',
                     ])
                     ->withInput();
             }
@@ -187,7 +187,7 @@ class AdminScheduleController extends Controller
             if ($timeOut->lessThan($minAllowedTime) || $timeOut->greaterThan($maxAllowedTime)) {
                 return back()
                     ->withErrors([
-                        "details.$index.time_out" => 'The time out must be between 07:00 AM and 09:00 PM.',
+                        "details.$index.end_time" => 'The end time must be between 07:00 AM and 09:00 PM.',
                     ])
                     ->withInput();
             }
@@ -195,7 +195,7 @@ class AdminScheduleController extends Controller
             if ($timeOut->lessThanOrEqualTo($timeIn)) {
                 return back()
                     ->withErrors([
-                        "details.$index.time_out" => 'The time out must be after the time in.',
+                        "details.$index.end_time" => 'The end time must be after the start time.',
                     ])
                     ->withInput();
             }
@@ -240,12 +240,12 @@ class AdminScheduleController extends Controller
 
                 foreach ($validated['details'] as $detail) {
                     $payload = [
-                        'day_of_week'    => $detail['day_of_week'],
-                        'time_in'        => Carbon::createFromFormat('H:i', $detail['time_in'])->format('Y-m-d H:i:s'),
-                        'time_out'       => Carbon::createFromFormat('H:i', $detail['time_out'])->format('Y-m-d H:i:s'),
-                        'subject_code'   => $detail['subject_code'],
+                        'day'            => $detail['day'],
+                        'start_time'     => Carbon::createFromFormat('H:i', $detail['start_time'])->format('Y-m-d H:i:s'),
+                        'end_time'       => Carbon::createFromFormat('H:i', $detail['end_time'])->format('Y-m-d H:i:s'),
+                        'course_code'    => $detail['course_code'],
                         'subject_desc'   => $detail['subject_desc'] ?? null,
-                        'room'           => $detail['room'],
+                        'room_code'      => $detail['room_code'],
                         'hours_required' => $detail['hours_required'],
                     ];
 
@@ -265,14 +265,14 @@ class AdminScheduleController extends Controller
                     // When creating a new detail, check for a soft-deleted row with the
                     // same schedule/day/time so we restore+update it instead of inserting
                     // a new row that would violate the unique_schedule_detail constraint.
-                    $timeIn  = Carbon::createFromFormat('H:i', $detail['time_in'])->format('H:i:s');
-                    $timeOut = Carbon::createFromFormat('H:i', $detail['time_out'])->format('H:i:s');
+                    $timeIn  = Carbon::createFromFormat('H:i', $detail['start_time'])->format('H:i:s');
+                    $timeOut = Carbon::createFromFormat('H:i', $detail['end_time'])->format('H:i:s');
 
                     $softDeleted = ScheduleDetail::onlyTrashed()
                         ->where('schedule_id', $schedule->id)
-                        ->where('day_of_week', $payload['day_of_week'])
-                        ->whereRaw('TIME(time_in) = ?', [$timeIn])
-                        ->whereRaw('TIME(time_out) = ?', [$timeOut])
+                        ->where('day', $payload['day'])
+                        ->whereRaw('TIME(start_time) = ?', [$timeIn])
+                        ->whereRaw('TIME(end_time) = ?', [$timeOut])
                         ->first();
 
                     if ($softDeleted) {
@@ -351,21 +351,21 @@ class AdminScheduleController extends Controller
         // A faculty member cannot teach two classes simultaneously, regardless of room.
         for ($i = 0; $i < $detailCount; $i++) {
             for ($j = $i + 1; $j < $detailCount; $j++) {
-                if ($validated['details'][$i]['day_of_week'] !== $validated['details'][$j]['day_of_week']) {
+                if ($validated['details'][$i]['day'] !== $validated['details'][$j]['day']) {
                     continue;
                 }
 
-                $iStart = Carbon::createFromFormat('H:i', $validated['details'][$i]['time_in'])->format('H:i:s');
-                $iEnd   = Carbon::createFromFormat('H:i', $validated['details'][$i]['time_out'])->format('H:i:s');
-                $jStart = Carbon::createFromFormat('H:i', $validated['details'][$j]['time_in'])->format('H:i:s');
-                $jEnd   = Carbon::createFromFormat('H:i', $validated['details'][$j]['time_out'])->format('H:i:s');
+                $iStart = Carbon::createFromFormat('H:i', $validated['details'][$i]['start_time'])->format('H:i:s');
+                $iEnd   = Carbon::createFromFormat('H:i', $validated['details'][$i]['end_time'])->format('H:i:s');
+                $jStart = Carbon::createFromFormat('H:i', $validated['details'][$j]['start_time'])->format('H:i:s');
+                $jEnd   = Carbon::createFromFormat('H:i', $validated['details'][$j]['end_time'])->format('H:i:s');
 
                 if ($iStart < $jEnd && $iEnd > $jStart) {
-                    if (! isset($errors["details.$i.time_in"])) {
-                        $errors["details.$i.time_in"] = 'Entry #' . ($i + 1) . ' overlaps with entry #' . ($j + 1) . ' on ' . $validated['details'][$i]['day_of_week'] . '.';
+                    if (! isset($errors["details.$i.start_time"])) {
+                        $errors["details.$i.start_time"] = 'Entry #' . ($i + 1) . ' overlaps with entry #' . ($j + 1) . ' on ' . $validated['details'][$i]['day'] . '.';
                     }
-                    if (! isset($errors["details.$j.time_in"])) {
-                        $errors["details.$j.time_in"] = 'Entry #' . ($j + 1) . ' overlaps with entry #' . ($i + 1) . ' on ' . $validated['details'][$j]['day_of_week'] . '.';
+                    if (! isset($errors["details.$j.start_time"])) {
+                        $errors["details.$j.start_time"] = 'Entry #' . ($j + 1) . ' overlaps with entry #' . ($i + 1) . ' on ' . $validated['details'][$j]['day'] . '.';
                     }
                 }
             }
@@ -373,45 +373,45 @@ class AdminScheduleController extends Controller
 
         for ($i = 0; $i < $detailCount; $i++) {
             $currentDetail = $validated['details'][$i];
-            $currentRoom = trim((string) ($currentDetail['room'] ?? ''));
+            $currentRoom = trim((string) ($currentDetail['room_code'] ?? ''));
 
             if ($currentRoom === '') {
                 continue;
             }
 
-            $currentStart = Carbon::createFromFormat('H:i', $currentDetail['time_in'])->format('H:i:s');
-            $currentEnd = Carbon::createFromFormat('H:i', $currentDetail['time_out'])->format('H:i:s');
+            $currentStart = Carbon::createFromFormat('H:i', $currentDetail['start_time'])->format('H:i:s');
+            $currentEnd = Carbon::createFromFormat('H:i', $currentDetail['end_time'])->format('H:i:s');
 
             for ($j = $i + 1; $j < $detailCount; $j++) {
                 $compareDetail = $validated['details'][$j];
-                $compareRoom = trim((string) ($compareDetail['room'] ?? ''));
+                $compareRoom = trim((string) ($compareDetail['room_code'] ?? ''));
 
                 if ($compareRoom === '' || strcasecmp($currentRoom, $compareRoom) !== 0) {
                     continue;
                 }
 
-                if ($currentDetail['day_of_week'] !== $compareDetail['day_of_week']) {
+                if ($currentDetail['day'] !== $compareDetail['day']) {
                     continue;
                 }
 
-                $compareStart = Carbon::createFromFormat('H:i', $compareDetail['time_in'])->format('H:i:s');
-                $compareEnd = Carbon::createFromFormat('H:i', $compareDetail['time_out'])->format('H:i:s');
+                $compareStart = Carbon::createFromFormat('H:i', $compareDetail['start_time'])->format('H:i:s');
+                $compareEnd = Carbon::createFromFormat('H:i', $compareDetail['end_time'])->format('H:i:s');
 
                 if ($currentStart < $compareEnd && $currentEnd > $compareStart) {
-                    $errors["details.$i.room"] = "Room {$currentRoom} has a conflict with entry #" . ($j + 1) . ' on ' . $currentDetail['day_of_week'] . '.';
-                    $errors["details.$j.room"] = "Room {$compareRoom} has a conflict with entry #" . ($i + 1) . ' on ' . $compareDetail['day_of_week'] . '.';
+                    $errors["details.$i.room_code"] = "Room {$currentRoom} has a conflict with entry #" . ($j + 1) . ' on ' . $currentDetail['day'] . '.';
+                    $errors["details.$j.room_code"] = "Room {$compareRoom} has a conflict with entry #" . ($i + 1) . ' on ' . $compareDetail['day'] . '.';
                 }
             }
 
-            if (isset($errors["details.$i.room"])) {
+            if (isset($errors["details.$i.room_code"])) {
                 continue;
             }
 
             $roomConflictQuery = ScheduleDetail::query()
-                ->where('day_of_week', $currentDetail['day_of_week'])
-                ->whereNotNull('room')
-                ->whereRaw('LOWER(TRIM(room)) = ?', [mb_strtolower($currentRoom)])
-                ->whereRaw('TIME(time_in) < ? AND TIME(time_out) > ?', [$currentEnd, $currentStart])
+                ->where('day', $currentDetail['day'])
+                ->whereNotNull('room_code')
+                ->whereRaw('LOWER(TRIM(room_code)) = ?', [mb_strtolower($currentRoom)])
+                ->whereRaw('TIME(start_time) < ? AND TIME(end_time) > ?', [$currentEnd, $currentStart])
                 ->whereHas('schedule', function ($query) use ($validated, $currentSchedule) {
                     $query->whereDate('effective_from', '<=', $validated['effective_until'])
                         ->whereDate('effective_until', '>=', $validated['effective_from']);
@@ -425,7 +425,7 @@ class AdminScheduleController extends Controller
 
             if ($roomConflictQuery) {
                 $conflictingScheduleCode = $roomConflictQuery->schedule?->schedule_code ?? 'another schedule';
-                $errors["details.$i.room"] = "Room {$currentRoom} is already occupied on {$currentDetail['day_of_week']} for the selected time range (conflict with {$conflictingScheduleCode}).";
+                $errors["details.$i.room_code"] = "Room {$currentRoom} is already occupied on {$currentDetail['day']} for the selected time range (conflict with {$conflictingScheduleCode}).";
             }
         }
 

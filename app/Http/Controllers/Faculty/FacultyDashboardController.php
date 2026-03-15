@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Faculty;
 
 use App\Http\Controllers\Controller;
-use App\Models\AttendanceRecord;
 use App\Models\Faculty;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
@@ -23,7 +22,7 @@ class FacultyDashboardController extends Controller
         $faculty = $request->user()->faculty;
 
         // Fallback for users without a faculty profile
-        if (! $faculty) {
+        if (!$faculty) {
             return Inertia::render('Faculty/Dashboard', [
                 'stats' => [],
                 'todaySchedule' => [],
@@ -66,8 +65,8 @@ class FacultyDashboardController extends Controller
             'currentDate' => Carbon::now()->format('l, F j, Y'),
             'greeting' => $this->getGreeting(),
             'filters' => [
-                'range' => $range,
-            ],
+                'range' => $range
+            ]
         ]);
     }
 
@@ -77,9 +76,8 @@ class FacultyDashboardController extends Controller
     public function getAnalyticsData(Request $request)
     {
         $faculty = $request->user()->faculty;
-        if (! $faculty) {
+        if (!$faculty)
             return response()->json([], 404);
-        }
 
         $range = $request->query('range', 'Last 6 months');
         $months = match ($range) {
@@ -99,6 +97,7 @@ class FacultyDashboardController extends Controller
      * Display the full biometric logs page.
      */
 
+
     /**
      * Display the schedule & attendance page.
      */
@@ -106,7 +105,7 @@ class FacultyDashboardController extends Controller
     {
         $faculty = $request->user()->faculty;
 
-        if (! $faculty) {
+        if (!$faculty) {
             return Inertia::render('Faculty/Schedule', [
                 'weeklySchedule' => [],
                 'internalSchedule' => [],
@@ -132,7 +131,7 @@ class FacultyDashboardController extends Controller
         $attendanceLogs = [];
 
         if ($faculty) {
-            $records = AttendanceRecord::where('faculty_id', $faculty->id)
+            $records = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
                 ->with(['scheduleDetail', 'justifications'])
                 ->orderBy('attendance_date', 'desc')
                 ->get();
@@ -153,7 +152,7 @@ class FacultyDashboardController extends Controller
                 $totalMinutes = (int) round((float) $record->total_hours_rendered * 60);
                 $hours = intdiv($totalMinutes, 60);
                 $mins = $totalMinutes % 60;
-                $totalHours = ($hours > 0 ? $hours.'h ' : '').$mins.'m';
+                $totalHours = ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm';
 
                 // Find undertime justification if any
                 $undertimeJustification = $record->justifications
@@ -207,7 +206,7 @@ class FacultyDashboardController extends Controller
                     'night_minutes' => $record->night_minutes ?? 0,
                     'overtime_night_minutes' => $record->overtime_night_minutes ?? 0,
                     'required_hours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
-                        ? (float) max(0, round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60, 2))
+                        ? (float) max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
                         : (float) $record->required_hours,
                     'total_hours' => $totalHours,
                     'online_attendance' => false,
@@ -247,20 +246,19 @@ class FacultyDashboardController extends Controller
         ]);
 
         $faculty = $request->user()->faculty;
-        if (! $faculty) {
+        if (!$faculty)
             abort(403);
-        }
 
-        $record = AttendanceRecord::where('faculty_id', $faculty->id)
+        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
             ->findOrFail($id);
 
         // Check if there is actually undertime (dynamically check if DB is out of sync)
         $hasUndertime = ($record->undertime_minutes > 0);
-        if (! $hasUndertime && $record->actual_time_out && $record->operational_time_out) {
+        if (!$hasUndertime && $record->actual_time_out && $record->operational_time_out) {
             $hasUndertime = $record->actual_time_out->lt($record->operational_time_out);
         }
 
-        if (! $hasUndertime) {
+        if (!$hasUndertime) {
             return back()->with('error', 'No undertime to justify for this record.');
         }
 
@@ -303,23 +301,23 @@ class FacultyDashboardController extends Controller
         ]);
 
         $faculty = $request->user()->faculty;
-        if (! $faculty) {
+        if (!$faculty)
             abort(403);
-        }
 
-        $record = AttendanceRecord::where('faculty_id', $faculty->id)
+        $record = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
             ->findOrFail($id);
 
         // Check if there is actually a missing time in or out
-        $isMissing = ! $record->actual_time_in || ! $record->actual_time_out
-            || $record->actual_time_in->format('H:i:s') === '00:00:00'; // Assuming --:-- might be stored as midnight in some cases, but actually controller shows format check
+        $isMissing = !$record->actual_time_in || !$record->actual_time_out
+            || $record->actual_time_in->format('H:i:s') === '00:00:00' // Assuming --:-- might be stored as midnight in some cases, but actually controller shows format check
+        ;
 
         // Re-check based on what we send to frontend
         $actualIn = $record->actual_time_in ? $record->actual_time_in->format('h:i A') : '--:--';
         $actualOut = $record->actual_time_out ? $record->actual_time_out->format('h:i A') : '--:--';
         $isMissing = ($actualIn === '--:--' || $actualOut === '--:--');
 
-        if (! $isMissing) {
+        if (!$isMissing) {
             return back()->with('error', 'No missing time in or out to justify for this record.');
         }
 

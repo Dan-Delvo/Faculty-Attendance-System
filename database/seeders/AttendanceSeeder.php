@@ -47,7 +47,7 @@ class AttendanceSeeder extends Seeder
 
                 /** @var ScheduleDetail $mondayDetail */
                 $mondayDetail = ScheduleDetail::where('schedule_id', $schedule->id)
-                    ->where('day_of_week', 'Monday')
+                    ->where('day', 'Monday')
                     ->first();
 
                 /** @var InternalSchedule $mondayInternal */
@@ -61,8 +61,8 @@ class AttendanceSeeder extends Seeder
                 }
 
                 // Extract clock times from schedule detail (date part is irrelevant)
-                $schedTimeIn  = Carbon::parse($mondayDetail->time_in)->format('H:i:s');  // "08:00:00"
-                $schedTimeOut = Carbon::parse($mondayDetail->time_out)->format('H:i:s'); // "11:00:00"
+                $schedTimeIn  = Carbon::parse($mondayDetail->start_time)->format('H:i:s');  // "08:00:00"
+                $schedTimeOut = Carbon::parse($mondayDetail->end_time)->format('H:i:s'); // "11:00:00"
 
                 /* ── Fetch all biometric logs for this faculty, by date ─────── */
                 $logsByDate = BiometricLog::where('biometric_id', $faculty->biometric_id)

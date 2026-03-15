@@ -17,12 +17,12 @@ import {
 } from '@/Constants/admin';
 
 const emptyDetail = {
-    day_of_week: 'Monday',
-    time_in: '08:00',
-    time_out: '09:00',
-    subject_code: '',
+    day: 'Monday',
+    start_time: '08:00',
+    end_time: '09:00',
+    course_code: '',
     subject_desc: '',
-    room: '',
+    room_code: '',
     hours_required: 1,
 };
 
@@ -267,42 +267,42 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = {};
 
         form.details.forEach((detail, index) => {
-            const subjectCode = (detail.subject_code ?? '').trim();
-            const room = (detail.room ?? '').trim();
-            const timeInMinutes = toMinutes(detail.time_in);
-            const timeOutMinutes = toMinutes(detail.time_out);
+            const subjectCode = (detail.course_code ?? '').trim();
+            const room = (detail.room_code ?? '').trim();
+            const timeInMinutes = toMinutes(detail.start_time);
+            const timeOutMinutes = toMinutes(detail.end_time);
 
             if (!subjectCode) {
-                localErrors[`details.${index}.subject_code`] = 'Subject Code is required.';
+                localErrors[`details.${index}.course_code`] = 'Course Code is required.';
             }
 
             if (!room) {
-                localErrors[`details.${index}.room`] = 'Room is required.';
+                localErrors[`details.${index}.room_code`] = 'Room Code is required.';
             }
 
             if (timeInMinutes === null || timeOutMinutes === null) {
                 if (timeInMinutes === null) {
-                    localErrors[`details.${index}.time_in`] = 'Time In is required and must be a valid time.';
+                    localErrors[`details.${index}.start_time`] = 'Start Time is required and must be a valid time.';
                 }
 
                 if (timeOutMinutes === null) {
-                    localErrors[`details.${index}.time_out`] = 'Time Out is required and must be a valid time.';
+                    localErrors[`details.${index}.end_time`] = 'End Time is required and must be a valid time.';
                 }
 
                 return;
             }
 
             if (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes) {
-                localErrors[`details.${index}.time_in`] = 'Time In must be between 07:00 AM and 09:00 PM.';
+                localErrors[`details.${index}.start_time`] = 'Start Time must be between 07:00 AM and 09:00 PM.';
             }
 
             if (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes) {
-                localErrors[`details.${index}.time_out`] = 'Time Out must be between 07:00 AM and 09:00 PM.';
+                localErrors[`details.${index}.end_time`] = 'End Time must be between 07:00 AM and 09:00 PM.';
                 return;
             }
 
             if (timeOutMinutes <= timeInMinutes) {
-                localErrors[`details.${index}.time_out`] = 'Time Out must be later than Time In.';
+                localErrors[`details.${index}.end_time`] = 'End Time must be later than Start Time.';
             }
         });
 
@@ -310,19 +310,19 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const count = form.details.length;
         for (let i = 0; i < count; i++) {
             for (let j = i + 1; j < count; j++) {
-                if (form.details[i].day_of_week !== form.details[j].day_of_week) continue;
-                const iStart = toMinutes(form.details[i].time_in);
-                const iEnd   = toMinutes(form.details[i].time_out);
-                const jStart = toMinutes(form.details[j].time_in);
-                const jEnd   = toMinutes(form.details[j].time_out);
+                if (form.details[i].day !== form.details[j].day) continue;
+                const iStart = toMinutes(form.details[i].start_time);
+                const iEnd   = toMinutes(form.details[i].end_time);
+                const jStart = toMinutes(form.details[j].start_time);
+                const jEnd   = toMinutes(form.details[j].end_time);
                 if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
                 if (iStart >= iEnd || jStart >= jEnd) continue;
                 if (iStart < jEnd && iEnd > jStart) {
-                    if (!localErrors[`details.${i}.time_in`]) {
-                        localErrors[`details.${i}.time_in`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${form.details[i].day_of_week}.`;
+                    if (!localErrors[`details.${i}.start_time`]) {
+                        localErrors[`details.${i}.start_time`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${form.details[i].day}.`;
                     }
-                    if (!localErrors[`details.${j}.time_in`]) {
-                        localErrors[`details.${j}.time_in`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${form.details[j].day_of_week}.`;
+                    if (!localErrors[`details.${j}.start_time`]) {
+                        localErrors[`details.${j}.start_time`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${form.details[j].day}.`;
                     }
                 }
             }
@@ -764,11 +764,11 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                 <div className="space-y-2">
                                     {selectedSchedule.details.map((d, i) => (
                                         <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
-                                            <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day_of_week.substring(0, 3)}</span>
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">{d.time_in} – {d.time_out}</span>
-                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.subject_code || '—'}</span>
+                                            <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day.substring(0, 3)}</span>
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">{d.start_time} – {d.end_time}</span>
+                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.course_code || '—'}</span>
                                             <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{d.subject_desc || '—'}</span>
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">{d.room || 'TBA'}</span>
+                                            <span className="text-xs text-gray-400 dark:text-gray-500">{d.room_code || 'TBA'}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -849,16 +849,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
         for (let i = 0; i < count; i++) {
             for (let j = i + 1; j < count; j++) {
-                if (details[i].day_of_week !== details[j].day_of_week) continue;
-                const iStart = toMinutes(details[i].time_in);
-                const iEnd   = toMinutes(details[i].time_out);
-                const jStart = toMinutes(details[j].time_in);
-                const jEnd   = toMinutes(details[j].time_out);
+                if (details[i].day !== details[j].day) continue;
+                const iStart = toMinutes(details[i].start_time);
+                const iEnd   = toMinutes(details[i].end_time);
+                const jStart = toMinutes(details[j].start_time);
+                const jEnd   = toMinutes(details[j].end_time);
                 if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
                 if (iStart >= iEnd || jStart >= jEnd) continue;
                 if (iStart < jEnd && iEnd > jStart) {
-                    conflicts[`details.${i}.time_in`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${details[i].day_of_week}.`;
-                    conflicts[`details.${j}.time_in`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${details[j].day_of_week}.`;
+                    conflicts[`details.${i}.start_time`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${details[i].day}.`;
+                    conflicts[`details.${j}.start_time`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${details[j].day}.`;
                 }
             }
         }
@@ -867,8 +867,8 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
             const next = { ...prev };
             // Clear stale conflict errors (only those previously set by this logic)
             details.forEach((_, i) => {
-                if (next[`details.${i}.time_in`]?.includes('overlaps with')) {
-                    delete next[`details.${i}.time_in`];
+                if (next[`details.${i}.start_time`]?.includes('overlaps with')) {
+                    delete next[`details.${i}.start_time`];
                 }
             });
             return { ...next, ...conflicts };
@@ -881,23 +881,23 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
         setErrors((prevErrors) => {
             const nextErrors = { ...prevErrors };
-            const timeInErrorKey = `details.${index}.time_in`;
-            const timeOutErrorKey = `details.${index}.time_out`;
+            const timeInErrorKey = `details.${index}.start_time`;
+            const timeOutErrorKey = `details.${index}.end_time`;
 
             delete nextErrors[timeInErrorKey];
             delete nextErrors[timeOutErrorKey];
 
             if (timeInMinutes !== null && (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes)) {
-                nextErrors[timeInErrorKey] = 'Time In must be between 07:00 AM and 09:00 PM.';
+                nextErrors[timeInErrorKey] = 'Start Time must be between 07:00 AM and 09:00 PM.';
             }
 
             if (timeOutMinutes !== null && (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes)) {
-                nextErrors[timeOutErrorKey] = 'Time Out must be between 07:00 AM and 09:00 PM.';
+                nextErrors[timeOutErrorKey] = 'End Time must be between 07:00 AM and 09:00 PM.';
                 return nextErrors;
             }
 
             if (timeInMinutes !== null && timeOutMinutes !== null && timeOutMinutes <= timeInMinutes) {
-                nextErrors[timeOutErrorKey] = 'Time Out must be later than Time In.';
+                nextErrors[timeOutErrorKey] = 'End Time must be later than Start Time.';
             }
 
             return nextErrors;
@@ -942,9 +942,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const handleTimeOutChange = (index, timeOutValue) => {
-        updateDetail(index, 'time_out', timeOutValue);
+        updateDetail(index, 'end_time', timeOutValue);
 
-        const currentTimeIn = form.details[index]?.time_in;
+        const currentTimeIn = form.details[index]?.start_time;
         const computedHours = computeHoursFromRange(currentTimeIn, timeOutValue);
 
         applyRowTimeValidation(index, currentTimeIn, timeOutValue);
@@ -955,9 +955,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const handleTimeInChange = (index, timeInValue) => {
-        updateDetail(index, 'time_in', timeInValue);
+        updateDetail(index, 'start_time', timeInValue);
 
-        const currentTimeOut = form.details[index]?.time_out;
+        const currentTimeOut = form.details[index]?.end_time;
 
         applyRowTimeValidation(index, timeInValue, currentTimeOut);
     };
@@ -970,11 +970,11 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
         updateDetail(index, 'hours_required', clampedHours);
 
-        const currentTimeIn = form.details[index]?.time_in;
+        const currentTimeIn = form.details[index]?.start_time;
         const computedTimeOut = computeTimeOutFromHours(currentTimeIn, clampedHours);
 
         if (computedTimeOut !== null) {
-            updateDetail(index, 'time_out', computedTimeOut);
+            updateDetail(index, 'end_time', computedTimeOut);
 
             applyRowTimeValidation(index, currentTimeIn, computedTimeOut);
         }
@@ -1132,41 +1132,41 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 <div>
                                     <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Day</label>
                                     <select
-                                        value={detail.day_of_week}
-                                        onChange={(e) => updateDetail(index, 'day_of_week', e.target.value)}
+                                        value={detail.day}
+                                        onChange={(e) => updateDetail(index, 'day', e.target.value)}
                                         className="form-input-sm"
                                     >
                                         {DAYS.map((d) => (
                                             <option key={d} value={d}>{d}</option>
                                         ))}
                                     </select>
-                                    {errors[`details.${index}.day_of_week`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.day_of_week`]}</p>}
+                                    {errors[`details.${index}.day`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.day`]}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Time In</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Start Time</label>
                                     <input
                                         type="time"
-                                        value={detail.time_in}
+                                        value={detail.start_time}
                                         onChange={(e) => handleTimeInChange(index, e.target.value)}
                                         min={ALLOWED_TIME_MIN}
                                         max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.time_in`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.time_in`]}</p>}
+                                    {errors[`details.${index}.start_time`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.start_time`]}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Time Out</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">End Time</label>
                                     <input
                                         type="time"
-                                        value={detail.time_out}
+                                        value={detail.end_time}
                                         onChange={(e) => handleTimeOutChange(index, e.target.value)}
                                         min={ALLOWED_TIME_MIN}
                                         max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.time_out`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.time_out`]}</p>}
+                                    {errors[`details.${index}.end_time`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.end_time`]}</p>}
                                 </div>
 
                                 <div>
@@ -1183,16 +1183,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Subject Code *</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Course Code *</label>
                                     <input
                                         type="text"
-                                        value={detail.subject_code}
-                                        onChange={(e) => updateDetail(index, 'subject_code', e.target.value)}
+                                        value={detail.course_code}
+                                        onChange={(e) => updateDetail(index, 'course_code', e.target.value)}
                                         placeholder="CS101"
                                         required
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.subject_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.subject_code`]}</p>}
+                                    {errors[`details.${index}.course_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.course_code`]}</p>}
                                 </div>
 
                                 <div className="sm:col-span-2">
@@ -1207,16 +1207,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room *</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room Code *</label>
                                     <input
                                         type="text"
-                                        value={detail.room}
-                                        onChange={(e) => updateDetail(index, 'room', e.target.value)}
-                                        placeholder="Room 201"
+                                        value={detail.room_code}
+                                        onChange={(e) => updateDetail(index, 'room_code', e.target.value)}
+                                        placeholder="R201"
                                         required
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.room`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room`]}</p>}
+                                    {errors[`details.${index}.room_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room_code`]}</p>}
                                 </div>
                             </div>
                         </div>

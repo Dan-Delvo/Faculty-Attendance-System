@@ -2,16 +2,18 @@
 
 namespace Database\Seeders;
 
+use App\Services\FlssBackendClient;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
 class UserSeeder extends Seeder
 {
     /**
-     * 3 admin/HR users + 15 faculty users = 18 total
+     * Creates admin accounts plus faculty users sourced from the external API.
      */
     public function run(): void
     {
@@ -40,9 +42,16 @@ class UserSeeder extends Seeder
                     'is_active'         => true,
                     'email_verified_at' => now(),
                 ],
+                [
+                    'username'          => 'head_academic_program',
+                    'email'             => 'head.academic@university.edu',
+                    'password'          => Hash::make('password'),
+                    'is_active'         => true,
+                    'email_verified_at' => now(),
+                ],
             ];
 
-            $adminRoles = ['super_admin', 'admin', 'hr_staff'];
+            $adminRoles = ['super_admin', 'admin', 'hr_staff', 'head_academic_program'];
 
             foreach ($admins as $index => $data) {
                 $user = User::firstOrCreate(['email' => $data['email']], $data);
@@ -50,30 +59,23 @@ class UserSeeder extends Seeder
                 $user->syncRoles([$role]);
             }
 
-            // ─── Faculty user accounts ─────────────────────────────────────────
-            // 15 faculty members: 3 per department (BSCS, BSIT, BSBA, BSED, BSCE)
-            $facultyUsers = [
-                // BSCS (dept index 1)
-                ['username' => 'j.santos',       'email' => 'juan.santos@university.edu'],
-                ['username' => 'm.cruz',          'email' => 'maria.cruz@university.edu'],
-                ['username' => 'r.reyes',         'email' => 'roberto.reyes@university.edu'],
-                // BSIT (dept index 2)
-                ['username' => 'a.delacruz',      'email' => 'ana.delacruz@university.edu'],
-                ['username' => 'c.mendoza',       'email' => 'carlos.mendoza@university.edu'],
-                ['username' => 'e.ramos',         'email' => 'elena.ramos@university.edu'],
-                // BSBA (dept index 3)
-                ['username' => 'm.torres',        'email' => 'miguel.torres@university.edu'],
-                ['username' => 's.villanueva',    'email' => 'sofia.villanueva@university.edu'],
-                ['username' => 'a.garcia',        'email' => 'antonio.garcia@university.edu'],
-                // BSED (dept index 4)
-                ['username' => 'm.bautista',      'email' => 'marisol.bautista@university.edu'],
-                ['username' => 'r.fernandez',     'email' => 'ricardo.fernandez@university.edu'],
-                ['username' => 'l.aquino',        'email' => 'lourdes.aquino@university.edu'],
-                // BSCE (dept index 5)
-                ['username' => 'e.navarro',       'email' => 'eduardo.navarro@university.edu'],
-                ['username' => 'c.morales',       'email' => 'cristina.morales@university.edu'],
-                ['username' => 'f.castro',        'email' => 'fernando.castro@university.edu'],
-            ];
+            // ─── Faculty user accounts from external API ──────────────────────
+            $facultyUsers = collect($this->fetchFacultySchedulesFromApi())
+                ->map(function (array $item): array {
+                    $email = strtolower(trim((string) ($item['faculty_email'] ?? '')));
+                    $usernameBase = Str::of((string) Str::before($email, '@'))
+                        ->lower()
+                        ->replaceMatches('/[^a-z0-9._-]/', '')
+                        ->limit(50, '')
+                        ->toString();
+
+                    return [
+                        'username' => $usernameBase !== '' ? $usernameBase : 'faculty_' . (int) ($item['faculty_id'] ?? 0),
+                        'email'    => $email,
+                    ];
+                })
+                ->filter(fn(array $u) => $u['email'] !== '')
+                ->values();
 
             foreach ($facultyUsers as $data) {
                 $user = User::firstOrCreate(
@@ -94,5 +96,39 @@ class UserSeeder extends Seeder
             DB::rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchFacultySchedulesFromApi(): array
+    {
+        $client = app(FlssBackendClient::class);
+        $response = $client->getFacultySchedules(['per_page' => 500]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('External schedules API request failed while seeding users. HTTP ' . $response->status());
+        }
+
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            throw new \RuntimeException('External schedules API returned an invalid JSON payload while seeding users.');
+        }
+
+        $records = data_get($payload, 'parttime_faculty_schedules');
+
+        if (! is_array($records)) {
+            $records = data_get($payload, 'data.parttime_faculty_schedules');
+        }
+
+        if (! is_array($records)) {
+            $records = data_get($payload, 'data');
+        }
+
+        if (! is_array($records)) {
+            $records = [];
+        }
+
+        return array_values(array_filter($records, fn ($record) => is_array($record)));
     }
 }

@@ -47,6 +47,9 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/api/dashboard', [AdminDashboardController::class, 'liveStats'])
         ->name('admin.api.dashboard');
 
+    Route::get('/api/external-schedules', [AdminDashboardController::class, 'externalSchedules'])
+        ->name('admin.api.external-schedules');
+
     Route::get('/dtr-export/preview', [AdminDtrExportController::class, 'preview'])
         ->name('admin.dtr-export.preview');
 

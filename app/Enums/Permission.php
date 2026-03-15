@@ -175,4 +175,23 @@ enum Permission: string
             self::ImportBiometricLogs,
         ];
     }
+
+    /** Returns all Head of Academic Program permissions. */
+    public static function headAcademicProgramPermissions(): array
+    {
+        return [
+            self::ViewDashboard,
+            self::ViewFaculty,
+            self::ViewSchedules,
+            self::CreateSchedules,
+            self::EditSchedules,
+            self::ViewAttendance,
+            self::GenerateDtr,
+            self::ViewLeaves,
+            self::ViewRequests,
+            self::ApproveRequests,
+            self::RejectRequests,
+            self::ViewReports,
+        ];
+    }
 }
