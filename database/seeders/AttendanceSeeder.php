@@ -9,6 +9,7 @@ use App\Models\Faculty;
 use App\Models\InternalSchedule;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -16,82 +17,75 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceSeeder extends Seeder
 {
-    /**
-     * Creates 18 AttendanceRecords per faculty (1 per week, on Monday)
-     * using the check-in / check-out times from BiometricLogSeeder.
-     *
-     * Then creates 5 DtrRecord summaries per faculty (January – May 2026).
-     *
-     * Totals:
-     *   AttendanceRecord :  18 × 15 = 270
-     *   DtrRecord        :   5 × 15 =  75
-     */
     public function run(): void
     {
         DB::beginTransaction();
         try {
-            // Grace-period in minutes (matches SystemSetting 'late_grace_period_minutes')
-            $gracePeriod = 5;
+            $gracePeriod = (int) SystemSetting::where('setting_key', 'late_grace_period_minutes')->value('setting_value') ?? 5;
 
             $adminUser = User::where('username', 'admin')->first();
 
             $faculties = Faculty::orderBy('id')->get();
 
+            $dayMapping = [
+                'Monday'    => 1,
+                'Tuesday'   => 2,
+                'Wednesday' => 3,
+                'Thursday'  => 4,
+                'Friday'    => 5,
+                'Saturday'  => 6,
+                'Sunday'    => 0,
+            ];
+
             foreach ($faculties as $faculty) {
-
-                /* ── Resolve scheduling references ─────────────────────────── */
                 $schedule = Schedule::where('faculty_id', $faculty->id)->first();
-                if (! $schedule) {
+                if (!$schedule) {
                     continue;
                 }
 
-                /** @var ScheduleDetail $mondayDetail */
-                $mondayDetail = ScheduleDetail::where('schedule_id', $schedule->id)
-                    ->where('day', 'Monday')
-                    ->first();
-
-                /** @var InternalSchedule $mondayInternal */
-                $mondayInternal = InternalSchedule::where('faculty_id', $faculty->id)
-                    ->where('schedule_id', $schedule->id)
-                    ->where('day_of_week', 'Monday')
-                    ->first();
-
-                if (! $mondayDetail) {
+                $scheduleDetails = ScheduleDetail::where('schedule_id', $schedule->id)->get();
+                if ($scheduleDetails->isEmpty()) {
                     continue;
                 }
 
-                // Extract clock times from schedule detail (date part is irrelevant)
-                $schedTimeIn  = Carbon::parse($mondayDetail->start_time)->format('H:i:s');  // "08:00:00"
-                $schedTimeOut = Carbon::parse($mondayDetail->end_time)->format('H:i:s'); // "11:00:00"
+                $detailsByDay = $scheduleDetails->keyBy('day');
 
-                /* ── Fetch all biometric logs for this faculty, by date ─────── */
                 $logsByDate = BiometricLog::where('biometric_id', $faculty->biometric_id)
                     ->orderBy('log_datetime')
                     ->get()
                     ->groupBy(fn($log) => Carbon::parse($log->log_datetime)->format('Y-m-d'));
 
-                /* ── Per-date attendance records ────────────────────────────── */
-                $monthlyData = [];   // [month => [days_present, days_late, late_min, undertime_min, hours_rendered]]
+                $monthlyData = [];
 
                 foreach ($logsByDate as $dateStr => $logs) {
-
                     $inLog  = $logs->firstWhere('log_type', 'IN');
                     $outLog = $logs->firstWhere('log_type', 'OUT');
 
-                    if (! $inLog || ! $outLog) {
-                        continue; // incomplete pair — skip
+                    if (!$inLog || !$outLog) {
+                        continue;
                     }
 
                     $attendanceDate = Carbon::parse($dateStr);
-                    $dayOfWeek      = 'Monday';  // all seeded dates are Mondays
+                    $dayOfWeek = $attendanceDate->format('l');
+
+                    $detail = $detailsByDay[$dayOfWeek] ?? null;
+                    if (!$detail) {
+                        continue;
+                    }
+
+                    $internalSchedule = InternalSchedule::where('faculty_id', $faculty->id)
+                        ->where('schedule_id', $schedule->id)
+                        ->where('day_of_week', $dayOfWeek)
+                        ->first();
+
+                    $schedTimeIn  = Carbon::parse($detail->start_time)->format('H:i:s');
+                    $schedTimeOut = Carbon::parse($detail->end_time)->format('H:i:s');
 
                     $officialIn  = Carbon::parse($dateStr . ' ' . $schedTimeIn);
                     $officialOut = Carbon::parse($dateStr . ' ' . $schedTimeOut);
                     $actualIn    = Carbon::parse($inLog->log_datetime);
                     $actualOut   = Carbon::parse($outLog->log_datetime);
 
-                    // ---------- Compute metrics ----------
-                    // Late = arrived after official_in + grace period; counted from official_in
                     $lateMinutes = 0;
                     if ($actualIn->gt($officialIn->copy()->addMinutes($gracePeriod))) {
                         $lateMinutes = max(0, (int) $actualIn->diffInMinutes($officialIn));
@@ -107,7 +101,6 @@ class AttendanceSeeder extends Seeder
 
                     $totalHours = round($actualIn->diffInMinutes($actualOut) / 60, 2);
 
-                    // ---------- Status ----------
                     $status = match (true) {
                         $lateMinutes > 0 && $undertimeMinutes > 0 => 'late_undertime',
                         $lateMinutes > 0                          => 'late',
@@ -115,7 +108,6 @@ class AttendanceSeeder extends Seeder
                         default                                   => 'present',
                     };
 
-                    // ---------- Remarks ----------
                     $remarks = match ($status) {
                         'late'            => "Arrived {$lateMinutes} min late.",
                         'undertime'       => "Left {$undertimeMinutes} min early.",
@@ -123,27 +115,26 @@ class AttendanceSeeder extends Seeder
                         default           => 'Regular attendance.',
                     };
 
-                    // Skip duplicate records on re-run
                     $exists = AttendanceRecord::where('faculty_id', $faculty->id)
                         ->where('attendance_date', $dateStr)
-                        ->where('schedule_detail_id', $mondayDetail->id)
+                        ->where('schedule_detail_id', $detail->id)
                         ->exists();
 
-                    if (! $exists) {
+                    if (!$exists) {
                         AttendanceRecord::create([
                             'faculty_id'              => $faculty->id,
-                            'schedule_detail_id'      => $mondayDetail->id,
-                            'internal_schedule_id'    => $mondayInternal?->id,
+                            'schedule_detail_id'      => $detail->id,
+                            'internal_schedule_id'    => $internalSchedule?->id,
                             'attendance_date'         => $dateStr,
                             'day_of_week'             => $dayOfWeek,
                             'official_time_in'        => $officialIn,
                             'official_time_out'       => $officialOut,
                             'operational_day_of_week' => $dayOfWeek,
-                            'operational_time_in'     => $mondayInternal
-                                ? Carbon::parse($dateStr . ' ' . Carbon::parse($mondayInternal->device_time_in)->format('H:i:s'))
+                            'operational_time_in'     => $internalSchedule
+                                ? Carbon::parse($dateStr . ' ' . Carbon::parse($internalSchedule->device_time_in)->format('H:i:s'))
                                 : $officialIn,
-                            'operational_time_out'    => $mondayInternal
-                                ? Carbon::parse($dateStr . ' ' . Carbon::parse($mondayInternal->device_time_out)->format('H:i:s'))
+                            'operational_time_out'    => $internalSchedule
+                                ? Carbon::parse($dateStr . ' ' . Carbon::parse($internalSchedule->device_time_out)->format('H:i:s'))
                                 : $officialOut,
                             'actual_time_in'          => $actualIn,
                             'actual_time_out'         => $actualOut,
@@ -151,7 +142,7 @@ class AttendanceSeeder extends Seeder
                             'undertime_minutes'       => $undertimeMinutes,
                             'overtime_minutes'        => $overtimeMinutes,
                             'total_hours_rendered'    => $totalHours,
-                            'required_hours'          => $mondayDetail->hours_required,
+                            'required_hours'         => $detail->hours_required,
                             'status'                  => $status,
                             'remarks'                 => $remarks,
                             'is_manual_entry'         => false,
@@ -159,9 +150,8 @@ class AttendanceSeeder extends Seeder
                         ]);
                     }
 
-                    // ---------- Accumulate monthly totals ----------
                     $month = (int) $attendanceDate->format('n');
-                    if (! isset($monthlyData[$month])) {
+                    if (!isset($monthlyData[$month])) {
                         $monthlyData[$month] = [
                             'days_present'  => 0,
                             'days_late'     => 0,
@@ -176,10 +166,9 @@ class AttendanceSeeder extends Seeder
                     $monthlyData[$month]['late_minutes']   += $lateMinutes;
                     $monthlyData[$month]['undertime_min']  += $undertimeMinutes;
                     $monthlyData[$month]['hours_rendered'] += $totalHours;
-                    $monthlyData[$month]['required_hours'] += $mondayDetail->hours_required;
+                    $monthlyData[$month]['required_hours'] += $detail->hours_required;
                 }
 
-                /* ── DTR Records (Jan – May 2026) ───────────────────────────── */
                 $dtrConfig = [
                     1 => ['status' => 'approved',  'finalized_at' => '2026-01-31 17:00:00', 'approved_at' => '2026-02-05 10:00:00'],
                     2 => ['status' => 'finalized', 'finalized_at' => now(),                  'approved_at' => null],
@@ -207,7 +196,6 @@ class AttendanceSeeder extends Seeder
                         'required_hours' => 0.0,
                     ];
 
-                    // Scheduled Mondays per month in Semester 2 2026
                     $scheduledDays = [1 => 4, 2 => 4, 3 => 5, 4 => 4, 5 => 1];
                     $daysAbsent    = $scheduledDays[$month] - $md['days_present'];
 

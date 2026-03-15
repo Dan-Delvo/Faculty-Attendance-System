@@ -180,18 +180,57 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
             .map(e => e.originalScheduleDetailId)
     );
 
-    // Combine both schedules
     const daysArr = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    // Filter internal schedule: show only approved schedule change requests (avoid duplicates per course+section)
+    const filteredInternalSchedule = (() => {
+        const allEntries = internalSchedule.flatMap(dayData => 
+            dayData.entries
+                .filter(entry => entry.isApproved) // Only approved schedule change requests
+                .map(entry => ({ ...entry, day: dayData.day }))
+        );
+
+        // Deduplicate by course+section for entries with course codes
+        const seen = new Map();
+        const courseEntries = [];
+        const operationalEntries = [];
+
+        allEntries.forEach(entry => {
+            if (entry.code) {
+                // Has course code - deduplicate
+                const key = `${entry.code}-${entry.sectionName || ''}`;
+                const existing = seen.get(key);
+                if (!existing || entry.id > existing.id) {
+                    seen.set(key, entry);
+                    courseEntries.push(entry);
+                }
+            } else {
+                // No course code - operational duty, keep all
+                operationalEntries.push(entry);
+            }
+        });
+
+        // Combine course entries (already deduplicated) + operational entries
+        const uniqueEntries = [...courseEntries, ...operationalEntries];
+
+        // Group back by day
+        return daysArr.map(day => ({
+            day,
+            shortDay: day.substring(0, 3),
+            entries: uniqueEntries.filter(e => e.day === day)
+        })).filter(d => d.entries.length > 0);
+    })();
+
+    // Combine both schedules with deduplication
     const combinedSchedule = daysArr.map(day => {
         const officialDay = sortedSchedule.find(d => d.day === day) || { classes: [] };
-        const internalDay = internalSchedule.find(d => d.day === day) || { entries: [] };
+        const internalDay = filteredInternalSchedule.find(d => d.day === day) || { entries: [] };
 
         const combinedItems = [
             ...officialDay.classes
                 .filter(c => !changedOfficialClassIds.has(c.id))
                 .map(c => ({ ...c, type: 'official' })),
             ...internalDay.entries
-                .filter(e => e.isChanged)
                 .map(e => ({ ...e, type: 'internal' }))
         ].sort((a, b) => toMin(a.startTime) - toMin(b.startTime));
 
@@ -392,7 +431,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
             {activeTab === 'internal' && (
                 <>
                     {/* Internal schedule summary */}
-                    {internalSchedule.length > 0 && (
+                    {filteredInternalSchedule.length > 0 && (
                         <div className="mb-6 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-900/10 p-4">
                             <div className="flex items-start gap-3">
                                 <svg className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -409,8 +448,8 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
-                        {internalSchedule.length > 0 ? (
-                            internalSchedule.map((dayData) => (
+                        {filteredInternalSchedule.length > 0 ? (
+                            filteredInternalSchedule.map((dayData) => (
                                 <div
                                     key={dayData.day}
                                     className="flex flex-col h-full rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden"

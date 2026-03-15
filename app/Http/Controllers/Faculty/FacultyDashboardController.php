@@ -136,8 +136,33 @@ class FacultyDashboardController extends Controller
                 ->orderBy('attendance_date', 'desc')
                 ->get();
 
-            $attendanceLogs = $records->map(function ($record) {
+            // Get all approved online attendance requests for this faculty
+            $onlineRequests = \App\Models\OnlineAttendanceRequest::where('faculty_id', $faculty->id)
+                ->where('status', 'approved')
+                ->with('scheduleDetail')
+                ->get();
+
+            // Create indexes for matching
+            $onlineByDateAndSchedule = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString() . '-' . ($req->schedule_detail_id ?? ''));
+            $onlineByDate = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString());
+            
+            // Track which online requests have been matched
+            $matchedOnlineIds = [];
+
+            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds) {
                 $detail = $record->scheduleDetail;
+
+                // Check if there's an approved online attendance request for this record
+                $scheduleDetailId = $record->schedule_detail_id ?? $detail?->id ?? '';
+                $dateStr = $record->attendance_date->toDateString();
+                
+                // Try matching by date+schedule_detail_id first, then by date only
+                $onlineRequest = $onlineByDateAndSchedule->get($dateStr . '-' . $scheduleDetailId) 
+                    ?? $onlineByDate->get($dateStr);
+                    
+                if ($onlineRequest) {
+                    $matchedOnlineIds[] = $onlineRequest->id;
+                }
 
                 // Build subjects array from the linked schedule detail
                 $subjects = [];
@@ -176,16 +201,36 @@ class FacultyDashboardController extends Controller
 
                 // Dynamically adjust status for UI consistency if DB status is out of sync
                 $displayStatus = $record->status;
+                $hasActualTimeIn = $record->actual_time_in !== null;
                 $isUndertime = ($undertimeMinutes > 0);
                 $isOvertime = ($record->overtime_minutes > 0);
 
-                if (strtolower($displayStatus) === 'present') {
+                // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
+                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
+                    $displayStatus = 'Absent';
+                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
+                    // Override status if has actual time-in and has undertime or overtime
                     if ($isUndertime && $isOvertime) {
                         $displayStatus = 'UNDERTIME / OVERTIME';
                     } elseif ($isUndertime) {
                         $displayStatus = 'UNDERTIME';
                     } elseif ($isOvertime) {
                         $displayStatus = 'OVERTIME';
+                    }
+                }
+
+                // Use online attendance time if available
+                $actualTimeIn = $record->actual_time_in;
+                $actualTimeOut = $record->actual_time_out;
+                $isOnlineAttendance = false;
+
+                if ($onlineRequest) {
+                    $isOnlineAttendance = true;
+                    if ($onlineRequest->time_in) {
+                        $actualTimeIn = \Carbon\Carbon::parse($onlineRequest->time_in);
+                    }
+                    if ($onlineRequest->time_out) {
+                        $actualTimeOut = \Carbon\Carbon::parse($onlineRequest->time_out);
                     }
                 }
 
@@ -197,14 +242,14 @@ class FacultyDashboardController extends Controller
                     'status' => $displayStatus,
                     'expected_time_in' => $record->operational_time_in
                         ? $record->operational_time_in->format('h:i A')
-                        : ($record->official_time_in ? $record->official_time_in->format('h:i A') : '--:--'),
+                        : ($record->official_time_in ? \Carbon\Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
                     'expected_time_out' => $record->operational_time_out
                         ? $record->operational_time_out->format('h:i A')
-                        : ($record->official_time_out ? $record->official_time_out->format('h:i A') : '--:--'),
-                    'actual_time_in' => $record->actual_time_in
-                        ? $record->actual_time_in->format('h:i A') : '--:--',
-                    'actual_time_out' => $record->actual_time_out
-                        ? $record->actual_time_out->format('h:i A') : '--:--',
+                        : ($record->official_time_out ? \Carbon\Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
+                    'actual_time_in' => $actualTimeIn
+                        ? $actualTimeIn->format('h:i A') : '--:--',
+                    'actual_time_out' => $actualTimeOut
+                        ? $actualTimeOut->format('h:i A') : '--:--',
                     'late_minutes' => $record->late_minutes ?? 0,
                     'undertime_minutes' => (int) $undertimeMinutes,
                     'undertime_justification' => $undertimeJustification?->justification,
@@ -221,10 +266,67 @@ class FacultyDashboardController extends Controller
                         ? (float) max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
                         : (float) $record->required_hours,
                     'total_hours' => $totalHours,
-                    'online_attendance' => false,
+                    'online_attendance' => $isOnlineAttendance,
                     'subjects' => $subjects,
                 ];
             })->toArray();
+            
+            // Add unmatched approved online attendance requests
+            $unmatchedOnline = $onlineRequests->filter(fn($req) => !in_array($req->id, $matchedOnlineIds));
+            
+            $onlineOnlyLogs = $unmatchedOnline->map(function ($req) {
+                $detail = $req->scheduleDetail;
+                $subjects = $detail ? [[
+                    'code' => $detail->course_code ?? '',
+                    'desc' => $detail->subject_desc ?? null,
+                    'program_code' => $detail->program_code ?? null,
+                    'year_level' => $detail->year_level ?? null,
+                    'section_name' => $detail->section_name ?? null,
+                ]] : [];
+                
+                $timeIn = $req->time_in ? \Carbon\Carbon::parse($req->time_in) : null;
+                $timeOut = $req->time_out ? \Carbon\Carbon::parse($req->time_out) : null;
+                $hours = 0;
+                if ($timeIn && $timeOut) {
+                    $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
+                }
+                $totalMinutes = (int) round($hours * 60);
+                $h = intdiv($totalMinutes, 60);
+                $m = $totalMinutes % 60;
+                $totalHours = ($h > 0 ? $h . 'h ' : '') . $m . 'm';
+                
+                return [
+                    'id' => 'online-' . $req->id,
+                    'date' => $req->attendance_date->format('M d, Y'),
+                    'raw_date' => $req->attendance_date->toDateString(),
+                    'dayOfWeek' => $req->attendance_date->format('l'),
+                    'status' => 'Present (Online)',
+                    'expected_time_in' => $detail && $detail->start_time 
+                        ? \Carbon\Carbon::parse($detail->start_time)->format('h:i A') 
+                        : '--:--',
+                    'expected_time_out' => $detail && $detail->end_time 
+                        ? \Carbon\Carbon::parse($detail->end_time)->format('h:i A') 
+                        : '--:--',
+                    'actual_time_in' => $timeIn ? $timeIn->format('h:i A') : '--:--',
+                    'actual_time_out' => $timeOut ? $timeOut->format('h:i A') : '--:--',
+                    'late_minutes' => 0,
+                    'undertime_minutes' => 0,
+                    'undertime_justification' => null,
+                    'undertime_status' => null,
+                    'missing_time_justification' => null,
+                    'missing_time_status' => null,
+                    'updated_at' => $req->updated_at ? $req->updated_at->toIso8601String() : null,
+                    'overtime_minutes' => 0,
+                    'night_minutes' => 0,
+                    'overtime_night_minutes' => 0,
+                    'required_hours' => (float) $hours,
+                    'total_hours' => $totalHours,
+                    'online_attendance' => true,
+                    'subjects' => $subjects,
+                ];
+            })->toArray();
+            
+            $attendanceLogs = array_merge($attendanceLogs, $onlineOnlyLogs);
         }
 
         return Inertia::render('Faculty/Attendance', [
