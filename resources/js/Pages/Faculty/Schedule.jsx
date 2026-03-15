@@ -209,19 +209,20 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
     );
 
     // Filter internal schedule: only show entries that are approved OR have request history
-    // And only show the latest approved entry per schedule detail
+    // And only show the latest approved entry per course and section to avoid duplication
     const filteredInternalSchedule = internalSchedule.map(dayData => {
         const filteredEntries = dayData.entries.filter(entry => {
             return entry.isApproved || entry.hasRequestHistory;
         });
 
-        // Group by originalScheduleDetailId to find latest approved per schedule
+        // Group by course code + section to find latest approved per subject
         const latestApprovedMap = new Map();
         filteredEntries.forEach(entry => {
-            if (entry.isApproved && entry.originalScheduleDetailId) {
-                const existing = latestApprovedMap.get(entry.originalScheduleDetailId);
+            if (entry.isApproved && entry.code) {
+                const key = `${entry.code}-${entry.sectionName || ''}`;
+                const existing = latestApprovedMap.get(key);
                 if (!existing || entry.id > existing.id) {
-                    latestApprovedMap.set(entry.originalScheduleDetailId, entry);
+                    latestApprovedMap.set(key, entry);
                 }
             }
         });
