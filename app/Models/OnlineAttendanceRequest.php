@@ -36,7 +36,7 @@ class OnlineAttendanceRequest extends Model
     {
         return [
             'attendance_date' => 'date',
-            'reviewed_at'     => 'datetime',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -88,8 +88,8 @@ class OnlineAttendanceRequest extends Model
     public static function getForFaculty(int $facultyId, Request $request): array
     {
         $perPage = (int) $request->query('per_page', 10);
-        $page    = (int) $request->query('page', 1);
-        $status  = $request->query('status', '');
+        $page = (int) $request->query('page', 1);
+        $status = $request->query('status', '');
 
         $query = static::with(['scheduleDetail.schedule', 'reviewedBy'])
             ->where('faculty_id', $facultyId)
@@ -108,34 +108,34 @@ class OnlineAttendanceRequest extends Model
             $detail = $req->scheduleDetail;
 
             return [
-                'id'               => $req->id,
-                'class_type'       => $req->class_type,
-                'attendance_date'  => $req->attendance_date?->format('M d, Y'),
-                'time_in'          => Carbon::parse($req->time_in)->format('h:i A'),
-                'time_out'         => Carbon::parse($req->time_out)->format('h:i A'),
-                'screenshot_in'    => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
-                'screenshot_out'   => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
-                'remarks'          => $req->remarks,
-                'status'           => $req->status,
-                'subject_code'     => $detail->course_code ?? $detail->subject_code ?? null,
-                'subject_desc'     => $detail?->subject_desc ?? null,
-                'program_code'     => $detail?->program_code ?? null,
-                'year_level'       => $detail?->year_level ?? null,
-                'section_name'     => $detail?->section_name ?? null,
-                'schedule_day'     => $detail?->day_of_week ?? null,
-                'reviewed_by'      => $req->reviewedBy?->email ?? null,
-                'reviewed_at'      => $req->reviewed_at?->format('M d, Y h:i A'),
-                'review_remarks'   => $req->review_remarks,
-                'created_at'       => $req->created_at?->format('M d, Y h:i A'),
+                'id' => $req->id,
+                'class_type' => $req->class_type,
+                'attendance_date' => $req->attendance_date?->format('M d, Y'),
+                'time_in' => Carbon::parse($req->time_in)->format('h:i A'),
+                'time_out' => Carbon::parse($req->time_out)->format('h:i A'),
+                'screenshot_in' => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
+                'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
+                'remarks' => $req->remarks,
+                'status' => $req->status,
+                'subject_code' => $detail->course_code ?? $detail->subject_code ?? null,
+                'subject_desc' => $detail?->subject_desc ?? null,
+                'program_code' => $detail?->program_code ?? null,
+                'year_level' => $detail?->year_level ?? null,
+                'section_name' => $detail?->section_name ?? null,
+                'schedule_day' => $detail?->day_of_week ?? null,
+                'reviewed_by' => $req->reviewedBy?->email ?? null,
+                'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
+                'review_remarks' => $req->review_remarks,
+                'created_at' => $req->created_at?->format('M d, Y h:i A'),
             ];
         })->toArray();
 
         return [
-            'data'         => $formatted,
-            'total'        => $total,
-            'per_page'     => $perPage,
+            'data' => $formatted,
+            'total' => $total,
+            'per_page' => $perPage,
             'current_page' => $page,
-            'last_page'    => (int) ceil($total / max($perPage, 1)),
+            'last_page' => (int) ceil($total / max($perPage, 1)),
         ];
     }
 
@@ -145,20 +145,32 @@ class OnlineAttendanceRequest extends Model
     public static function getForAdmin(Request $request): array
     {
         $perPage = (int) $request->query('per_page', 10);
-        $page    = (int) $request->query('page', 1);
-        $status  = $request->query('status', '');
-        $search  = $request->query('search', '');
+        $page = (int) $request->query('page', 1);
+        $status = $request->query('status', '');
+        $search = $request->query('search', '');
 
         // Build the base query with optimized column selection
         $query = static::select([
-            'id', 'faculty_id', 'schedule_detail_id', 'class_type',
-            'attendance_date', 'time_in', 'time_out', 'screenshot_in', 'screenshot_out',
-            'remarks', 'status', 'reviewed_by', 'reviewed_at', 'review_remarks', 'created_at'
+            'id',
+            'faculty_id',
+            'schedule_detail_id',
+            'class_type',
+            'attendance_date',
+            'time_in',
+            'time_out',
+            'screenshot_in',
+            'screenshot_out',
+            'remarks',
+            'status',
+            'reviewed_by',
+            'reviewed_at',
+            'review_remarks',
+            'created_at'
         ])
             ->with([
                 'faculty:id,first_name,last_name,user_id',
                 'faculty.user:id,email',
-                'scheduleDetail:id,subject_code,subject_desc,day_of_week',
+                'scheduleDetail:id,course_code,subject_desc,day',
                 'scheduleDetail.schedule:id',
                 'reviewedBy:id,email'
             ])
@@ -173,25 +185,25 @@ class OnlineAttendanceRequest extends Model
                 // Search by full name (first_name + last_name)
                 $q->whereHas('faculty', function ($faculty) use ($search) {
                     $faculty->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
-                      ->orWhere('first_name', 'like', "%{$search}%")
-                      ->orWhere('last_name', 'like', "%{$search}%");
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%");
                 })
-                // Search faculty email (via user relationship)
-                ->orWhere(function ($q2) use ($search) {
-                    $q2->whereHas('faculty', function ($faculty) use ($search) {
-                        $faculty->whereHas('user', function ($user) use ($search) {
-                            $user->where('email', 'like', "%{$search}%");
+                    // Search faculty email (via user relationship)
+                    ->orWhere(function ($q2) use ($search) {
+                        $q2->whereHas('faculty', function ($faculty) use ($search) {
+                            $faculty->whereHas('user', function ($user) use ($search) {
+                                $user->where('email', 'like', "%{$search}%");
+                            });
                         });
-                    });
-                })
-                // Search in remarks
-                ->orWhere('remarks', 'like', "%{$search}%");
+                    })
+                    // Search in remarks
+                    ->orWhere('remarks', 'like', "%{$search}%");
             });
         }
 
         // Count total before pagination
         $total = $query->count();
-        
+
         // Fetch paginated items
         $items = $query->offset(($page - 1) * $perPage)
             ->limit($perPage)
@@ -202,37 +214,37 @@ class OnlineAttendanceRequest extends Model
             $faculty = $req->faculty;
 
             return [
-                'id'               => $req->id,
-                'faculty_id'       => $req->faculty_id,
-                'faculty_name'     => $faculty ? "{$faculty->first_name} {$faculty->last_name}" : 'N/A',
-                'faculty_email'    => $faculty?->user?->email ?? 'N/A',
-                'class_type'       => $req->class_type,
-                'attendance_date'  => $req->attendance_date?->format('M d, Y'),
-                'time_in'          => Carbon::parse($req->time_in)->format('h:i A'),
-                'time_out'         => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
-                'screenshot_in'    => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
-                'screenshot_out'   => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
-                'remarks'          => $req->remarks,
-                'status'           => $req->status,
-                'subject_code'     => $detail->course_code ?? $detail->subject_code ?? 'N/A',
-                'subject_desc'     => $detail?->subject_desc ?? 'N/A',
-                'program_code'     => $detail?->program_code ?? null,
-                'year_level'       => $detail?->year_level ?? null,
-                'section_name'     => $detail?->section_name ?? null,
-                'schedule_day'     => $detail?->day_of_week ?? 'N/A',
-                'reviewed_by'      => $req->reviewedBy?->email ?? null,
-                'reviewed_at'      => $req->reviewed_at?->format('M d, Y h:i A'),
-                'review_remarks'   => $req->review_remarks,
-                'created_at'       => $req->created_at?->format('M d, Y h:i A'),
+                'id' => $req->id,
+                'faculty_id' => $req->faculty_id,
+                'faculty_name' => $faculty ? "{$faculty->first_name} {$faculty->last_name}" : 'N/A',
+                'faculty_email' => $faculty?->user?->email ?? 'N/A',
+                'class_type' => $req->class_type,
+                'attendance_date' => $req->attendance_date?->format('M d, Y'),
+                'time_in' => Carbon::parse($req->time_in)->format('h:i A'),
+                'time_out' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
+                'screenshot_in' => $req->screenshot_in ? Storage::url($req->screenshot_in) : null,
+                'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
+                'remarks' => $req->remarks,
+                'status' => $req->status,
+                'subject_code' => $detail->course_code ?? $detail->subject_code ?? 'N/A',
+                'subject_desc' => $detail?->subject_desc ?? 'N/A',
+                'program_code' => $detail?->program_code ?? null,
+                'year_level' => $detail?->year_level ?? null,
+                'section_name' => $detail?->section_name ?? null,
+                'schedule_day' => $detail?->day_of_week ?? 'N/A',
+                'reviewed_by' => $req->reviewedBy?->email ?? null,
+                'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
+                'review_remarks' => $req->review_remarks,
+                'created_at' => $req->created_at?->format('M d, Y h:i A'),
             ];
         })->toArray();
 
         return [
-            'data'         => $formatted,
-            'total'        => $total,
-            'per_page'     => $perPage,
+            'data' => $formatted,
+            'total' => $total,
+            'per_page' => $perPage,
             'current_page' => $page,
-            'last_page'    => (int) ceil($total / max($perPage, 1)),
+            'last_page' => (int) ceil($total / max($perPage, 1)),
         ];
     }
 }

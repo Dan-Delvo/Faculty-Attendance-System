@@ -146,9 +146,13 @@ class Faculty extends Model
                     'day_of_week' => $change->requested_day_of_week,
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i'),
-                    'subject_code' => $detail->subject_code,
+                    'day' => $change->requested_day_of_week,
+                    'start_time' => Carbon::parse($change->requested_time_in)->format('H:i'),
+                    'end_time' => Carbon::parse($change->requested_time_out)->format('H:i'),
+                    'course_code' => $detail->course_code,
                     'subject_desc' => $detail->subject_desc,
                     'room' => $change->requested_room ?: $detail->room_code,
+                    'room_code' => $change->requested_room ?: $detail->room_code,
                     'schedule_code' => $meta?->schedule_code,
                     'is_changed' => true,
                     'program_code' => $detail->program_code,
@@ -163,8 +167,13 @@ class Faculty extends Model
                     'time_in' => Carbon::parse($detail->start_time)->format('H:i'),
                     'time_out' => Carbon::parse($detail->end_time)->format('H:i'),
                     'subject_code' => $detail->subject_code,
+                    'day' => $detail->day,
+                    'start_time' => Carbon::parse($detail->start_time)->format('H:i'),
+                    'end_time' => Carbon::parse($detail->end_time)->format('H:i'),
+                    'course_code' => $detail->course_code,
                     'subject_desc' => $detail->subject_desc,
                     'room' => $detail->room_code,
+                    'room_code' => $detail->room_code,
                     'schedule_code' => $meta?->schedule_code,
                     'is_changed' => false,
                     'program_code' => $detail->program_code,
@@ -250,7 +259,7 @@ class Faculty extends Model
             if ($roomConflict) {
                 $roomFaculty = $roomConflict->schedule?->faculty;
                 $occupant = $roomFaculty ? $roomFaculty->full_name : 'another faculty';
-                $roomSubject = $roomConflict->subject_code ?? 'a class';
+                $roomSubject = $roomConflict->course_code ?? $roomConflict->subject_code ?? 'a class';
                 $roomTime = Carbon::parse($roomConflict->start_time)->format('H:i')
                     . '–'
                     . Carbon::parse($roomConflict->end_time)->format('H:i');
@@ -342,8 +351,13 @@ class Faculty extends Model
                         'time_in' => Carbon::parse($d->start_time)->format('H:i'),
                         'time_out' => Carbon::parse($d->end_time)->format('H:i'),
                         'subject_code' => $d->course_code ?? $d->subject_code,
+                        'day' => $d->day,
+                        'start_time' => Carbon::parse($d->start_time)->format('H:i'),
+                        'end_time' => Carbon::parse($d->end_time)->format('H:i'),
+                        'course_code' => $d->course_code,
                         'subject_desc' => $d->subject_desc,
                         'room' => $d->room_code,
+                        'room_code' => $d->room_code,
                         'schedule_code' => $schedule->schedule_code,
                         'program_code' => $d->program_code,
                         'year_level' => $d->year_level,
@@ -671,8 +685,6 @@ class Faculty extends Model
 
                     // Calculate status based on the specific subject time if available, otherwise use duty window
                     // (targetStart and targetEnd are already set correctly above from either official or requested times)
-                    
-                    
                     $todayStart = $now->copy()->setTimeFrom($targetStart);
                     $todayEnd = $targetEnd ? $now->copy()->setTimeFrom($targetEnd) : null;
 
@@ -691,7 +703,7 @@ class Faculty extends Model
                     return [
                         'id' => $entry->id . ($detail ? '-' . $detail->id : ''),
                         'subject' => $detail?->subject_desc ?? 'Operational Duty',
-                        'code' => $detail?->subject_code ?? '',
+                        'code' => $detail?->course_code ?? $detail?->subject_code ?? '',
                         'section' => $detail?->section_name ?? '',
                         'room' => $room,
                         'startTime' => $targetStart->format('h:i A'),
@@ -738,9 +750,9 @@ class Faculty extends Model
             return [
                 'id' => $detail->id,
                 'subject' => $detail->subject_desc ?? 'Untitled Subject',
-                'code' => $detail->subject_code ?? '',
+                'code' => $detail->course_code ?? $detail->subject_code ?? '',
                 'section' => $detail->section_name ?? '',
-                'room' => $detail->room ?? 'TBA',
+                'room' => $detail->room_code ?? 'TBA',
                 'startTime' => $timeIn->format('h:i A'),
                 'endTime' => $timeOut->format('h:i A'),
                 'status' => $status,
@@ -776,7 +788,6 @@ class Faculty extends Model
 
         // Use internal schedule (operational times) for late/early-out detection.
         // Falls back to official schedule details if no internal schedule exists.
-        $now = Carbon::now();
         $now = Carbon::now();
         $activeScheduleIds = $this->schedules()
             ->where('status', 'active')
@@ -815,9 +826,9 @@ class Faculty extends Model
             // Fallback to official schedule details
             $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             foreach ($details as $detail) {
-                $day = $detail->day_of_week;
-                $tIn = Carbon::parse($detail->time_in)->format('H:i');
-                $tOut = Carbon::parse($detail->time_out)->format('H:i');
+                $day = $detail->day;
+                $tIn = Carbon::parse($detail->start_time)->format('H:i');
+                $tOut = Carbon::parse($detail->end_time)->format('H:i');
 
                 if (!isset($scheduleLookup[$day])) {
                     $scheduleLookup[$day] = [
@@ -1028,7 +1039,6 @@ class Faculty extends Model
                         'id' => $detail->id,
                         'subject' => $detail->subject_desc ?? 'Untitled Subject',
                         'code' => $detail->course_code ?? $detail->subject_code ?? '',
-                        'room' => $detail->room_code ?? 'TBA',
                         'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
                         'hours' => ($detail->hours_required <= 0)
@@ -1197,25 +1207,21 @@ class Faculty extends Model
                         $isChanged = $item['isChanged'];
                         $originalDay = $item['originalDay'];
                         $room = $item['room'];
-                        $targetStart = Carbon::parse($item['start']);
-                        $targetEnd = $item['end'] ? Carbon::parse($item['end']) : null;
+                        // $targetStart = Carbon::parse($item['start']); // Redundant re-assignment
+                        $targetEnd = $item['end'] ? Carbon::parse($item['end']) : null; // Fix missing 'null' and semicolon
 
                         $storedHours = (float) $entry->required_hours;
                         $requiredHours = ($storedHours <= 0 && $timeOut)
                             ? max(0, (int) round($timeOut->diffInMinutes($timeIn) / 60))
                             : $storedHours;
 
-                        $requiredHoursDisplay = $detail
-                            ? max(0, (int) round(Carbon::parse($detail->end_time)->diffInMinutes(Carbon::parse($detail->start_time)) / 60))
-                            : $requiredHours;
-
                         $meta = $scheduleMeta->get($entry->schedule_id);
 
                         return [
                             'id' => $entry->id . ($detail ? '-' . $detail->id : ''),
-                            'startTime' => $targetStart->format('h:i A'),
-                            'endTime' => $targetEnd ? $targetEnd->format('h:i A') : '--:--',
-                            'requiredHours' => $targetEnd ? max(0, (int) round($targetEnd->diffInMinutes($targetStart) / 60)) : $requiredHours,
+                            'startTime' => $timeIn->format('h:i A'),
+                            'endTime' => $timeOut ? $timeOut->format('h:i A') : '--:--',
+                            'requiredHours' => $requiredHours,
                             'isOperational' => $entry->is_operational,
                             'syncStatus' => $entry->sync_status,
                             'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
@@ -1226,14 +1232,8 @@ class Faculty extends Model
                             'isChanged' => $isChanged,
                             'originalDay' => $originalDay,
                             'originalScheduleDetailId' => $isChanged ? $detail?->id : null,
-                            'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
-                            'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
-                            'programCode' => $detail?->program_code ?? '',
-                            'programTitle' => $detail?->program_title ?? '',
-                            'yearLevel' => $detail?->year_level ?? '',
-                            'sectionName' => $detail?->section_name ?? '',
                         ];
-                    });
+                    })->all();
                 })->values()->toArray(),
             ];
         }
@@ -1258,7 +1258,7 @@ class Faculty extends Model
                 'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
                 'dayOfWeek' => $record->day_of_week,
                 'subject' => $record->scheduleDetail?->subject_desc ?? 'N/A',
-                'subjectCode' => $record->scheduleDetail?->course_code ?? $record->scheduleDetail?->subject_code ?? '',
+                'subjectCode' => $record->scheduleDetail?->course_code ?? '',
                 'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
                 'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
                 'expectedTimeIn' => $record->operational_time_in

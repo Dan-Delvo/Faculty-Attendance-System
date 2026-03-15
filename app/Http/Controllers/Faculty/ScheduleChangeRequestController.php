@@ -139,7 +139,7 @@ class ScheduleChangeRequestController extends Controller
                 $q->where('status', 'active');
             })
                 ->where('id', '!=', $validated['schedule_detail_id'])
-                ->where('day_of_week', $reqDay)
+                ->where('day', $reqDay)
                 ->where('room', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
                     $q->whereRaw("TIME(start_time) < ?", [$reqOut])
@@ -148,7 +148,7 @@ class ScheduleChangeRequestController extends Controller
                 ->with('schedule.faculty')
                 ->first();
 
-                if ($roomConflict) {
+            if ($roomConflict) {
                 $occupant = $roomConflict->schedule?->faculty?->full_name ?? 'another faculty';
                 $conflicts[] = [
                     'type' => 'room',

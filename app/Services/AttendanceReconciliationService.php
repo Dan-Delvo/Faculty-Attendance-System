@@ -187,9 +187,9 @@ class AttendanceReconciliationService
 
         // Collect unique subjects from expected entries for display
         $subjects = collect($expectedEntries)
-            ->filter(fn($e) => !empty($e['subject_code']))
+            ->filter(fn($e) => !empty($e['course_code']))
             ->map(fn($e) => [
-                'code' => $e['subject_code'],
+                'code' => $e['course_code'],
                 'desc' => $e['subject_desc'] ?? null,
                 'program_code' => $e['program_code'] ?? null,
                 'year_level' => $e['year_level'] ?? null,
