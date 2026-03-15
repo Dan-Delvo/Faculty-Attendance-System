@@ -85,6 +85,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     const [semesterFilter, setSemesterFilter] = useState(filters.semester);
     const [yearFilter, setYearFilter] = useState(filters.academic_year);
     const [deptFilter, setDeptFilter] = useState(filters.department);
+    const [showAll, setShowAll] = useState(Boolean(filters.all));
 
     // ── Search suggestions ──
     const [suggestions, setSuggestions] = useState([]);
@@ -130,15 +131,17 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     semester: semesterFilter,
                     academic_year: yearFilter,
                     department: deptFilter,
+                    ...(showAll ? { all: 1 } : {}),
                 },
                 { preserveState: true, preserveScroll: true, replace: true },
             );
         },
-        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter],
+        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter, showAll],
     );
 
     const handleFilter = () => {
         setCurrentPage(1);
+        setShowAll(false);
         fetchSchedules(1);
     };
 
@@ -162,6 +165,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                 semester: semesterFilter,
                 academic_year: yearFilter,
                 department: deptFilter,
+                ...(showAll ? { all: 1 } : {}),
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -175,7 +179,8 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setYearFilter('');
         setDeptFilter('');
         setCurrentPage(1);
-        router.get(route('admin.schedules.index'), {}, { preserveState: true, preserveScroll: true, replace: true });
+        setShowAll(true);
+        router.get(route('admin.schedules.index'), { all: 1 }, { preserveState: true, preserveScroll: true, replace: true });
     };
 
     // ── Search Suggestions (AJAX) ──
@@ -262,6 +267,38 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
+    const officialDetails = selectedSchedule?.details ?? [];
+    const internalEntries = selectedSchedule?.internal_schedule ?? [];
+    const approvedRequests = selectedSchedule?.approved_change_requests ?? [];
+
+    const approvedByDetailId = new Map(
+        approvedRequests
+            .filter((req) => req && req.schedule_detail_id)
+            .map((req) => [req.schedule_detail_id, req]),
+    );
+
+    const detailUsesInternal = (detail) => {
+        if (!detail?.id) return false;
+        return approvedByDetailId.has(detail.id);
+    };
+
+    const findInternalLink = (entry) => {
+        if (!entry?.day || !entry.start_time || !entry.end_time) return null;
+        const entryStart = toMinutes(entry.start_time);
+        const entryEnd = toMinutes(entry.end_time);
+        if (entryStart === null || entryEnd === null) return null;
+
+        return (
+            approvedRequests.find((req) => {
+                if (!req?.requested_day || !req.requested_time_in || !req.requested_time_out) return false;
+                if (req.requested_day !== entry.day) return false;
+                const reqStart = toMinutes(req.requested_time_in);
+                const reqEnd = toMinutes(req.requested_time_out);
+                if (reqStart === null || reqEnd === null) return false;
+                return reqStart === entryStart && reqEnd === entryEnd;
+            }) || null
+        );
+    };
 
     const validateDetailTimeRanges = () => {
         const localErrors = {};
@@ -759,18 +796,70 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                 </div>
                             )}
 
-                            <div>
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Class Schedule</p>
-                                <div className="space-y-2">
-                                    {selectedSchedule.details.map((d, i) => (
-                                        <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
-                                            <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day.substring(0, 3)}</span>
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">{d.start_time} – {d.end_time}</span>
-                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.course_code || '—'}</span>
-                                            <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{d.subject_desc || '—'}</span>
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">{d.room_code || 'TBA'}</span>
-                                        </div>
-                                    ))}
+                            <div className="space-y-5">
+                                <div>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Official Schedule</p>
+                                    <div className="space-y-2">
+                                        {officialDetails.length > 0 ? (
+                                            officialDetails.map((d, i) => (
+                                                <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
+                                                    <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day?.substring(0, 3) ?? '—'}</span>
+                                                    <span className="text-sm text-gray-700 dark:text-gray-300">{d.start_time} – {d.end_time}</span>
+                                                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.course_code || '—'}</span>
+                                                    <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{d.subject_desc || '—'}</span>
+                                                    <span className="text-xs text-gray-400 dark:text-gray-500">{d.room_code || 'TBA'}</span>
+                                                    {detailUsesInternal(d) && (
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400">
+                                                            Uses Internal
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No official schedule entries.</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Internal Schedule</p>
+                                    <div className="space-y-2">
+                                        {internalEntries.length > 0 ? (
+                                            internalEntries.map((entry, i) => {
+                                                const linked = findInternalLink(entry);
+                                                return (
+                                                <div key={entry.id ?? i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
+                                                    <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{entry.day?.substring(0, 3) ?? '—'}</span>
+                                                    <span className="text-sm text-gray-700 dark:text-gray-300">{entry.start_time ?? '--:--'} – {entry.end_time ?? '--:--'}</span>
+                                                    <span className={`text-xs font-bold uppercase tracking-wider ${entry.is_operational ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                        {entry.is_operational ? 'Operational' : 'Non-Operational'}
+                                                    </span>
+                                                    {entry.required_hours !== null && entry.required_hours !== undefined && (
+                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                            {Number(entry.required_hours)} hr{Number(entry.required_hours) === 1 ? '' : 's'}
+                                                        </span>
+                                                    )}
+                                                    {entry.sync_status && (
+                                                        <span className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">{entry.sync_status}</span>
+                                                    )}
+                                                    {linked ? (
+                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                            Linked to: <span className="font-semibold text-gray-700 dark:text-gray-300">{linked.course_code || '—'}</span>
+                                                            {linked.subject_desc ? ` — ${linked.subject_desc}` : ''}
+                                                            {linked.original_day && linked.original_start_time && linked.original_end_time
+                                                                ? ` (Orig: ${linked.original_day.substring(0, 3)} ${linked.original_start_time}–${linked.original_end_time})`
+                                                                : ''}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 dark:text-gray-500">No linked official schedule</span>
+                                                    )}
+                                                </div>
+                                            );
+                                            })
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No internal schedule entries.</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -905,7 +994,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const toTimeString = (minutesValue) => {
-        const clampedMinutes = Math.min(minutesValue, maxAllowedMinutes);
+        const clampedMinutes = Math.min(Math.round(minutesValue), maxAllowedMinutes);
         const hours = Math.floor(clampedMinutes / 60);
         const minutes = clampedMinutes % 60;
 
@@ -921,7 +1010,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
         }
 
         const totalMinutes = timeOutMinutes - timeInMinutes;
-        const roundedHours = Math.round(totalMinutes / 60);
+        const roundedHours = Math.round((totalMinutes / 60) * 100) / 100;
 
         return Math.max(1, Math.min(12, roundedHours));
     };
@@ -965,7 +1054,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     const handleHoursChange = (index, hoursValue) => {
         const parsedHours = Number(hoursValue);
         const clampedHours = Number.isFinite(parsedHours)
-            ? Math.max(1, Math.min(12, parsedHours))
+            ? Math.max(1, Math.min(12, Math.round(parsedHours * 100) / 100))
             : 1;
 
         updateDetail(index, 'hours_required', clampedHours);
@@ -1177,6 +1266,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                         onChange={(e) => handleHoursChange(index, e.target.value)}
                                         min="1"
                                         max="12"
+                                        step="0.5"
                                         className="form-input-sm"
                                     />
                                     {errors[`details.${index}.hours_required`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.hours_required`]}</p>}

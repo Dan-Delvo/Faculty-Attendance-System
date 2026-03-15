@@ -60,11 +60,26 @@ class AdminHolidayController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'holiday_date' => ['required', 'date', Rule::unique('holidays', 'holiday_date')],
+            'holiday_date' => [
+                'required',
+                'date',
+                Rule::unique('holidays', 'holiday_date')->whereNull('deleted_at'),
+            ],
             'name'         => ['required', 'string', 'max:255'],
             'type'         => ['required', Rule::in(['national', 'local', 'observance'])],
             'is_recurring' => ['boolean'],
         ]);
+
+        $existing = Holiday::withTrashed()
+            ->where('holiday_date', $validated['holiday_date'])
+            ->first();
+
+        if ($existing && $existing->trashed()) {
+            $existing->restore();
+            $existing->update($validated);
+
+            return back()->with('success', 'Holiday "' . $validated['name'] . '" has been restored and updated.');
+        }
 
         Holiday::create($validated);
 

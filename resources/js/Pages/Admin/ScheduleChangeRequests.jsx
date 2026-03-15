@@ -53,6 +53,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const [filterStatus, setFilterStatus] = useState(filters.status || '');
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [searchInput, setSearchInput] = useState(filters.search || '');
+    const [showAll, setShowAll] = useState(Boolean(filters.all));
     const [isFiltering, setIsFiltering] = useState(false);
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
     const [perPage, setPerPage] = useState(initialRequests.per_page || 15);
@@ -73,7 +74,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const rejectForm = useForm({ review_remarks: '' });
 
     /* ── AJAX filtering ──────────────────────────────────────────────── */
-    const fetchRequests = useCallback((status, search, page = 1, newPerPage) => {
+    const fetchRequests = useCallback((status, search, page = 1, newPerPage, showAllFlag = showAll) => {
         setIsFiltering(true);
 
         const params = new URLSearchParams();
@@ -81,6 +82,7 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
         if (search) params.set('search', search);
         params.set('page', page);
         if (newPerPage) params.set('per_page', newPerPage);
+        if (showAllFlag) params.set('all', '1');
 
         fetch(route('admin.schedule-change-requests.filter') + '?' + params.toString(), {
             credentials: 'same-origin',
@@ -104,17 +106,19 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                 window.alert('Failed to load schedule change requests. Please try again.');
             })
             .finally(() => setIsFiltering(false));
-    }, []);
+    }, [showAll]);
 
     const applyFilter = (status) => {
         setFilterStatus(status);
-        fetchRequests(status, searchQuery, 1);
+        const nextShowAll = status === '';
+        setShowAll(nextShowAll);
+        fetchRequests(status, searchQuery, 1, undefined, nextShowAll);
     };
 
     const applySearch = (e) => {
         e.preventDefault();
         setSearchQuery(searchInput);
-        fetchRequests(filterStatus, searchInput, 1);
+        fetchRequests(filterStatus, searchInput, 1, undefined, showAll);
     };
 
     const clearSearch = () => {
@@ -122,16 +126,16 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
         setSearchQuery('');
         setSuggestions([]);
         setShowSuggestions(false);
-        fetchRequests(filterStatus, '', 1);
+        fetchRequests(filterStatus, '', 1, undefined, showAll);
     };
 
     const goToPage = (page) => {
-        fetchRequests(filterStatus, searchQuery, page, perPage);
+        fetchRequests(filterStatus, searchQuery, page, perPage, showAll);
     };
 
     const handlePerPageChange = (newPerPage) => {
         setPerPage(newPerPage);
-        fetchRequests(filterStatus, searchQuery, 1, newPerPage);
+        fetchRequests(filterStatus, searchQuery, 1, newPerPage, showAll);
     };
 
     // ── Search Suggestions (AJAX) ──

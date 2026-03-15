@@ -349,7 +349,7 @@ class AttendanceReconciliationService
             $officialOut = $detail->end_time
                 ? Carbon::parse($detail->end_time)->format('H:i:s')
                 : Carbon::parse($detail->start_time)
-                    ->addHours(max(1, (int) ($detail->hours_required ?? 1)))
+                    ->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)))
                     ->format('H:i:s');
 
             return [
