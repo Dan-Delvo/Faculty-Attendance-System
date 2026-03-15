@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceRecord;
 use App\Models\BiometricLog;
 use App\Models\Faculty;
 use App\Models\ImportBatch;
+use App\Models\InternalSchedule;
+use App\Models\ScheduleDetail;
+use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +27,11 @@ use SplFileObject;
 
 class AdminAttendanceImportController extends Controller
 {
+    public function __construct(
+        private readonly AttendanceReconciliationService $attendanceReconciliationService
+    ) {
+    }
+
     public function index(Request $request)
     {
         $perPage = (int) $request->query('per_page', 10);
@@ -217,24 +226,210 @@ class AdminAttendanceImportController extends Controller
             ], 409);
         }
 
-        // Only mark logs with a recognised faculty as synced; unrecognised IDs remain unprocessed.
-        $syncedCount = BiometricLog::query()
+        // Only recognized, unsynced logs are candidates for attendance sync.
+        $candidateLogs = BiometricLog::query()
             ->where('import_batch_id', $batch->id)
             ->where('is_processed', false)
             ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
-            ->update([
-                'is_processed' => true,
-                'updated_at' => now(),
+            ->with(['faculty:id,biometric_id'])
+            ->orderBy('log_datetime')
+            ->orderBy('id')
+            ->get();
+
+        if ($candidateLogs->isEmpty()) {
+            return response()->json([
+                'message' => 'This batch is already fully synced.',
+                'synced_count' => 0,
+                'attendance_records_count' => 0,
             ]);
+        }
+
+        $logsToMarkProcessed = [];
+        $syncedCount = 0;
+        $attendanceRecordsCount = 0;
+
+        DB::transaction(function () use (
+            $candidateLogs,
+            &$logsToMarkProcessed,
+            &$syncedCount,
+            &$attendanceRecordsCount
+        ): void {
+            $groupedByFacultyAndDate = $candidateLogs->groupBy(function (BiometricLog $log): string {
+                $facultyId = $log->faculty?->id;
+                $date = $log->log_datetime?->toDateString();
+
+                return ($facultyId ?? '0') . '|' . ($date ?? '');
+            });
+
+            foreach ($groupedByFacultyAndDate as $groupKey => $logsGroup) {
+                [$facultyId, $date] = array_pad(explode('|', (string) $groupKey, 2), 2, null);
+
+                if (! $facultyId || ! $date) {
+                    continue;
+                }
+
+                $faculty = Faculty::find($facultyId);
+                if (! $faculty) {
+                    continue;
+                }
+
+                $syncResult = $this->createOrUpdateAttendanceRecordsFromBiometricLogs(
+                    $faculty,
+                    $date
+                );
+
+                if (! $syncResult['synced']) {
+                    continue;
+                }
+
+                $attendanceRecordsCount += $syncResult['attendance_records_count'];
+                $syncedCount += $logsGroup->count();
+                $logsToMarkProcessed = array_merge(
+                    $logsToMarkProcessed,
+                    $logsGroup->pluck('id')->all()
+                );
+            }
+
+            if (! empty($logsToMarkProcessed)) {
+                BiometricLog::query()
+                    ->whereIn('id', array_values(array_unique($logsToMarkProcessed)))
+                    ->update([
+                        'is_processed' => true,
+                        'updated_at' => now(),
+                    ]);
+            }
+        });
 
         $message = $syncedCount > 0
-            ? "{$syncedCount} biometric log " . ($syncedCount === 1 ? 'entry was' : 'entries were') . ' successfully synced.'
+            ? "{$syncedCount} biometric log " . ($syncedCount === 1 ? 'entry was' : 'entries were') . " successfully synced and {$attendanceRecordsCount} attendance " . ($attendanceRecordsCount === 1 ? 'record was' : 'records were') . ' updated.'
             : 'This batch is already fully synced.';
 
         return response()->json([
             'message' => $message,
             'synced_count' => $syncedCount,
+            'attendance_records_count' => $attendanceRecordsCount,
         ]);
+    }
+
+    /**
+     * Create/update attendance records for a faculty on a target date based on imported biometric logs.
+     *
+     * Rules:
+     * - Official times come from active schedule_details on that date/day.
+     * - Operational times come from internal_schedules when available; otherwise fallback to official times.
+     * - Actual times come from earliest IN and latest OUT biometric logs for that date.
+     * - Late/undertime/overtime are computed using AttendanceReconciliationService.
+     */
+    private function createOrUpdateAttendanceRecordsFromBiometricLogs(Faculty $faculty, string $date): array
+    {
+        $targetDate = Carbon::parse($date);
+        $dayOfWeek = $targetDate->format('l');
+
+        $activeScheduleIds = $faculty->schedules()
+            ->where('status', 'active')
+            ->whereDate('effective_from', '<=', $targetDate->toDateString())
+            ->whereDate('effective_until', '>=', $targetDate->toDateString())
+            ->pluck('id');
+
+        if ($activeScheduleIds->isEmpty()) {
+            return ['synced' => false, 'attendance_records_count' => 0];
+        }
+
+        $officialDetails = ScheduleDetail::query()
+            ->whereIn('schedule_id', $activeScheduleIds)
+            ->where('day', $dayOfWeek)
+            ->orderBy('start_time')
+            ->get();
+
+        if ($officialDetails->isEmpty()) {
+            return ['synced' => false, 'attendance_records_count' => 0];
+        }
+
+        $dayLogs = BiometricLog::query()
+            ->where('biometric_id', $faculty->biometric_id)
+            ->whereDate('log_datetime', $targetDate->toDateString())
+            ->orderBy('log_datetime', 'asc')
+            ->get();
+
+        $actualTimeIn = $dayLogs->first(function (BiometricLog $log) {
+            return str_contains(strtolower((string) $log->log_type), 'in');
+        })?->log_datetime;
+
+        $actualTimeOut = $dayLogs->reverse()->first(function (BiometricLog $log) {
+            return str_contains(strtolower((string) $log->log_type), 'out');
+        })?->log_datetime;
+
+        $metrics = $this->attendanceReconciliationService
+            ->getDailyAttendanceStatus($faculty, $targetDate->toDateString());
+
+        $recordsCreatedOrUpdated = 0;
+
+        foreach ($officialDetails as $detail) {
+            $officialTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($detail->start_time)->format('H:i:s'));
+
+            $officialTimeOut = $detail->end_time
+                ? Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($detail->end_time)->format('H:i:s'))
+                : $officialTimeIn->copy()->addHours(max(1, (int) ($detail->hours_required ?? 1)));
+
+            $internalSchedule = InternalSchedule::query()
+                ->where('faculty_id', $faculty->id)
+                ->where('schedule_id', $detail->schedule_id)
+                ->where('day_of_week', $dayOfWeek)
+                ->where('is_operational', true)
+                ->first();
+
+            if ($internalSchedule) {
+                $operationalTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($internalSchedule->device_time_in)->format('H:i:s'));
+                $operationalTimeOut = $internalSchedule->device_time_out
+                    ? Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($internalSchedule->device_time_out)->format('H:i:s'))
+                    : $operationalTimeIn->copy()->addHours(max(1, (int) ($detail->hours_required ?? 1)));
+                $operationalDayOfWeek = $internalSchedule->day_of_week;
+            } else {
+                // Fallback rule requested: no internal schedule -> operational == official.
+                $operationalTimeIn = $officialTimeIn->copy();
+                $operationalTimeOut = $officialTimeOut->copy();
+                $operationalDayOfWeek = $detail->day;
+            }
+
+            $totalHoursRendered = 0;
+            if ($actualTimeIn && $actualTimeOut && $actualTimeOut->greaterThan($actualTimeIn)) {
+                $totalHoursRendered = round($actualTimeIn->diffInMinutes($actualTimeOut) / 60, 2);
+            }
+
+            AttendanceRecord::updateOrCreate(
+                [
+                    'faculty_id' => $faculty->id,
+                    'attendance_date' => $targetDate->toDateString(),
+                    'schedule_detail_id' => $detail->id,
+                ],
+                [
+                    'internal_schedule_id' => $internalSchedule?->id,
+                    'day_of_week' => $detail->day,
+                    'official_time_in' => $officialTimeIn,
+                    'official_time_out' => $officialTimeOut,
+                    'operational_day_of_week' => $operationalDayOfWeek,
+                    'operational_time_in' => $operationalTimeIn,
+                    'operational_time_out' => $operationalTimeOut,
+                    'actual_time_in' => $actualTimeIn,
+                    'actual_time_out' => $actualTimeOut,
+                    'late_minutes' => (int) ($metrics['late_minutes'] ?? 0),
+                    'undertime_minutes' => (int) ($metrics['undertime_minutes'] ?? 0),
+                    'overtime_minutes' => (int) ($metrics['overtime_minutes'] ?? 0),
+                    'night_minutes' => 0,
+                    'overtime_night_minutes' => 0,
+                    'total_hours_rendered' => $totalHoursRendered,
+                    'required_hours' => (float) ($internalSchedule?->required_hours ?? $detail->hours_required ?? 0),
+                    'status' => (string) ($metrics['status'] ?? ($actualTimeIn ? 'Present' : 'Absent')),
+                    'remarks' => 'Synced from biometric import',
+                    'is_manual_entry' => false,
+                    'processed_at' => now(),
+                ]
+            );
+
+            $recordsCreatedOrUpdated++;
+        }
+
+        return ['synced' => true, 'attendance_records_count' => $recordsCreatedOrUpdated];
     }
 
     public function downloadTemplate()
