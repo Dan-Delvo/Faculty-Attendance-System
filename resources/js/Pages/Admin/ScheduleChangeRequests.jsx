@@ -5,8 +5,10 @@ import InputLabel from '@/Components/InputLabel';
 import InputError from '@/Components/InputError';
 import SecondaryButton from '@/Components/SecondaryButton';
 import DangerButton from '@/Components/DangerButton';
+import Pagination from '@/Components/Pagination';
 import { Head, useForm } from '@inertiajs/react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import axios from 'axios';
 import {
     CHANGE_REQUEST_STATUS_STYLES as STATUS_STYLES,
     DAY_AVATAR_COLORS,
@@ -53,6 +55,13 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const [searchInput, setSearchInput] = useState(filters.search || '');
     const [isFiltering, setIsFiltering] = useState(false);
     const [currentPage, setCurrentPage] = useState(initialRequests.current_page || 1);
+    const [perPage, setPerPage] = useState(initialRequests.per_page || 15);
+
+    // ── Search suggestions ──────────────────────────────────────────────
+    const [suggestions, setSuggestions]       = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchRef        = useRef(null);
+    const suggestionsTimeout = useRef(null);
 
     // ── Modals + selected request ────────────────────────────────────────
     const [showApproveModal, setShowApproveModal] = useState(false);
@@ -64,13 +73,14 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const rejectForm = useForm({ review_remarks: '' });
 
     /* ── AJAX filtering ──────────────────────────────────────────────── */
-    const fetchRequests = useCallback((status, search, page = 1) => {
+    const fetchRequests = useCallback((status, search, page = 1, newPerPage) => {
         setIsFiltering(true);
 
         const params = new URLSearchParams();
         if (status) params.set('status', status);
         if (search) params.set('search', search);
         params.set('page', page);
+        if (newPerPage) params.set('per_page', newPerPage);
 
         fetch(route('admin.schedule-change-requests.filter') + '?' + params.toString(), {
             credentials: 'same-origin',
@@ -110,12 +120,58 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
     const clearSearch = () => {
         setSearchInput('');
         setSearchQuery('');
+        setSuggestions([]);
+        setShowSuggestions(false);
         fetchRequests(filterStatus, '', 1);
     };
 
     const goToPage = (page) => {
-        fetchRequests(filterStatus, searchQuery, page);
+        fetchRequests(filterStatus, searchQuery, page, perPage);
     };
+
+    const handlePerPageChange = (newPerPage) => {
+        setPerPage(newPerPage);
+        fetchRequests(filterStatus, searchQuery, 1, newPerPage);
+    };
+
+    // ── Search Suggestions (AJAX) ──
+    const handleSearchInput = (val) => {
+        setSearchInput(val);
+        if (suggestionsTimeout.current) clearTimeout(suggestionsTimeout.current);
+        if (val.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+        suggestionsTimeout.current = setTimeout(async () => {
+            try {
+                const res = await axios.get(route('admin.schedule-change-requests.suggestions'), { params: { q: val } });
+                setSuggestions(res.data);
+                setShowSuggestions(res.data.length > 0);
+            } catch {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        }, 300);
+    };
+
+    const pickSuggestion = (sug) => {
+        setSearchInput(sug.value);
+        setSearchQuery(sug.value);
+        setShowSuggestions(false);
+        fetchRequests(filterStatus, sug.value, 1);
+    };
+
+    // Close suggestions when clicking outside the search box
+    useEffect(() => {
+        const handler = (e) => {
+            if (searchRef.current && !searchRef.current.contains(e.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
 
     /* ── Approve ─────────────────────────────────────────────────────── */
     const openApprove = (req) => {
@@ -188,15 +244,16 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
                 {/* Search */}
                 <form onSubmit={applySearch} className="flex-1 flex gap-2">
-                    <div className="relative flex-1">
+                    <div className="relative flex-1" ref={searchRef}>
                         <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                         <input
                             type="text"
-                            placeholder="Search by faculty name or code…"
+                            placeholder="Search by faculty name, schedule code, course code, room code, department, reason…"
                             value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
+                            onChange={(e) => handleSearchInput(e.target.value)}
+                            onFocus={() => searchInput.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
                             className="w-full rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 py-2.5 pl-9 pr-4 text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 focus:border-[#7a1315] focus:ring-[#7a1315] focus:outline-none"
                         />
                         {searchInput && (
@@ -209,6 +266,20 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
+                        )}
+                        {showSuggestions && (
+                            <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl max-h-60 overflow-y-auto">
+                                {suggestions.map((s) => (
+                                    <button
+                                        key={s.id}
+                                        type="button"
+                                        onClick={() => pickSuggestion(s)}
+                                        className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                                    >
+                                        {s.label}
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </div>
                     <button
@@ -259,33 +330,14 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
                     ))}
 
                     {/* Pagination */}
-                    {requestsData.last_page > 1 && (
-                        <div className="flex items-center justify-between pt-4">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Page {requestsData.current_page} of {requestsData.last_page} ({requestsData.total} total)
-                            </p>
-                            <div className="flex gap-2">
-                                {requestsData.current_page > 1 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToPage(requestsData.current_page - 1)}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                    >
-                                        Previous
-                                    </button>
-                                )}
-                                {requestsData.current_page < requestsData.last_page && (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToPage(requestsData.current_page + 1)}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                    >
-                                        Next
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    <Pagination
+                        currentPage={requestsData.current_page}
+                        totalItems={requestsData.total}
+                        perPage={requestsData.per_page}
+                        onPageChange={goToPage}
+                        onPerPageChange={handlePerPageChange}
+                        perPageOptions={[5, 10, 25, 50]}
+                    />
                 </div>
             ) : !isFiltering ? (
                 <EmptyState filterStatus={filterStatus} searchQuery={searchQuery} />
@@ -469,6 +521,8 @@ export default function AdminScheduleChangeRequests({ requests: initialRequests,
 function RequestCard({ req, onApprove, onReject }) {
     const dayColor = DAY_AVATAR_COLORS[req.original_day] ?? 'from-gray-400 to-gray-500';
     const [isExpanded, setIsExpanded] = useState(false);
+    const [previewModalUrl, setPreviewModalUrl] = useState(null);
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
 
     const toggleExpand = () => {
         setIsExpanded((prev) => !prev);
@@ -531,6 +585,11 @@ function RequestCard({ req, onApprove, onReject }) {
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                                 Submitted {req.created_at}
                             </p>
+                            {(req.program_code || req.year_level || req.section_name) && (
+                                <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
+                                    {[req.program_code, (req.year_level || req.section_name) ? [req.year_level, req.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
+                                </p>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -616,6 +675,31 @@ function RequestCard({ req, onApprove, onReject }) {
                             <p className="text-sm text-gray-700 dark:text-gray-300">{req.reason}</p>
                         </div>
 
+                        {/* ── Supporting Document ── */}
+                        {req.supporting_document_url && (
+                            <div className="mt-4">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Supporting Document</p>
+                                <div
+                                    onClick={(e) => { e.stopPropagation(); setPreviewModalUrl(req.supporting_document_url); setShowPreviewModal(true); }}
+                                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 transition hover:border-blue-400 dark:hover:border-blue-500 w-full sm:w-48 h-32 flex items-center justify-center"
+                                >
+                                    {req.supporting_document_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                                        <img src={req.supporting_document_url} alt="Supporting Document" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors">
+                                            <svg className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                            </svg>
+                                            <span className="text-sm font-semibold">View Document</span>
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <svg className="h-8 w-8 text-white drop-shadow-md" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* ── Review details (always visible once reviewed) ── */}
                         {req.reviewed_at && (
                             <div className={`mt-3 p-3 rounded-lg border ${reviewBlockStyle.wrap}`}>
@@ -634,6 +718,33 @@ function RequestCard({ req, onApprove, onReject }) {
                     </div>
                 </div>
             </div>
+
+            {/* Document Preview Modal */}
+            <Modal show={showPreviewModal} onClose={() => setShowPreviewModal(false)} maxWidth="2xl">
+                <div onClick={(e) => e.stopPropagation()}>
+                    <div className="p-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-700">
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Document Preview</h2>
+                        <button onClick={() => setShowPreviewModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div className="p-4 relative bg-gray-50 dark:bg-gray-900 min-h-[50vh] flex items-center justify-center overflow-auto">
+                        {previewModalUrl && previewModalUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                            <img src={previewModalUrl} alt="Preview" className="max-w-full max-h-[70vh] rounded-lg object-contain shadow-sm" />
+                        ) : previewModalUrl ? (
+                            <iframe src={previewModalUrl} className="w-full h-[70vh] rounded-lg bg-white shadow-sm" title="Document Preview" />
+                        ) : null}
+                    </div>
+                    <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+                        <SecondaryButton onClick={() => setShowPreviewModal(false)}>Close</SecondaryButton>
+                        <a href={previewModalUrl} download target="_blank" rel="noopener noreferrer" className="ml-3 inline-flex items-center gap-2 rounded-xl bg-[#7a1315] px-4 py-2 bg-gradient-to-r from-red-600 to-red-800 text-sm font-bold text-white shadow-md hover:from-red-700 hover:to-red-900 transition-all dark:from-red-600 dark:to-red-800 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900">
+                            Download File
+                        </a>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }

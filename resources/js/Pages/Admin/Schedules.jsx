@@ -17,12 +17,12 @@ import {
 } from '@/Constants/admin';
 
 const emptyDetail = {
-    day_of_week: 'Monday',
-    time_in: '08:00',
-    time_out: '09:00',
-    subject_code: '',
+    day: 'Monday',
+    start_time: '08:00',
+    end_time: '09:00',
+    course_code: '',
     subject_desc: '',
-    room: '',
+    room_code: '',
     hours_required: 1,
 };
 
@@ -267,44 +267,66 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = {};
 
         form.details.forEach((detail, index) => {
-            const subjectCode = (detail.subject_code ?? '').trim();
-            const room = (detail.room ?? '').trim();
-            const timeInMinutes = toMinutes(detail.time_in);
-            const timeOutMinutes = toMinutes(detail.time_out);
+            const subjectCode = (detail.course_code ?? '').trim();
+            const room = (detail.room_code ?? '').trim();
+            const timeInMinutes = toMinutes(detail.start_time);
+            const timeOutMinutes = toMinutes(detail.end_time);
 
             if (!subjectCode) {
-                localErrors[`details.${index}.subject_code`] = 'Subject Code is required.';
+                localErrors[`details.${index}.course_code`] = 'Course Code is required.';
             }
 
             if (!room) {
-                localErrors[`details.${index}.room`] = 'Room is required.';
+                localErrors[`details.${index}.room_code`] = 'Room Code is required.';
             }
 
             if (timeInMinutes === null || timeOutMinutes === null) {
                 if (timeInMinutes === null) {
-                    localErrors[`details.${index}.time_in`] = 'Time In is required and must be a valid time.';
+                    localErrors[`details.${index}.start_time`] = 'Start Time is required and must be a valid time.';
                 }
 
                 if (timeOutMinutes === null) {
-                    localErrors[`details.${index}.time_out`] = 'Time Out is required and must be a valid time.';
+                    localErrors[`details.${index}.end_time`] = 'End Time is required and must be a valid time.';
                 }
 
                 return;
             }
 
             if (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes) {
-                localErrors[`details.${index}.time_in`] = 'Time In must be between 07:00 AM and 09:00 PM.';
+                localErrors[`details.${index}.start_time`] = 'Start Time must be between 07:00 AM and 09:00 PM.';
             }
 
             if (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes) {
-                localErrors[`details.${index}.time_out`] = 'Time Out must be between 07:00 AM and 09:00 PM.';
+                localErrors[`details.${index}.end_time`] = 'End Time must be between 07:00 AM and 09:00 PM.';
                 return;
             }
 
             if (timeOutMinutes <= timeInMinutes) {
-                localErrors[`details.${index}.time_out`] = 'Time Out must be later than Time In.';
+                localErrors[`details.${index}.end_time`] = 'End Time must be later than Start Time.';
             }
         });
+
+        // Cross-entry conflict check: a faculty cannot teach two classes at the same time
+        const count = form.details.length;
+        for (let i = 0; i < count; i++) {
+            for (let j = i + 1; j < count; j++) {
+                if (form.details[i].day !== form.details[j].day) continue;
+                const iStart = toMinutes(form.details[i].start_time);
+                const iEnd   = toMinutes(form.details[i].end_time);
+                const jStart = toMinutes(form.details[j].start_time);
+                const jEnd   = toMinutes(form.details[j].end_time);
+                if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
+                if (iStart >= iEnd || jStart >= jEnd) continue;
+                if (iStart < jEnd && iEnd > jStart) {
+                    if (!localErrors[`details.${i}.start_time`]) {
+                        localErrors[`details.${i}.start_time`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${form.details[i].day}.`;
+                    }
+                    if (!localErrors[`details.${j}.start_time`]) {
+                        localErrors[`details.${j}.start_time`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${form.details[j].day}.`;
+                    }
+                }
+            }
+        }
 
         return localErrors;
     };
@@ -313,7 +335,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = validateDetailTimeRanges();
         if (Object.keys(localErrors).length > 0) {
             setErrors(localErrors);
-            toast.error('Please fix invalid time ranges before creating the schedule.');
+            const hasConflict = Object.values(localErrors).some((msg) => msg.includes('overlaps with'));
+            toast.error(hasConflict
+                ? 'Two or more class entries conflict on the same day and time. Please resolve the overlaps.'
+                : 'Please fix invalid time ranges before creating the schedule.');
             return;
         }
 
@@ -337,7 +362,10 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         const localErrors = validateDetailTimeRanges();
         if (Object.keys(localErrors).length > 0) {
             setErrors(localErrors);
-            toast.error('Please fix invalid time ranges before saving changes.');
+            const hasConflict = Object.values(localErrors).some((msg) => msg.includes('overlaps with'));
+            toast.error(hasConflict
+                ? 'Two or more class entries conflict on the same day and time. Please resolve the overlaps.'
+                : 'Please fix invalid time ranges before saving changes.');
             return;
         }
 
@@ -434,7 +462,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                 onChange={(e) => handleSearchInput(e.target.value)}
                                 onFocus={() => search.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
-                                placeholder="Search by code, faculty name..."
+                                placeholder="Search by schedule code, faculty name, subject, room…"
                                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-2.5 pl-10 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-[#7a1315]/30 focus:border-[#7a1315] outline-none transition-all"
                             />
                             <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -736,11 +764,11 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                 <div className="space-y-2">
                                     {selectedSchedule.details.map((d, i) => (
                                         <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
-                                            <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day_of_week.substring(0, 3)}</span>
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">{d.time_in} – {d.time_out}</span>
-                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.subject_code || '—'}</span>
+                                            <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day.substring(0, 3)}</span>
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">{d.start_time} – {d.end_time}</span>
+                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.course_code || '—'}</span>
                                             <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{d.subject_desc || '—'}</span>
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">{d.room || 'TBA'}</span>
+                                            <span className="text-xs text-gray-400 dark:text-gray-500">{d.room_code || 'TBA'}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -813,29 +841,63 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
 
+    // Real-time cross-entry conflict detection
+    useEffect(() => {
+        const details = form.details;
+        const count = details.length;
+        const conflicts = {};
+
+        for (let i = 0; i < count; i++) {
+            for (let j = i + 1; j < count; j++) {
+                if (details[i].day !== details[j].day) continue;
+                const iStart = toMinutes(details[i].start_time);
+                const iEnd   = toMinutes(details[i].end_time);
+                const jStart = toMinutes(details[j].start_time);
+                const jEnd   = toMinutes(details[j].end_time);
+                if (iStart === null || iEnd === null || jStart === null || jEnd === null) continue;
+                if (iStart >= iEnd || jStart >= jEnd) continue;
+                if (iStart < jEnd && iEnd > jStart) {
+                    conflicts[`details.${i}.start_time`] = `Entry #${i + 1} overlaps with entry #${j + 1} on ${details[i].day}.`;
+                    conflicts[`details.${j}.start_time`] = `Entry #${j + 1} overlaps with entry #${i + 1} on ${details[j].day}.`;
+                }
+            }
+        }
+
+        setErrors((prev) => {
+            const next = { ...prev };
+            // Clear stale conflict errors (only those previously set by this logic)
+            details.forEach((_, i) => {
+                if (next[`details.${i}.start_time`]?.includes('overlaps with')) {
+                    delete next[`details.${i}.start_time`];
+                }
+            });
+            return { ...next, ...conflicts };
+        });
+    }, [form.details]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const applyRowTimeValidation = (index, timeInValue, timeOutValue) => {
         const timeInMinutes = toMinutes(timeInValue);
         const timeOutMinutes = toMinutes(timeOutValue);
 
         setErrors((prevErrors) => {
             const nextErrors = { ...prevErrors };
-            const timeInErrorKey = `details.${index}.time_in`;
-            const timeOutErrorKey = `details.${index}.time_out`;
+            const timeInErrorKey = `details.${index}.start_time`;
+            const timeOutErrorKey = `details.${index}.end_time`;
 
             delete nextErrors[timeInErrorKey];
             delete nextErrors[timeOutErrorKey];
 
             if (timeInMinutes !== null && (timeInMinutes < minAllowedMinutes || timeInMinutes > maxAllowedMinutes)) {
-                nextErrors[timeInErrorKey] = 'Time In must be between 07:00 AM and 09:00 PM.';
+                nextErrors[timeInErrorKey] = 'Start Time must be between 07:00 AM and 09:00 PM.';
             }
 
             if (timeOutMinutes !== null && (timeOutMinutes < minAllowedMinutes || timeOutMinutes > maxAllowedMinutes)) {
-                nextErrors[timeOutErrorKey] = 'Time Out must be between 07:00 AM and 09:00 PM.';
+                nextErrors[timeOutErrorKey] = 'End Time must be between 07:00 AM and 09:00 PM.';
                 return nextErrors;
             }
 
             if (timeInMinutes !== null && timeOutMinutes !== null && timeOutMinutes <= timeInMinutes) {
-                nextErrors[timeOutErrorKey] = 'Time Out must be later than Time In.';
+                nextErrors[timeOutErrorKey] = 'End Time must be later than Start Time.';
             }
 
             return nextErrors;
@@ -880,9 +942,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const handleTimeOutChange = (index, timeOutValue) => {
-        updateDetail(index, 'time_out', timeOutValue);
+        updateDetail(index, 'end_time', timeOutValue);
 
-        const currentTimeIn = form.details[index]?.time_in;
+        const currentTimeIn = form.details[index]?.start_time;
         const computedHours = computeHoursFromRange(currentTimeIn, timeOutValue);
 
         applyRowTimeValidation(index, currentTimeIn, timeOutValue);
@@ -893,9 +955,9 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const handleTimeInChange = (index, timeInValue) => {
-        updateDetail(index, 'time_in', timeInValue);
+        updateDetail(index, 'start_time', timeInValue);
 
-        const currentTimeOut = form.details[index]?.time_out;
+        const currentTimeOut = form.details[index]?.end_time;
 
         applyRowTimeValidation(index, timeInValue, currentTimeOut);
     };
@@ -908,11 +970,11 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
         updateDetail(index, 'hours_required', clampedHours);
 
-        const currentTimeIn = form.details[index]?.time_in;
+        const currentTimeIn = form.details[index]?.start_time;
         const computedTimeOut = computeTimeOutFromHours(currentTimeIn, clampedHours);
 
         if (computedTimeOut !== null) {
-            updateDetail(index, 'time_out', computedTimeOut);
+            updateDetail(index, 'end_time', computedTimeOut);
 
             applyRowTimeValidation(index, currentTimeIn, computedTimeOut);
         }
@@ -920,6 +982,12 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
 
     return (
         <div className="mt-5 space-y-6">
+            {errors.general && (
+                <div className="mb-4 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">{errors.general}</p>
+                </div>
+            )}
+
             {/* Top fields grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField label="Faculty" error={errors.faculty_id}>
@@ -1064,41 +1132,41 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 <div>
                                     <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Day</label>
                                     <select
-                                        value={detail.day_of_week}
-                                        onChange={(e) => updateDetail(index, 'day_of_week', e.target.value)}
+                                        value={detail.day}
+                                        onChange={(e) => updateDetail(index, 'day', e.target.value)}
                                         className="form-input-sm"
                                     >
                                         {DAYS.map((d) => (
                                             <option key={d} value={d}>{d}</option>
                                         ))}
                                     </select>
-                                    {errors[`details.${index}.day_of_week`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.day_of_week`]}</p>}
+                                    {errors[`details.${index}.day`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.day`]}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Time In</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Start Time</label>
                                     <input
                                         type="time"
-                                        value={detail.time_in}
+                                        value={detail.start_time}
                                         onChange={(e) => handleTimeInChange(index, e.target.value)}
                                         min={ALLOWED_TIME_MIN}
                                         max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.time_in`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.time_in`]}</p>}
+                                    {errors[`details.${index}.start_time`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.start_time`]}</p>}
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Time Out</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">End Time</label>
                                     <input
                                         type="time"
-                                        value={detail.time_out}
+                                        value={detail.end_time}
                                         onChange={(e) => handleTimeOutChange(index, e.target.value)}
                                         min={ALLOWED_TIME_MIN}
                                         max={ALLOWED_TIME_MAX}
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.time_out`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.time_out`]}</p>}
+                                    {errors[`details.${index}.end_time`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.end_time`]}</p>}
                                 </div>
 
                                 <div>
@@ -1115,16 +1183,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Subject Code *</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Course Code *</label>
                                     <input
                                         type="text"
-                                        value={detail.subject_code}
-                                        onChange={(e) => updateDetail(index, 'subject_code', e.target.value)}
+                                        value={detail.course_code}
+                                        onChange={(e) => updateDetail(index, 'course_code', e.target.value)}
                                         placeholder="CS101"
                                         required
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.subject_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.subject_code`]}</p>}
+                                    {errors[`details.${index}.course_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.course_code`]}</p>}
                                 </div>
 
                                 <div className="sm:col-span-2">
@@ -1139,16 +1207,16 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                 </div>
 
                                 <div>
-                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room *</label>
+                                    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Room Code *</label>
                                     <input
                                         type="text"
-                                        value={detail.room}
-                                        onChange={(e) => updateDetail(index, 'room', e.target.value)}
-                                        placeholder="Room 201"
+                                        value={detail.room_code}
+                                        onChange={(e) => updateDetail(index, 'room_code', e.target.value)}
+                                        placeholder="R201"
                                         required
                                         className="form-input-sm"
                                     />
-                                    {errors[`details.${index}.room`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room`]}</p>}
+                                    {errors[`details.${index}.room_code`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.room_code`]}</p>}
                                 </div>
                             </div>
                         </div>

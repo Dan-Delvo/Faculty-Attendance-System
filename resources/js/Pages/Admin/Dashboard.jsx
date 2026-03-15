@@ -255,7 +255,7 @@ export default function AdminDashboard({
             </section>
 
             {/* ── Stat Cards ────────────────────────────── */}
-            <section className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <section className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {statsData.map((stat, i) => (
                     <StatCard key={stat.label} stat={stat} index={i} />
                 ))}
@@ -339,7 +339,7 @@ export default function AdminDashboard({
                                 </h3>
                             </div>
                             <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-1">
-                                Mon – Fri
+                                Mon – Sat
                             </span>
                         </div>
 
@@ -348,7 +348,7 @@ export default function AdminDashboard({
                         </p>
 
                         {/* Summary row */}
-                        <div className="mt-5 grid grid-cols-5 gap-3">
+                        <div className="mt-5 grid grid-cols-6 gap-3">
                             {graphData.map((day) => (
                                 <div
                                     key={day.day}

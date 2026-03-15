@@ -22,6 +22,7 @@ class ScheduleChangeRequest extends Model
         'requested_room',
         'effective_date',
         'reason',
+        'supporting_document_path',
         'status',
         'reviewed_by',
         'reviewed_at',
@@ -31,7 +32,7 @@ class ScheduleChangeRequest extends Model
     protected function casts(): array
     {
         return [
-            'effective_date' => 'date',
+            'effective_date' => 'date:Y-m-d',
             'reviewed_at' => 'datetime',
         ];
     }
@@ -104,10 +105,33 @@ class ScheduleChangeRequest extends Model
         }
 
         if ($search) {
-            $query->whereHas('faculty', function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('faculty_code', 'like', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('reason', 'like', "%{$search}%")
+                  ->orWhere('requested_day_of_week', 'like', "%{$search}%")
+                  ->orWhere('requested_room', 'like', "%{$search}%")
+                  ->orWhere('status', 'like', "%{$search}%")
+                  ->orWhereHas('faculty', function ($fq) use ($search) {
+                      $fq->where('first_name', 'like', "%{$search}%")
+                         ->orWhere('last_name', 'like', "%{$search}%")
+                         ->orWhere('middle_name', 'like', "%{$search}%")
+                         ->orWhere('faculty_code', 'like', "%{$search}%")
+                         ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                         ->orWhereRaw("CONCAT(last_name, ', ', first_name) LIKE ?", ["%{$search}%"])
+                         ->orWhereRaw("CONCAT(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name) LIKE ?", ["%{$search}%"])
+                         ->orWhereHas('department', function ($dq) use ($search) {
+                             $dq->where('name', 'like', "%{$search}%")
+                                ->orWhere('code', 'like', "%{$search}%");
+                         });
+                  })
+                  ->orWhereHas('scheduleDetail', function ($sdq) use ($search) {
+                      $sdq->where('course_code', 'like', "%{$search}%")
+                          ->orWhere('subject_desc', 'like', "%{$search}%")
+                          ->orWhere('room_code', 'like', "%{$search}%")
+                          ->orWhere('day', 'like', "%{$search}%")
+                          ->orWhereHas('schedule', function ($sq) use ($search) {
+                              $sq->where('schedule_code', 'like', "%{$search}%");
+                          });
+                  });
             });
         }
 
@@ -128,11 +152,11 @@ class ScheduleChangeRequest extends Model
                 'faculty_code' => $faculty?->faculty_code ?? 'N/A',
                 'department' => $faculty?->department?->name ?? 'N/A',
                 'schedule_detail_id' => $req->schedule_detail_id,
-                'original_day' => $detail?->day_of_week ?? 'N/A',
-                'original_time_in' => $detail ? Carbon::parse($detail->time_in)->format('H:i') : '--:--',
-                'original_time_out' => $detail ? Carbon::parse($detail->time_out)->format('H:i') : '--:--',
-                'original_room' => $detail?->room ?? 'N/A',
-                'original_subject' => $detail?->subject_code ?? 'N/A',
+                'original_day' => $detail?->day ?? 'N/A',
+                'original_time_in' => $detail ? Carbon::parse($detail->start_time)->format('H:i') : '--:--',
+                'original_time_out' => $detail ? Carbon::parse($detail->end_time)->format('H:i') : '--:--',
+                'original_room' => $detail?->room_code ?? 'N/A',
+                'original_subject' => $detail?->course_code ?? 'N/A',
                 'original_subject_desc' => $detail?->subject_desc ?? null,
                 'schedule_code' => $detail?->schedule?->schedule_code ?? null,
                 'requested_day' => $req->requested_day_of_week,
@@ -141,11 +165,15 @@ class ScheduleChangeRequest extends Model
                 'requested_room' => $req->requested_room,
                 'effective_date' => $req->effective_date?->format('M d, Y'),
                 'reason' => $req->reason,
+                'supporting_document_url' => $req->supporting_document_path ? \Illuminate\Support\Facades\Storage::url($req->supporting_document_path) : null,
                 'status' => $req->status,
                 'reviewed_by_email' => $req->reviewedBy?->email ?? null,
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks' => $req->review_remarks,
                 'created_at' => $req->created_at?->format('M d, Y h:i A'),
+                'program_code' => $detail?->program_code,
+                'year_level' => $detail?->year_level,
+                'section_name' => $detail?->section_name,
             ];
         })->toArray();
 
@@ -190,11 +218,11 @@ class ScheduleChangeRequest extends Model
             return [
                 'id' => $req->id,
                 'schedule_detail_id' => $req->schedule_detail_id,
-                'original_day' => $detail?->day_of_week ?? 'N/A',
-                'original_time_in' => $detail ? Carbon::parse($detail->time_in)->format('H:i') : '--:--',
-                'original_time_out' => $detail ? Carbon::parse($detail->time_out)->format('H:i') : '--:--',
-                'original_room' => $detail?->room ?? 'N/A',
-                'original_subject' => $detail?->subject_code ?? 'N/A',
+                'original_day' => $detail?->day ?? 'N/A',
+                'original_time_in' => $detail ? Carbon::parse($detail->start_time)->format('H:i') : '--:--',
+                'original_time_out' => $detail ? Carbon::parse($detail->end_time)->format('H:i') : '--:--',
+                'original_room' => $detail?->room_code ?? 'N/A',
+                'original_subject' => $detail?->course_code ?? 'N/A',
                 'schedule_code' => $detail?->schedule?->schedule_code ?? null,
                 'requested_day' => $req->requested_day_of_week,
                 'requested_time_in' => Carbon::parse($req->requested_time_in)->format('H:i'),
@@ -202,11 +230,15 @@ class ScheduleChangeRequest extends Model
                 'requested_room' => $req->requested_room,
                 'effective_date' => $req->effective_date?->format('M d, Y'),
                 'reason' => $req->reason,
+                'supporting_document_url' => $req->supporting_document_path ? \Illuminate\Support\Facades\Storage::url($req->supporting_document_path) : null,
                 'status' => $req->status,
                 'reviewed_by' => $req->reviewedBy?->email ?? null,
                 'reviewed_at' => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks' => $req->review_remarks,
                 'created_at' => $req->created_at?->format('M d, Y h:i A'),
+                'program_code' => $detail?->program_code,
+                'year_level' => $detail?->year_level,
+                'section_name' => $detail?->section_name,
             ];
         })->toArray();
 

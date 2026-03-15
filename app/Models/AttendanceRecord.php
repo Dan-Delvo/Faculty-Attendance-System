@@ -83,4 +83,9 @@ class AttendanceRecord extends Model
     {
         return $this->hasMany(AttendanceAdjustment::class);
     }
+
+    public function justifications(): HasMany
+    {
+        return $this->hasMany(AttendanceJustification::class);
+    }
 }

@@ -59,7 +59,7 @@ class OnlineAttendanceSeeder extends Seeder
                 }
 
                 $details = ScheduleDetail::where('schedule_id', $schedule->id)
-                    ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+                    ->orderByRaw("FIELD(day, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
                     ->get();
 
                 // Copy placeholder per faculty so paths are realistic
@@ -79,8 +79,8 @@ class OnlineAttendanceSeeder extends Seeder
 
                     // Derive times from schedule detail or use defaults
                     if ($detail) {
-                        $timeIn  = Carbon::parse($detail->time_in)->format('H:i:s');
-                        $timeOut = Carbon::parse($detail->time_out)->format('H:i:s');
+                        $timeIn  = Carbon::parse($detail->start_time)->format('H:i:s');
+                        $timeOut = Carbon::parse($detail->end_time)->format('H:i:s');
                     } else {
                         $timeIn  = '09:00:00';
                         $timeOut = '12:00:00';

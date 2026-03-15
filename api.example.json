@@ -1,0 +1,78 @@
+{
+    "parttime_faculty_schedules": [
+        {
+            "faculty_id": 1001,
+            "faculty_email": "faculty.alpha@example.test",
+            "last_name": "Navarro",
+            "first_name": "Adrian",
+            "middle_name": "M.",
+            "suffix_name": null,
+            "faculty_code": "FA1001MOCK2026",
+            "faculty_type": "Part-Time",
+            "assigned_units": 9,
+            "schedules": [
+                {
+                    "day": "Tuesday",
+                    "start_time": "09:00:00",
+                    "end_time": "12:00:00",
+                    "room_code": "R201",
+                    "program_code": "BSIT",
+                    "program_title": "Bachelor of Science in Information Technology",
+                    "year_level": 2,
+                    "section_name": "1",
+                    "course_title": "Database Systems",
+                    "course_code": "IT 204"
+                },
+                {
+                    "day": "Monday",
+                    "start_time": "13:00:00",
+                    "end_time": "16:00:00",
+                    "room_code": "LAB3",
+                    "program_code": "BSCS",
+                    "program_title": "Bachelor of Science in Computer Science",
+                    "year_level": 3,
+                    "section_name": "2",
+                    "course_title": "Software Engineering",
+                    "course_code": "CS 311"
+                },
+                {
+                    "day": "Wednesday",
+                    "start_time": "15:30:00",
+                    "end_time": "18:30:00",
+                    "room_code": "R105",
+                    "program_code": "BSBA-MM",
+                    "program_title": "Bachelor of Science in Business Administration - Major in Marketing Management",
+                    "year_level": 4,
+                    "section_name": "1",
+                    "course_title": "Strategic Management",
+                    "course_code": "BA 402"
+                }
+            ]
+        },
+        {
+            "faculty_id": 1002,
+            "faculty_email": "faculty.beta@example.test",
+            "last_name": "Serrano",
+            "first_name": "Leah",
+            "middle_name": null,
+            "suffix_name": null,
+            "faculty_code": "FA1002MOCK2026",
+            "faculty_type": "Part-Time",
+            "assigned_units": 3,
+            "schedules": [
+                {
+                    "day": "Saturday",
+                    "start_time": "07:30:00",
+                    "end_time": "12:30:00",
+                    "room_code": "R308",
+                    "program_code": "BSED",
+                    "program_title": "Bachelor of Secondary Education",
+                    "year_level": 1,
+                    "section_name": "1",
+                    "course_title": "Foundations of Education",
+                    "course_code": "ED 101"
+                }
+            ]
+        }
+    ]
+}

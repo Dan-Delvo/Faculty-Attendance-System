@@ -4,10 +4,12 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
 use App\Http\Controllers\Admin\AdminDtrExportController;
+use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
+use App\Http\Controllers\Admin\AdminOnlineRequestController;
 use App\Http\Controllers\Admin\AdminSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -46,6 +48,9 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/api/dashboard', [AdminDashboardController::class, 'liveStats'])
         ->name('admin.api.dashboard');
 
+    Route::get('/api/external-schedules', [AdminDashboardController::class, 'externalSchedules'])
+        ->name('admin.api.external-schedules');
+
     Route::get('/dtr-export/preview', [AdminDtrExportController::class, 'preview'])
         ->name('admin.dtr-export.preview');
 
@@ -81,13 +86,32 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/api/schedule-change-requests', [AdminScheduleChangeRequestController::class, 'filter'])
         ->name('admin.schedule-change-requests.filter');
 
+    Route::get('/api/schedule-change-requests/suggestions', [AdminScheduleChangeRequestController::class, 'searchSuggestions'])
+        ->name('admin.schedule-change-requests.suggestions');
+
     Route::patch('/schedule-change-requests/{scheduleChangeRequest}/approve', [AdminScheduleChangeRequestController::class, 'approve'])
         ->name('admin.schedule-change-requests.approve');
 
     Route::patch('/schedule-change-requests/{scheduleChangeRequest}/reject', [AdminScheduleChangeRequestController::class, 'reject'])
         ->name('admin.schedule-change-requests.reject');
 
+    // ── Online Attendance Requests ─────────────────────────────────────────
+    Route::get('/online-requests', [AdminOnlineRequestController::class, 'index'])
+        ->name('admin.online-requests.index');
+
+    Route::get('/api/online-requests', [AdminOnlineRequestController::class, 'filter'])
+        ->name('admin.online-requests.filter');
+
+    Route::patch('/online-requests/{onlineRequest}/approve', [AdminOnlineRequestController::class, 'approve'])
+        ->name('admin.online-requests.approve');
+
+    Route::patch('/online-requests/{onlineRequest}/reject', [AdminOnlineRequestController::class, 'reject'])
+        ->name('admin.online-requests.reject');
+
     // ── Holiday Management ─────────────────────────────────────────────────
+    Route::get('/holidays/suggestions', [AdminHolidayController::class, 'searchSuggestions'])
+        ->name('admin.holidays.suggestions');
+
     Route::get('/holidays', [AdminHolidayController::class, 'index'])
         ->name('admin.holidays.index');
 

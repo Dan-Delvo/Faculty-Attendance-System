@@ -16,6 +16,7 @@ class Schedule extends Model
 
     protected $fillable = [
         'faculty_id',
+        'external_faculty_id',
         'schedule_code',
         'academic_year',
         'semester',
@@ -30,10 +31,11 @@ class Schedule extends Model
     protected function casts(): array
     {
         return [
+            'external_faculty_id' => 'integer',
             'academic_year' => 'integer',
             'semester' => 'integer',
-            'effective_from' => 'datetime',
-            'effective_until' => 'datetime',
+            'effective_from' => 'date:Y-m-d',
+            'effective_until' => 'date:Y-m-d',
         ];
     }
 
@@ -89,10 +91,21 @@ class Schedule extends Model
             $query->where(function ($q) use ($search) {
                 $q->where('schedule_code', 'like', "%{$search}%")
                   ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhereRaw('CAST(academic_year AS CHAR) LIKE ?', ["%{$search}%"])
                   ->orWhereHas('faculty', function ($fq) use ($search) {
                       $fq->where('first_name', 'like', "%{$search}%")
                          ->orWhere('last_name', 'like', "%{$search}%")
-                         ->orWhere('faculty_code', 'like', "%{$search}%");
+                         ->orWhere('middle_name', 'like', "%{$search}%")
+                         ->orWhere('faculty_code', 'like', "%{$search}%")
+                         ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                         ->orWhereRaw("CONCAT(last_name, ', ', first_name) LIKE ?", ["%{$search}%"])
+                         ->orWhereRaw("CONCAT(first_name, ' ', COALESCE(middle_name, ''), ' ', last_name) LIKE ?", ["%{$search}%"]);
+                  })
+                  ->orWhereHas('scheduleDetails', function ($dq) use ($search) {
+                      $dq->where('course_code', 'like', "%{$search}%")
+                         ->orWhere('subject_desc', 'like', "%{$search}%")
+                         ->orWhere('room_code', 'like', "%{$search}%")
+                         ->orWhere('day', 'like', "%{$search}%");
                   });
             });
         }
@@ -147,12 +160,12 @@ class Schedule extends Model
                 'details'        => $schedule->scheduleDetails->map(function (ScheduleDetail $d) {
                     return [
                         'id'             => $d->id,
-                        'day_of_week'    => $d->day_of_week,
-                        'time_in'        => Carbon::parse($d->time_in)->format('H:i'),
-                        'time_out'       => Carbon::parse($d->time_out)->format('H:i'),
-                        'subject_code'   => $d->subject_code,
+                        'day'            => $d->day,
+                        'start_time'     => Carbon::parse($d->start_time)->format('H:i'),
+                        'end_time'       => Carbon::parse($d->end_time)->format('H:i'),
+                        'course_code'    => $d->course_code,
                         'subject_desc'   => $d->subject_desc,
-                        'room'           => $d->room,
+                        'room_code'      => $d->room_code,
                         'hours_required' => $d->hours_required,
                     ];
                 })->toArray(),
@@ -180,7 +193,14 @@ class Schedule extends Model
                   ->orWhereHas('faculty', function ($q2) use ($query) {
                       $q2->where('first_name', 'like', "%{$query}%")
                          ->orWhere('last_name', 'like', "%{$query}%")
-                         ->orWhere('faculty_code', 'like', "%{$query}%");
+                         ->orWhere('middle_name', 'like', "%{$query}%")
+                         ->orWhere('faculty_code', 'like', "%{$query}%")
+                         ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$query}%"])
+                         ->orWhereRaw("CONCAT(last_name, ', ', first_name) LIKE ?", ["%{$query}%"]);
+                  })
+                  ->orWhereHas('scheduleDetails', function ($dq) use ($query) {
+                             $dq->where('course_code', 'like', "%{$query}%")
+                                 ->orWhere('room_code', 'like', "%{$query}%");
                   });
             })
             ->limit(8)

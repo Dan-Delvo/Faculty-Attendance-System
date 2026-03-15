@@ -68,21 +68,12 @@ class AdminAttendanceImportController extends Controller
             $duplicateRecords = 0;
             $errors = [];
 
-            $existingFaculty = Faculty::query()
-                ->pluck('id', 'biometric_id');
-
             DB::beginTransaction();
 
             foreach ($parsedRows as $row) {
                 if ($row['biometric_id'] === '' || $row['log_datetime'] === '' || $row['log_type'] === '') {
                     $failedRecords++;
                     $errors[] = "Line {$row['line']}: biometric_id, log_datetime, and log_type are required.";
-                    continue;
-                }
-
-                if (! $existingFaculty->has($row['biometric_id'])) {
-                    $failedRecords++;
-                    $errors[] = "Line {$row['line']}: biometric_id '{$row['biometric_id']}' does not exist in faculties.";
                     continue;
                 }
 
@@ -169,10 +160,16 @@ class AdminAttendanceImportController extends Controller
             ->orderBy('log_datetime')
             ->orderBy('id');
 
-        $paginated = $logsQuery->paginate($perPage)->through(function (BiometricLog $log): array {
+        // Pre-load the set of known biometric IDs to determine which logs have unrecognised faculty.
+        $knownBiometricIds = Faculty::query()->pluck('biometric_id')->flip();
+
+        $paginated = $logsQuery->paginate($perPage)->through(function (BiometricLog $log) use ($knownBiometricIds): array {
+            $facultyExists = $knownBiometricIds->has($log->biometric_id);
+
             return [
                 'id' => $log->id,
-                'faculty_name' => $log->faculty?->full_name ?? $log->biometric_id,
+                'faculty_name' => $log->faculty?->full_name ?? null,
+                'faculty_exists' => $facultyExists,
                 'biometric_id' => $log->biometric_id,
                 'log_datetime' => optional($log->log_datetime)->format('Y-m-d H:i:s'),
                 'log_type' => $log->log_type,
@@ -187,6 +184,16 @@ class AdminAttendanceImportController extends Controller
         $totalLogs = (int) ($counts->total ?? 0);
         $syncedLogs = (int) ($counts->synced ?? 0);
 
+        // Count unsynced logs whose biometric_id has no matching faculty record.
+        // Uses the already-loaded $knownBiometricIds collection to avoid an extra DB round-trip.
+        // Only unprocessed logs are counted so that the frontend's syncable-count arithmetic
+        // (unsyncedLogs − unrecognizedLogs) remains accurate even when a faculty is soft-deleted
+        // after their logs were already synced.
+        $unrecognizedLogs = BiometricLog::where('import_batch_id', $batch->id)
+            ->where('is_processed', false)
+            ->whereNotIn('biometric_id', $knownBiometricIds->keys())
+            ->count();
+
         return response()->json([
             'batch' => [
                 'id' => $batch->id,
@@ -196,6 +203,7 @@ class AdminAttendanceImportController extends Controller
                 'total_logs' => $totalLogs,
                 'synced_logs' => $syncedLogs,
                 'unsynced_logs' => $totalLogs - $syncedLogs,
+                'unrecognized_logs' => $unrecognizedLogs,
             ],
             'logs' => $paginated,
         ]);
@@ -209,9 +217,11 @@ class AdminAttendanceImportController extends Controller
             ], 409);
         }
 
+        // Only mark logs with a recognised faculty as synced; unrecognised IDs remain unprocessed.
         $syncedCount = BiometricLog::query()
             ->where('import_batch_id', $batch->id)
             ->where('is_processed', false)
+            ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
             ->update([
                 'is_processed' => true,
                 'updated_at' => now(),
@@ -236,51 +246,48 @@ class AdminAttendanceImportController extends Controller
     {
         $fileName = 'biometric_logs_import_template.xlsx';
 
-        $headers = [
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Biometric Logs Template');
+
+        $sheet->setCellValue('A1', 'Attendance Log Import Template');
+        $sheet->setCellValue('A2', 'Purpose: Use this sheet to bulk import biometric attendance logs for faculty.');
+        $sheet->setCellValue('A3', 'Fill one log entry per row starting at row 10. Do not change the column names in row 9.');
+
+        $sheet->fromArray([
+            ['Column', 'Purpose / Format'],
+            ['biometric_id', 'Required. Faculty biometric ID. Must match an existing faculties.biometric_id value.'],
+            ['log_datetime', 'Required. Date and time of the log. Recommended format: YYYY-MM-DD HH:MM:SS.'],
+            ['log_type', 'Required. Log type from the device (e.g., IN or OUT).'],
+            ['device_id', 'Optional. Identifier of the biometric device used to record the log.'],
+        ], null, 'A5');
+
+        $sheet->fromArray([
+            ['biometric_id', 'log_datetime', 'log_type', 'device_id'],
+            ['BIO-0001', '2026-03-01 08:02:15', 'IN', 'DEVICE-01'],
+            ['BIO-0001', '2026-03-01 17:11:54', 'OUT', 'DEVICE-01'],
+            ['BIO-0002', '2026-03-01 08:09:40', 'IN', 'DEVICE-02'],
+            ['BIO-0002', '2026-03-01 17:04:11', 'OUT', 'DEVICE-02'],
+        ], null, 'A9');
+
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(9);
+        $sheet->getStyle('A5:B5')->getFont()->setBold(true);
+        $sheet->getStyle('A9:D9')->getFont()->setBold(true);
+
+        foreach (['A', 'B', 'C', 'D'] as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'attendance_template_') . '.xlsx';
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempPath);
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+
+        return response()->download($tempPath, $fileName, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => "attachment; filename={$fileName}",
-        ];
-
-        $callback = static function (): void {
-            $spreadsheet = new Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Biometric Logs Template');
-
-            $sheet->setCellValue('A1', 'Attendance Log Import Template');
-            $sheet->setCellValue('A2', 'Purpose: Use this sheet to bulk import biometric attendance logs for faculty.');
-            $sheet->setCellValue('A3', 'Fill one log entry per row starting at row 10. Do not change the column names in row 9.');
-
-            $sheet->fromArray([
-                ['Column', 'Purpose / Format'],
-                ['biometric_id', 'Required. Faculty biometric ID. Must match an existing faculties.biometric_id value.'],
-                ['log_datetime', 'Required. Date and time of the log. Recommended format: YYYY-MM-DD HH:MM:SS.'],
-                ['log_type', 'Required. Log type from the device (e.g., IN or OUT).'],
-                ['device_id', 'Optional. Identifier of the biometric device used to record the log.'],
-            ], null, 'A5');
-
-            $sheet->fromArray([
-                ['biometric_id', 'log_datetime', 'log_type', 'device_id'],
-                ['BIO-0001', '2026-03-01 08:02:15', 'IN', 'DEVICE-01'],
-                ['BIO-0001', '2026-03-01 17:11:54', 'OUT', 'DEVICE-01'],
-                ['BIO-0002', '2026-03-01 08:09:40', 'IN', 'DEVICE-02'],
-                ['BIO-0002', '2026-03-01 17:04:11', 'OUT', 'DEVICE-02'],
-            ], null, 'A9');
-
-            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(9);
-            $sheet->getStyle('A5:B5')->getFont()->setBold(true);
-            $sheet->getStyle('A9:D9')->getFont()->setBold(true);
-
-            foreach (['A', 'B', 'C', 'D'] as $column) {
-                $sheet->getColumnDimension($column)->setAutoSize(true);
-            }
-
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-            $spreadsheet->disconnectWorksheets();
-            unset($spreadsheet);
-        };
-
-        return response()->stream($callback, 200, $headers);
+        ])->deleteFileAfterSend(true);
     }
 
     private function downloadCsvTemplate()
