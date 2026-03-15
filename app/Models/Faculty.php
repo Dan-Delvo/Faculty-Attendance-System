@@ -20,6 +20,7 @@ class Faculty extends Model
     protected $primaryKey = 'id';
 
     protected $fillable = [
+        'external_faculty_id',
         'user_id',
         'department_id',
         'faculty_code',
@@ -27,6 +28,9 @@ class Faculty extends Model
         'first_name',
         'middle_name',
         'last_name',
+        'suffix_name',
+        'faculty_type',
+        'assigned_units',
         'phone',
         'employment_type',
         'date_hired',
@@ -36,6 +40,8 @@ class Faculty extends Model
     protected function casts(): array
     {
         return [
+            'external_faculty_id' => 'integer',
+            'assigned_units' => 'integer',
             'date_hired' => 'date',
             'is_active' => 'boolean',
         ];

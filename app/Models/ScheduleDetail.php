@@ -14,20 +14,26 @@ class ScheduleDetail extends Model
 
     protected $fillable = [
         'schedule_id',
-        'day_of_week',
-        'time_in',
-        'time_out',
-        'subject_code',
+        'day',
+        'start_time',
+        'end_time',
+        'program_code',
+        'program_title',
+        'year_level',
+        'section_name',
+        'course_title',
+        'course_code',
+        'room_code',
         'subject_desc',
-        'room',
         'hours_required',
     ];
 
     protected function casts(): array
     {
         return [
-            'time_in' => 'datetime',
-            'time_out' => 'datetime',
+            'start_time' => 'datetime',
+            'end_time' => 'datetime',
+            'year_level' => 'integer',
             'hours_required' => 'integer',
         ];
     }
