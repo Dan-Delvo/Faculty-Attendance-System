@@ -39,8 +39,37 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     // ── File preview state ───────────────────────────────────
     const [previewIn, setPreviewIn] = useState(null);
     const [previewOut, setPreviewOut] = useState(null);
+    const [attendanceCheck, setAttendanceCheck] = useState({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
     const fileInRef = useRef(null);
     const fileOutRef = useRef(null);
+
+    // ── Check for existing attendance on date change ────────
+    const checkAttendance = useCallback((date) => {
+        if (!date) {
+            setAttendanceCheck({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
+            return;
+        }
+
+        fetch(route('faculty.online-attendance.check', { date }), {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                setAttendanceCheck({
+                    checked: true,
+                    canSubmit: data.can_submit,
+                    hasAttendance: data.has_attendance,
+                    hasPendingRequest: data.has_pending_request,
+                });
+            })
+            .catch(() => {
+                setAttendanceCheck({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
+            });
+    }, []);
 
     // ── Create form ──────────────────────────────────────────
     const createForm = useForm({
@@ -110,6 +139,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         createForm.clearErrors();
         setPreviewIn(null);
         setPreviewOut(null);
+        setAttendanceCheck({ checked: false, canSubmit: true, hasAttendance: false, hasPendingRequest: false });
         setShowCreateModal(true);
     };
 
@@ -313,7 +343,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 <option value="">— No specific schedule —</option>
                                 {scheduleDetails.map((d) => (
                                     <option key={d.id} value={d.id}>
-                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} · {d.program_code} {(d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : ''}
+                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} {d.subject_desc ? `- ${d.subject_desc}` : ''} · {d.program_code} {(d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : ''}
                                     </option>
                                 ))}
                             </select>
@@ -362,10 +392,21 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 type="date"
                                 className="mt-1 block w-full text-sm"
                                 value={createForm.data.attendance_date}
-                                onChange={(e) => { createForm.setData('attendance_date', e.target.value); createForm.clearErrors('attendance_date'); }}
+                                onChange={(e) => { 
+                                    createForm.setData('attendance_date', e.target.value); 
+                                    createForm.clearErrors('attendance_date');
+                                    checkAttendance(e.target.value);
+                                }}
                                 max={new Date().toISOString().split('T')[0]}
                             />
                             <InputError message={createForm.errors.attendance_date} />
+                            {attendanceCheck.checked && !attendanceCheck.canSubmit && (
+                                <p className="mt-1 text-xs font-bold text-red-600 dark:text-red-400">
+                                    {attendanceCheck.hasAttendance 
+                                        ? 'You already have an attendance record for this date.' 
+                                        : 'You already have a pending request for this date.'}
+                                </p>
+                            )}
                         </div>
 
                         {/* Time In & Out */}
@@ -472,7 +513,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         <SecondaryButton type="button" onClick={() => setShowCreateModal(false)}>
                             Cancel
                         </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={createForm.processing}>
+                        <PrimaryButton type="submit" disabled={createForm.processing || !attendanceCheck.canSubmit}>
                             {createForm.processing ? 'Submitting…' : 'Submit Attendance'}
                         </PrimaryButton>
                     </div>

@@ -110,4 +110,39 @@ class OnlineAttendanceController extends Controller
 
         return back()->with('success', 'Online attendance request cancelled.');
     }
+
+    /**
+     * Check if attendance already exists for a given date.
+     */
+    public function checkAttendance(Request $request)
+    {
+        $faculty = $request->user()->faculty;
+
+        if (!$faculty) {
+            return response()->json(['error' => 'Faculty profile not found.'], 404);
+        }
+
+        $date = $request->query('date');
+
+        if (!$date) {
+            return response()->json(['error' => 'Date is required.'], 400);
+        }
+
+        // Check for existing attendance record
+        $hasAttendance = $faculty->attendanceRecords()
+            ->where('attendance_date', $date)
+            ->exists();
+
+        // Check for pending online attendance request
+        $hasPendingRequest = $faculty->onlineAttendanceRequests()
+            ->where('attendance_date', $date)
+            ->where('status', 'pending')
+            ->exists();
+
+        return response()->json([
+            'has_attendance' => $hasAttendance,
+            'has_pending_request' => $hasPendingRequest,
+            'can_submit' => !$hasAttendance && !$hasPendingRequest,
+        ]);
+    }
 }

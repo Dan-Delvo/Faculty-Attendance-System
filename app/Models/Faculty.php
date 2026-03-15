@@ -380,6 +380,19 @@ class Faculty extends Model
             ];
         }
 
+        // Block if there's already an attendance record for this date (biometric or previous online)
+        $existingAttendance = $this->attendanceRecords()
+            ->where('attendance_date', $data['attendance_date'])
+            ->exists();
+
+        if ($existingAttendance) {
+            return [
+                'success' => false,
+                'error_field' => 'attendance_date',
+                'error_message' => 'You already have an attendance record for this date.',
+            ];
+        }
+
         // Verify schedule detail belongs to this faculty (if provided)
         if (!empty($data['schedule_detail_id'])) {
             $owns = ScheduleDetail::whereHas('schedule', function ($q) {
