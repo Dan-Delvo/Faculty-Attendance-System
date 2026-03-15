@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateDtrBatchZipJob;
 use App\Jobs\GenerateDtrPdfJob;
 use App\Models\AttendanceAdjustment;
 use App\Models\Faculty;
@@ -55,6 +56,54 @@ class AdminDtrExportController extends Controller
     }
 
     /**
+     * Return a JSON preview for multiple faculty (rows + summary per faculty).
+     */
+    public function previewBatch(Request $request, AttendanceToDtrService $service): JsonResponse
+    {
+        $validated = $request->validate([
+            'faculty_ids'   => ['required', 'array', 'min:1'],
+            'faculty_ids.*' => ['required', 'integer', 'exists:faculties,id'],
+            'month'         => ['required', 'integer', 'between:1,12'],
+            'year'          => ['required', 'integer', 'between:2000,2100'],
+        ]);
+
+        $month = (int) $validated['month'];
+        $year  = (int) $validated['year'];
+
+        $faculties = Faculty::query()
+            ->with('department:id,name')
+            ->whereIn('id', $validated['faculty_ids'])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+
+        $periodLabel = Carbon::create($year, $month, 1)->format('F Y');
+
+        $previews = $faculties->map(function (Faculty $faculty) use ($service, $month, $year) {
+            $conversion = $service->convertToDtr($faculty->id, $month, $year);
+            $attendance = $conversion['attendance'] ?? [];
+            $summary    = $conversion['summary'] ?? [];
+
+            $rows = $this->buildRows($attendance, $month, $year);
+
+            return [
+                'faculty' => [
+                    'id' => $faculty->id,
+                    'full_name' => $faculty->full_name,
+                    'department' => $faculty->department?->name ?? 'N/A',
+                ],
+                'rows' => $rows,
+                'summary' => $summary,
+            ];
+        })->values();
+
+        return response()->json([
+            'periodLabel' => $periodLabel,
+            'previews' => $previews,
+        ]);
+    }
+
+    /**
      * Dispatch a background job to generate the PDF, return a token to poll.
      */
     public function dispatch(Request $request): JsonResponse
@@ -89,17 +138,48 @@ class AdminDtrExportController extends Controller
     }
 
     /**
+     * Dispatch a background job to generate a zip of multiple DTR PDFs.
+     */
+    public function dispatchBatch(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'faculty_ids'   => ['required', 'array', 'min:1'],
+            'faculty_ids.*' => ['required', 'integer', 'exists:faculties,id'],
+            'month'         => ['required', 'integer', 'between:1,12'],
+            'year'          => ['required', 'integer', 'between:2000,2100'],
+        ]);
+
+        $token = Str::uuid()->toString();
+        $fileName = "dtr_export_{$validated['year']}_{$validated['month']}.zip";
+
+        GenerateDtrBatchZipJob::dispatch(
+            array_map(fn ($id) => (int) $id, $validated['faculty_ids']),
+            (int) $validated['month'],
+            (int) $validated['year'],
+            $token,
+        );
+
+        return response()->json([
+            'token'    => $token,
+            'fileName' => $fileName,
+            'message'  => 'Batch PDF generation started.',
+        ]);
+    }
+
+    /**
      * Check if the PDF has been generated yet.
      */
     public function status(Request $request): JsonResponse
     {
         $token = $request->query('token');
+        $extension = $request->query('extension', 'pdf');
+        $extension = in_array($extension, ['pdf', 'zip'], true) ? $extension : 'pdf';
 
         if (! $token) {
             return response()->json(['ready' => false], 422);
         }
 
-        $path = "dtr-exports/{$token}.pdf";
+        $path = "dtr-exports/{$token}.{$extension}";
 
         return response()->json([
             'ready' => Storage::disk('local')->exists($path),
@@ -113,12 +193,16 @@ class AdminDtrExportController extends Controller
     {
         $token    = $request->query('token');
         $fileName = $request->query('fileName', 'dtr.pdf');
+        $extension = $request->query('extension');
 
         if (! $token) {
             return response()->json(['error' => 'Missing token.'], 422);
         }
 
-        $path = "dtr-exports/{$token}.pdf";
+        $extension = $extension
+            ?? (strtolower(pathinfo($fileName, PATHINFO_EXTENSION)) ?: 'pdf');
+        $extension = in_array($extension, ['pdf', 'zip'], true) ? $extension : 'pdf';
+        $path = "dtr-exports/{$token}.{$extension}";
 
         if (! Storage::disk('local')->exists($path)) {
             return response()->json(['error' => 'File not ready yet.'], 404);
@@ -156,6 +240,7 @@ class AdminDtrExportController extends Controller
                 'undertime_minutes' => (int) ($record?->undertime_minutes ?? 0),
                 'status'            => $dayData['status'] ?? 'none',
                 'holiday_label'     => collect($dayData['holidays'] ?? [])->pluck('name')->filter()->implode(', '),
+                'is_holiday'        => !empty($dayData['holidays']),
             ];
         }
 

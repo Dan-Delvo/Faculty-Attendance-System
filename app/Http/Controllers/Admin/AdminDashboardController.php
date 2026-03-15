@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\AttendanceRecord;
-use App\Models\BiometricLog;
 use App\Models\Faculty;
 use App\Services\FlssBackendClient;
 use Carbon\Carbon;
@@ -21,7 +19,6 @@ class AdminDashboardController extends Controller
      */
     public function index(Request $request)
     {
-        $activeFaculty = Faculty::getActiveFacultyList();
         $now = Carbon::now();
 
         return Inertia::render('Admin/Dashboard', [
@@ -31,13 +28,6 @@ class AdminDashboardController extends Controller
             'weeklyGraph'       => Faculty::getWeeklyTimedInGraph(),
             'currentDate'       => $now->format('l, F j, Y'),
             'greeting'          => $this->getGreeting(),
-            'facultyOptions'    => $activeFaculty,
-            'dtrExportDefaults' => [
-                'faculty_id' => $activeFaculty[0]['id'] ?? null,
-                'month' => $now->month,
-                'year' => $now->year,
-            ],
-            'dtrExportYears'    => array_values(array_reverse(range($now->year - 5, $now->year + 1))),
         ]);
     }
 
