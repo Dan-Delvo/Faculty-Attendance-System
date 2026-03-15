@@ -141,10 +141,13 @@ class FacultyDashboardController extends Controller
 
                 // Build subjects array from the linked schedule detail
                 $subjects = [];
-                if ($detail && $detail->subject_code) {
+                if ($detail) {
                     $subjects[] = [
-                        'code' => $detail->subject_code,
+                        'code' => $detail->course_code ?? '',
                         'desc' => $detail->subject_desc ?? null,
+                        'program_code' => $detail->program_code,
+                        'year_level' => $detail->year_level,
+                        'section_name' => $detail->section_name,
                     ];
                 }
 
@@ -173,8 +176,17 @@ class FacultyDashboardController extends Controller
 
                 // Dynamically adjust status for UI consistency if DB status is out of sync
                 $displayStatus = $record->status;
-                if ($undertimeMinutes > 0 && strtolower($displayStatus) === 'present') {
-                    $displayStatus = 'UNDERTIME';
+                $isUndertime = ($undertimeMinutes > 0);
+                $isOvertime = ($record->overtime_minutes > 0);
+
+                if (strtolower($displayStatus) === 'present') {
+                    if ($isUndertime && $isOvertime) {
+                        $displayStatus = 'UNDERTIME / OVERTIME';
+                    } elseif ($isUndertime) {
+                        $displayStatus = 'UNDERTIME';
+                    } elseif ($isOvertime) {
+                        $displayStatus = 'OVERTIME';
+                    }
                 }
 
                 return [

@@ -61,6 +61,8 @@ function statusStyle(status = '') {
         return 'text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/40 ring-blue-600/20';
     if (s.includes('missing') || s.includes('check'))
         return 'text-rose-700 bg-rose-100 dark:text-rose-400 dark:bg-rose-900/40 ring-rose-600/20';
+    if (s === 'overtime')
+        return 'text-indigo-700 bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/40 ring-indigo-600/20';
     // default
     return 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-gray-800 ring-gray-500/20';
 }
@@ -154,14 +156,19 @@ function ScheduleCard({ item }) {
                 <div className="flex gap-3">
                     <div className={`mt-1 h-3 w-3 shrink-0 rounded-full bg-gradient-to-r ${isCurrent ? 'from-amber-400 to-amber-600' : 'from-blue-400 to-blue-600'} shadow-sm`} />
                     <div>
-                        <h4 className="font-bold text-gray-900 dark:text-white leading-tight pr-2">
+                        <h4 className="font-bold text-white leading-tight pr-2">
                             {item.subject}
                         </h4>
-                        <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                            <span>{item.code}</span>
-                            <span className="hidden sm:inline">•</span>
-                            <span>{item.section}</span>
-                        </p>
+                        {item.code && (
+                            <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                {item.code}
+                            </p>
+                        )}
+                        {(item.programCode || item.yearLevel || item.sectionName) && (
+                            <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-500">
+                                {[item.programCode, (item.yearLevel || item.sectionName) ? [item.yearLevel, item.sectionName].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
+                            </p>
+                        )}
                     </div>
                 </div>
                 <div className="shrink-0 ml-2">
@@ -203,7 +210,7 @@ function ScheduleCard({ item }) {
                         </span>
                     )}
                     {item.isChanged && (
-                        <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-400/30" title={`Moved from ${item.originalDay}`}>
+                        <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/30" title={`Moved from ${item.originalDay}`}>
                             Changed
                         </span>
                     )}
