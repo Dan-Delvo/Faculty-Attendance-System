@@ -364,7 +364,7 @@ class Faculty extends Model
      * @param  string $screenshotOutPath Storage path for time-out screenshot.
      * @return array{success: bool, error_field?: string, error_message?: string}
      */
-    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, string $screenshotOutPath): array
+    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, ?string $screenshotOutPath = null): array
     {
         // Block duplicate pending request for the same date
         $existingPending = $this->onlineAttendanceRequests()
@@ -377,6 +377,19 @@ class Faculty extends Model
                 'success' => false,
                 'error_field' => 'attendance_date',
                 'error_message' => 'You already have a pending online attendance request for this date.',
+            ];
+        }
+
+        // Block if there's already an attendance record for this date (biometric or previous online)
+        $existingAttendance = $this->attendanceRecords()
+            ->where('attendance_date', $data['attendance_date'])
+            ->exists();
+
+        if ($existingAttendance) {
+            return [
+                'success' => false,
+                'error_field' => 'attendance_date',
+                'error_message' => 'You already have an attendance record for this date.',
             ];
         }
 

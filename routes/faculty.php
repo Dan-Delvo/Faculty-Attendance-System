@@ -39,6 +39,8 @@ Route::middleware(['auth', 'auth.faculty'])->group(function () {
     // AJAX endpoints for online attendance
     Route::get('/faculty/api/online-attendance', [OnlineAttendanceController::class, 'filter'])
         ->name('faculty.online-attendance.filter');
+    Route::get('/faculty/api/online-attendance/check', [OnlineAttendanceController::class, 'checkAttendance'])
+        ->name('faculty.online-attendance.check');
 });
 
 /*
