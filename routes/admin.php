@@ -4,7 +4,6 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminHolidayController;
 use App\Http\Controllers\Admin\AdminAttendanceImportController;
 use App\Http\Controllers\Admin\AdminDtrExportController;
-use App\Http\Controllers\Admin\AdminDtrExportController;
 use App\Http\Controllers\Admin\AdminNewPasswordController;
 use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
