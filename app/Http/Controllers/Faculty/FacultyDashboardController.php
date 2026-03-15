@@ -143,7 +143,7 @@ class FacultyDashboardController extends Controller
                 $subjects = [];
                 if ($detail) {
                     $subjects[] = [
-                        'code' => $detail->course_code ?? $detail->subject_code ?? '',
+                        'code' => $detail->course_code ?? '',
                         'desc' => $detail->subject_desc ?? null,
                         'program_code' => $detail->program_code,
                         'year_level' => $detail->year_level,

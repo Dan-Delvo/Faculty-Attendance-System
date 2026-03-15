@@ -146,13 +146,9 @@ class Faculty extends Model
                     'day_of_week' => $change->requested_day_of_week,
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i'),
-                    'day' => $change->requested_day_of_week,
-                    'start_time' => Carbon::parse($change->requested_time_in)->format('H:i'),
-                    'end_time' => Carbon::parse($change->requested_time_out)->format('H:i'),
-                    'course_code' => $detail->course_code,
+                    'subject_code' => $detail->course_code,
                     'subject_desc' => $detail->subject_desc,
-                    'room' => $change->requested_room ?: $detail->room_code,
-                    'room_code' => $change->requested_room ?: $detail->room_code,
+                    'room' => $change->requested_room ?: ($detail->room_code ?? 'TBA'),
                     'schedule_code' => $meta?->schedule_code,
                     'is_changed' => true,
                     'program_code' => $detail->program_code,
@@ -166,14 +162,9 @@ class Faculty extends Model
                     'day_of_week' => $detail->day,
                     'time_in' => Carbon::parse($detail->start_time)->format('H:i'),
                     'time_out' => Carbon::parse($detail->end_time)->format('H:i'),
-                    'subject_code' => $detail->subject_code,
-                    'day' => $detail->day,
-                    'start_time' => Carbon::parse($detail->start_time)->format('H:i'),
-                    'end_time' => Carbon::parse($detail->end_time)->format('H:i'),
-                    'course_code' => $detail->course_code,
+                    'subject_code' => $detail->course_code,
                     'subject_desc' => $detail->subject_desc,
-                    'room' => $detail->room_code,
-                    'room_code' => $detail->room_code,
+                    'room' => $detail->room_code ?? 'TBA',
                     'schedule_code' => $meta?->schedule_code,
                     'is_changed' => false,
                     'program_code' => $detail->program_code,
@@ -259,7 +250,7 @@ class Faculty extends Model
             if ($roomConflict) {
                 $roomFaculty = $roomConflict->schedule?->faculty;
                 $occupant = $roomFaculty ? $roomFaculty->full_name : 'another faculty';
-                $roomSubject = $roomConflict->course_code ?? $roomConflict->subject_code ?? 'a class';
+                $roomSubject = $roomConflict->course_code ?? 'a class';
                 $roomTime = Carbon::parse($roomConflict->start_time)->format('H:i')
                     . '–'
                     . Carbon::parse($roomConflict->end_time)->format('H:i');
@@ -350,18 +341,14 @@ class Faculty extends Model
                         'day_of_week' => $d->day,
                         'time_in' => Carbon::parse($d->start_time)->format('H:i'),
                         'time_out' => Carbon::parse($d->end_time)->format('H:i'),
-                        'subject_code' => $d->course_code ?? $d->subject_code,
-                        'day' => $d->day,
-                        'start_time' => Carbon::parse($d->start_time)->format('H:i'),
-                        'end_time' => Carbon::parse($d->end_time)->format('H:i'),
-                        'course_code' => $d->course_code,
+                        'subject_code' => $d->course_code,
                         'subject_desc' => $d->subject_desc,
-                        'room' => $d->room_code,
-                        'room_code' => $d->room_code,
+                        'room' => $d->room_code ?? 'TBA',
                         'schedule_code' => $schedule->schedule_code,
                         'program_code' => $d->program_code,
                         'year_level' => $d->year_level,
                         'section_name' => $d->section_name,
+                        'is_changed' => false,
                     ];
                 });
             })
@@ -703,7 +690,7 @@ class Faculty extends Model
                     return [
                         'id' => $entry->id . ($detail ? '-' . $detail->id : ''),
                         'subject' => $detail?->subject_desc ?? 'Operational Duty',
-                        'code' => $detail?->course_code ?? $detail?->subject_code ?? '',
+                        'code' => $detail?->course_code ?? '',
                         'section' => $detail?->section_name ?? '',
                         'room' => $room,
                         'startTime' => $targetStart->format('h:i A'),
@@ -719,7 +706,7 @@ class Faculty extends Model
                         'programTitle' => $detail?->program_title ?? '',
                         'yearLevel' => $detail?->year_level ?? '',
                         'sectionName' => $detail?->section_name ?? '',
-                    ];
+                        ];
                 });
             })->values()->toArray();
         }
@@ -750,7 +737,7 @@ class Faculty extends Model
             return [
                 'id' => $detail->id,
                 'subject' => $detail->subject_desc ?? 'Untitled Subject',
-                'code' => $detail->course_code ?? $detail->subject_code ?? '',
+                'code' => $detail->course_code ?? '',
                 'section' => $detail->section_name ?? '',
                 'room' => $detail->room_code ?? 'TBA',
                 'startTime' => $timeIn->format('h:i A'),
@@ -758,12 +745,16 @@ class Faculty extends Model
                 'status' => $status,
                 'source' => 'official',
                 'scheduleCode' => $meta?->schedule_code,
+                'schedule_code' => $meta?->schedule_code,
                 'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                 'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                 'programCode' => $detail->program_code ?? '',
+                'program_code' => $detail->program_code ?? '',
                 'programTitle' => $detail->program_title ?? '',
                 'yearLevel' => $detail->year_level ?? '',
+                'year_level' => $detail->year_level ?? '',
                 'sectionName' => $detail->section_name ?? '',
+                'section_name' => $detail->section_name ?? '',
             ];
         })->values()->toArray();
     }
@@ -1038,7 +1029,7 @@ class Faculty extends Model
                     return [
                         'id' => $detail->id,
                         'subject' => $detail->subject_desc ?? 'Untitled Subject',
-                        'code' => $detail->course_code ?? $detail->subject_code ?? '',
+                        'code' => $detail->course_code,
                         'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
                         'hours' => ($detail->hours_required <= 0)
@@ -1051,6 +1042,7 @@ class Faculty extends Model
                         'programTitle' => $detail->program_title ?? '',
                         'yearLevel' => $detail->year_level ?? '',
                         'sectionName' => $detail->section_name ?? '',
+                        'room' => $detail->room_code ?? 'TBA',
                     ];
                 })->values()->toArray(),
             ];
@@ -1221,14 +1213,18 @@ class Faculty extends Model
                             'id' => $entry->id . ($detail ? '-' . $detail->id : ''),
                             'startTime' => $timeIn->format('h:i A'),
                             'endTime' => $timeOut ? $timeOut->format('h:i A') : '--:--',
-                            'requiredHours' => $requiredHours,
+                            'hours' => $requiredHours,
                             'isOperational' => $entry->is_operational,
                             'syncStatus' => $entry->sync_status,
                             'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
                             'subject' => $detail?->subject_desc ?? 'Operational Duty',
-                            'code' => $detail?->course_code ?? $detail?->subject_code ?? '',
+                            'code' => $detail?->course_code ?? '',
                             'room' => $room,
                             'scheduleCode' => $meta?->schedule_code,
+                            'programCode' => $detail?->program_code ?? '',
+                            'programTitle' => $detail?->program_title ?? '',
+                            'yearLevel' => $detail?->year_level ?? '',
+                            'sectionName' => $detail?->section_name ?? '',
                             'isChanged' => $isChanged,
                             'originalDay' => $originalDay,
                             'originalScheduleDetailId' => $isChanged ? $detail?->id : null,
