@@ -10,7 +10,6 @@ import { useMemo, useRef, useState } from 'react';
 
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300',
-    processing: 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-300',
     completed: 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-300',
     failed: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-300',
 };
@@ -167,6 +166,7 @@ export default function AttendanceImports({ batches, filters }) {
     const unrecognizedLogsCount = Number(batchDetails?.batch?.unrecognized_logs ?? 0);
     // Logs that are unsynced AND have a recognized faculty (can actually be synced).
     const syncableLogsCount = Math.max(0, unsyncedLogsCount - unrecognizedLogsCount);
+    const duplicateLogs = batchDetails?.duplicates ?? [];
 
     return (
         <AuthenticatedLayout
@@ -229,10 +229,11 @@ export default function AttendanceImports({ batches, filters }) {
                                     <th className="py-3 pr-3">File</th>
                                     <th className="py-3 px-3">Status</th>
                                     <th className="py-3 px-3 text-right">Total</th>
-                                    <th className="py-3 px-3 text-right">Processed</th>
+                                    <th className="py-3 px-3 text-right">Not Synced</th>
+                                    <th className="py-3 px-3 text-right">Synced</th>
                                     <th className="py-3 px-3 text-right">Failed</th>
                                     <th className="py-3 px-3 text-right">Duplicates</th>
-                                    <th className="py-3 px-3">Started</th>
+                                    <th className="py-3 px-3">Imported</th>
                                     <th className="py-3 px-3">Completed</th>
                                     <th className="py-3 pl-3 text-right">Actions</th>
                                 </tr>
@@ -251,8 +252,11 @@ export default function AttendanceImports({ batches, filters }) {
                                                 <StatusBadge status={batch.status} />
                                             </td>
                                             <td className="py-3 px-3 text-right align-top">{batch.total_records}</td>
-                                            <td className="py-3 px-3 text-right align-top">{batch.processed_records}</td>
-                                            <td className="py-3 px-3 text-right align-top">{batch.failed_records}</td>
+                                            <td className="py-3 px-3 text-right align-top">{batch.unsynced_logs ?? 0}</td>
+                                            <td className="py-3 px-3 text-right align-top">{batch.synced_logs ?? 0}</td>
+                                            <td className="py-3 px-3 text-right align-top">
+                                                {(Number(batch.failed_records ?? 0) + Number(batch.unrecognized_logs ?? 0))}
+                                            </td>
                                             <td className="py-3 px-3 text-right align-top">{batch.duplicate_records}</td>
                                             <td className="py-3 px-3 align-top">{formatDateTime(batch.started_at)}</td>
                                             <td className="py-3 px-3 align-top">
@@ -264,23 +268,19 @@ export default function AttendanceImports({ batches, filters }) {
                                                 )}
                                             </td>
                                             <td className="py-3 pl-3 text-right align-top">
-                                                {batch.status !== 'failed' ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => loadBatchDetails(batch)}
-                                                        className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                                    >
-                                                        View Details
-                                                    </button>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadBatchDetails(batch)}
+                                                    className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                                >
+                                                    View Details
+                                                </button>
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={9} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        <td colSpan={10} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                                             No import batches yet.
                                         </td>
                                     </tr>
@@ -421,11 +421,72 @@ export default function AttendanceImports({ batches, filters }) {
                                 )}
                             </div>
 
+                            {duplicateLogs.length > 0 && (
+                                <div className="rounded-xl border border-amber-200 dark:border-amber-800/50 overflow-x-auto">
+                                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 bg-amber-50/60 dark:bg-amber-900/20">
+                                        Duplicate Logs
+                                    </div>
+                                    <table className="w-full min-w-[780px] text-sm">
+                                        <thead>
+                                            <tr className="border-b border-amber-200 dark:border-amber-800/50 text-left text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                                                <th className="py-3 px-3">Faculty</th>
+                                                <th className="py-3 px-3">Date</th>
+                                                <th className="py-3 px-3">Time</th>
+                                                <th className="py-3 px-3">Type</th>
+                                                <th className="py-3 px-3">ID Status</th>
+                                                <th className="py-3 px-3">Synced</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {duplicateLogs.map((log) => (
+                                                <tr key={log.id} className={`border-b border-amber-100 dark:border-amber-900/40 text-gray-700 dark:text-gray-200 ${!log.faculty_exists ? 'bg-red-50/30 dark:bg-red-900/10' : 'bg-amber-50/30 dark:bg-amber-900/10'}`}>
+                                                    <td className="py-3 px-3 align-top">
+                                                        {log.faculty_exists ? (
+                                                            <>
+                                                                <p className="font-semibold text-gray-800 dark:text-gray-100">{log.faculty_name}</p>
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{log.biometric_id}</p>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <p className="font-semibold text-red-700 dark:text-red-400">{log.biometric_id}</p>
+                                                                <p className="text-xs text-red-500 dark:text-red-500 mt-0.5">Not found in system</p>
+                                                            </>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 px-3 align-top">{formatDate(log.log_datetime)}</td>
+                                                    <td className="py-3 px-3 align-top">{formatTime(log.log_datetime)}</td>
+                                                    <td className="py-3 px-3 align-top">{formatLogType(log.log_type)}</td>
+                                                    <td className="py-3 px-3 align-top">
+                                                        {log.faculty_exists ? (
+                                                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                                Recognized
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-300">
+                                                                Unknown ID
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 px-3 align-top">
+                                                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300">
+                                                            Duplicate
+                                                        </span>
+                                                        <span className="ml-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-300/50 dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-600/50">
+                                                            Already in logs
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
                             <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-4">
                                 <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Sync Logs</h4>
-                                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                                    Sync this batch to mark all remaining unsynced logs as synced.
-                                </p>
+                                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                        Sync this batch to mark all remaining not synced logs as synced.
+                                    </p>
 
                                 <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -468,10 +529,10 @@ export default function AttendanceImports({ batches, filters }) {
                 <div className="px-6 py-5">
                     <p className="text-sm text-gray-700 dark:text-gray-300">
                         {syncableLogsCount > 0
-                            ? <>Sync <span className="font-semibold">{syncableLogsCount}</span> unsynced log {syncableLogsCount === 1 ? 'entry' : 'entries'} now?</>
+                            ? <>Sync <span className="font-semibold">{syncableLogsCount}</span> not synced log {syncableLogsCount === 1 ? 'entry' : 'entries'} now?</>
                             : (unrecognizedLogsCount > 0
                                 ? 'No syncable logs remaining. Unrecognized entries cannot be synced.'
-                                : 'No unsynced logs were found. You can still continue to verify the batch status.')}
+                                : 'No not synced logs were found. You can still continue to verify the batch status.')}
                     </p>
                 </div>
 

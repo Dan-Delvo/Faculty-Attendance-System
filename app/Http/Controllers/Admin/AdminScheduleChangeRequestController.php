@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InternalSchedule;
 use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,11 +22,35 @@ class AdminScheduleChangeRequestController extends Controller
      */
     public function index(Request $request)
     {
+        $showAll = $request->boolean('all');
+        $academicYear = $request->query('academic_year', '');
+        $semester = $request->query('semester', '');
+
+        if ($showAll) {
+            $academicYear = '';
+            $semester = '';
+        } else {
+            if ($academicYear === '') {
+                $academicYear = SystemSetting::currentAcademicYear();
+            }
+            if ($semester === '') {
+                $semester = SystemSetting::currentSemester();
+            }
+        }
+
+        $request->merge([
+            'academic_year' => $academicYear,
+            'semester' => $semester,
+        ]);
+
         return Inertia::render('Admin/ScheduleChangeRequests', [
             'requests' => ScheduleChangeRequest::getForAdmin($request),
             'filters'  => [
                 'status' => $request->query('status', ''),
                 'search' => $request->query('search', ''),
+                'academic_year' => $academicYear,
+                'semester' => $semester,
+                'all' => $showAll,
             ],
             'pendingCount' => ScheduleChangeRequest::pending()->count(),
         ]);
@@ -36,6 +61,27 @@ class AdminScheduleChangeRequestController extends Controller
      */
     public function filter(Request $request)
     {
+        $showAll = $request->boolean('all');
+        $academicYear = $request->query('academic_year', '');
+        $semester = $request->query('semester', '');
+
+        if ($showAll) {
+            $academicYear = '';
+            $semester = '';
+        } else {
+            if ($academicYear === '') {
+                $academicYear = SystemSetting::currentAcademicYear();
+            }
+            if ($semester === '') {
+                $semester = SystemSetting::currentSemester();
+            }
+        }
+
+        $request->merge([
+            'academic_year' => $academicYear,
+            'semester' => $semester,
+        ]);
+
         return response()->json(
             ScheduleChangeRequest::getForAdmin($request)
         );

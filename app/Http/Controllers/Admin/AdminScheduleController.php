@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\Faculty;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
+use App\Models\SystemSetting;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,27 @@ class AdminScheduleController extends Controller
      */
     public function index(Request $request)
     {
+        $showAll = $request->boolean('all');
+        $academicYear = $request->query('academic_year', '');
+        $semester = $request->query('semester', '');
+
+        if ($showAll) {
+            $academicYear = '';
+            $semester = '';
+        } else {
+            if ($academicYear === '') {
+                $academicYear = SystemSetting::currentAcademicYear();
+            }
+            if ($semester === '') {
+                $semester = SystemSetting::currentSemester();
+            }
+        }
+
+        $request->merge([
+            'academic_year' => $academicYear,
+            'semester' => $semester,
+        ]);
+
         $schedules = Schedule::getFilteredSchedules($request);
         $faculties  = Faculty::getActiveFacultyList();
         $departments = Department::where('is_active', true)
@@ -35,10 +57,11 @@ class AdminScheduleController extends Controller
                 'search'    => $request->query('search', ''),
                 'status'    => $request->query('status', ''),
                 'type'      => $request->query('type', ''),
-                'semester'  => $request->query('semester', ''),
-                'academic_year' => $request->query('academic_year', ''),
+                'semester'  => $semester,
+                'academic_year' => $academicYear,
                 'department'    => $request->query('department', ''),
                 'per_page'  => (int) $request->query('per_page', 10),
+                'all'       => $showAll,
             ],
         ]);
     }
@@ -65,7 +88,7 @@ class AdminScheduleController extends Controller
             'details.*.course_code'   => 'required|string|max:50|regex:/\S/',
             'details.*.subject_desc'  => 'nullable|string|max:255',
             'details.*.room_code'     => 'required|string|max:100|regex:/\S/',
-            'details.*.hours_required' => 'required|integer|min:1|max:12',
+            'details.*.hours_required' => 'required|numeric|min:1|max:12|decimal:0,2',
         ]);
 
         $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');
@@ -166,7 +189,7 @@ class AdminScheduleController extends Controller
             'details.*.course_code'   => 'required|string|max:50|regex:/\S/',
             'details.*.subject_desc'  => 'nullable|string|max:255',
             'details.*.room_code'     => 'required|string|max:100|regex:/\S/',
-            'details.*.hours_required' => 'required|integer|min:1|max:12',
+            'details.*.hours_required' => 'required|numeric|min:1|max:12|decimal:0,2',
         ]);
 
         $minAllowedTime = Carbon::createFromFormat('H:i', '07:00');

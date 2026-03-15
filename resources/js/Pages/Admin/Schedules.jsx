@@ -85,6 +85,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     const [semesterFilter, setSemesterFilter] = useState(filters.semester);
     const [yearFilter, setYearFilter] = useState(filters.academic_year);
     const [deptFilter, setDeptFilter] = useState(filters.department);
+    const [showAll, setShowAll] = useState(Boolean(filters.all));
 
     // ── Search suggestions ──
     const [suggestions, setSuggestions] = useState([]);
@@ -130,15 +131,17 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     semester: semesterFilter,
                     academic_year: yearFilter,
                     department: deptFilter,
+                    ...(showAll ? { all: 1 } : {}),
                 },
                 { preserveState: true, preserveScroll: true, replace: true },
             );
         },
-        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter],
+        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter, showAll],
     );
 
     const handleFilter = () => {
         setCurrentPage(1);
+        setShowAll(false);
         fetchSchedules(1);
     };
 
@@ -162,6 +165,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                 semester: semesterFilter,
                 academic_year: yearFilter,
                 department: deptFilter,
+                ...(showAll ? { all: 1 } : {}),
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -175,7 +179,8 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setYearFilter('');
         setDeptFilter('');
         setCurrentPage(1);
-        router.get(route('admin.schedules.index'), {}, { preserveState: true, preserveScroll: true, replace: true });
+        setShowAll(true);
+        router.get(route('admin.schedules.index'), { all: 1 }, { preserveState: true, preserveScroll: true, replace: true });
     };
 
     // ── Search Suggestions (AJAX) ──
@@ -989,7 +994,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const toTimeString = (minutesValue) => {
-        const clampedMinutes = Math.min(minutesValue, maxAllowedMinutes);
+        const clampedMinutes = Math.min(Math.round(minutesValue), maxAllowedMinutes);
         const hours = Math.floor(clampedMinutes / 60);
         const minutes = clampedMinutes % 60;
 
@@ -1005,7 +1010,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
         }
 
         const totalMinutes = timeOutMinutes - timeInMinutes;
-        const roundedHours = Math.round(totalMinutes / 60);
+        const roundedHours = Math.round((totalMinutes / 60) * 100) / 100;
 
         return Math.max(1, Math.min(12, roundedHours));
     };
@@ -1049,7 +1054,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     const handleHoursChange = (index, hoursValue) => {
         const parsedHours = Number(hoursValue);
         const clampedHours = Number.isFinite(parsedHours)
-            ? Math.max(1, Math.min(12, parsedHours))
+            ? Math.max(1, Math.min(12, Math.round(parsedHours * 100) / 100))
             : 1;
 
         updateDetail(index, 'hours_required', clampedHours);
@@ -1261,6 +1266,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                         onChange={(e) => handleHoursChange(index, e.target.value)}
                                         min="1"
                                         max="12"
+                                        step="0.5"
                                         className="form-input-sm"
                                     />
                                     {errors[`details.${index}.hours_required`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.hours_required`]}</p>}

@@ -34,7 +34,7 @@ class ScheduleDetail extends Model
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'year_level' => 'integer',
-            'hours_required' => 'integer',
+            'hours_required' => 'decimal:2',
         ];
     }
 
