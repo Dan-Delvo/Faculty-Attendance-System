@@ -77,13 +77,14 @@ class OnlineAttendanceController extends Controller
         $screenshotInPath  = $request->file('screenshot_in')
             ->store("online-attendance/{$faculty->id}", 'public');
         $screenshotOutPath = $request->file('screenshot_out')
-            ->store("online-attendance/{$faculty->id}", 'public');
+            ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
+            : null;
 
         $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath);
 
         if (!$result['success']) {
             // Clean up uploaded files on failure
-            \Illuminate\Support\Facades\Storage::disk('public')->delete([$screenshotInPath, $screenshotOutPath]);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete(array_filter([$screenshotInPath, $screenshotOutPath]));
             return back()->withErrors([$result['error_field'] => $result['error_message']]);
         }
 
