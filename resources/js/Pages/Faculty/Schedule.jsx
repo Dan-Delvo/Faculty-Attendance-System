@@ -208,6 +208,39 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
         0,
     );
 
+    // Filter internal schedule: only show entries that are approved OR have request history
+    // And only show the latest approved entry per schedule detail
+    const filteredInternalSchedule = internalSchedule.map(dayData => {
+        const filteredEntries = dayData.entries.filter(entry => {
+            return entry.isApproved || entry.hasRequestHistory;
+        });
+
+        // Group by originalScheduleDetailId to find latest approved per schedule
+        const latestApprovedMap = new Map();
+        filteredEntries.forEach(entry => {
+            if (entry.isApproved && entry.originalScheduleDetailId) {
+                const existing = latestApprovedMap.get(entry.originalScheduleDetailId);
+                if (!existing || entry.id > existing.id) {
+                    latestApprovedMap.set(entry.originalScheduleDetailId, entry);
+                }
+            }
+        });
+
+        const latestApprovedIds = new Set(Array.from(latestApprovedMap.values()).map(e => e.id));
+
+        const finalEntries = filteredEntries.filter(entry => {
+            if (entry.isApproved) {
+                return latestApprovedIds.has(entry.id);
+            }
+            return true;
+        });
+
+        return {
+            ...dayData,
+            entries: finalEntries
+        };
+    }).filter(dayData => dayData.entries.length > 0);
+
     return (
         <AuthenticatedLayout>
             <Head title="Schedule & Attendance" />
@@ -392,7 +425,7 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
             {activeTab === 'internal' && (
                 <>
                     {/* Internal schedule summary */}
-                    {internalSchedule.length > 0 && (
+                    {filteredInternalSchedule.length > 0 && (
                         <div className="mb-6 rounded-2xl border border-amber-200/60 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-900/10 p-4">
                             <div className="flex items-start gap-3">
                                 <svg className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -409,8 +442,8 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
-                        {internalSchedule.length > 0 ? (
-                            internalSchedule.map((dayData) => (
+                        {filteredInternalSchedule.length > 0 ? (
+                            filteredInternalSchedule.map((dayData) => (
                                 <div
                                     key={dayData.day}
                                     className="flex flex-col h-full rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm overflow-hidden"
