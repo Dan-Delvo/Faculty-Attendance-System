@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceRecord;
-use App\Models\AttendanceRecord;
 use App\Models\BiometricLog;
 use App\Models\Faculty;
 use App\Models\ImportBatch;
