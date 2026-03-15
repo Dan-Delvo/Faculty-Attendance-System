@@ -117,9 +117,9 @@ class OnlineAttendanceRequest extends Model
                 'screenshot_out'   => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
                 'remarks'          => $req->remarks,
                 'status'           => $req->status,
-                'subject_code'     => $detail?->subject_code ?? null,
+                'course_code'      => $detail?->course_code ?? null,
                 'subject_desc'     => $detail?->subject_desc ?? null,
-                'schedule_day'     => $detail?->day_of_week ?? null,
+                'schedule_day'     => $detail?->day ?? null,
                 'reviewed_by'      => $req->reviewedBy?->email ?? null,
                 'reviewed_at'      => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks'   => $req->review_remarks,
@@ -155,7 +155,7 @@ class OnlineAttendanceRequest extends Model
             ->with([
                 'faculty:id,first_name,last_name,user_id',
                 'faculty.user:id,email',
-                'scheduleDetail:id,subject_code,subject_desc,day_of_week',
+                'scheduleDetail:id,course_code,subject_desc,day',
                 'scheduleDetail.schedule:id',
                 'reviewedBy:id,email'
             ])
@@ -211,9 +211,9 @@ class OnlineAttendanceRequest extends Model
                 'screenshot_out'   => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
                 'remarks'          => $req->remarks,
                 'status'           => $req->status,
-                'subject_code'     => $detail?->subject_code ?? 'N/A',
+                'course_code'      => $detail?->course_code ?? 'N/A',
                 'subject_desc'     => $detail?->subject_desc ?? 'N/A',
-                'schedule_day'     => $detail?->day_of_week ?? 'N/A',
+                'schedule_day'     => $detail?->day ?? 'N/A',
                 'reviewed_by'      => $req->reviewedBy?->email ?? null,
                 'reviewed_at'      => $req->reviewed_at?->format('M d, Y h:i A'),
                 'review_remarks'   => $req->review_remarks,

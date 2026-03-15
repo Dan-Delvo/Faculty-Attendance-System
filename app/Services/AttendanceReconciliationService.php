@@ -187,9 +187,9 @@ class AttendanceReconciliationService
 
         // Collect unique subjects from expected entries for display
         $subjects = collect($expectedEntries)
-            ->filter(fn($e) => !empty($e['subject_code']))
+            ->filter(fn($e) => !empty($e['course_code']))
             ->map(fn($e) => [
-                'code' => $e['subject_code'],
+                'code' => $e['course_code'],
                 'desc' => $e['subject_desc'] ?? null,
             ])
             ->unique('code')
@@ -279,7 +279,7 @@ class AttendanceReconciliationService
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
                     'source' => 'change_request',
-                    'subject_code' => $detail->subject_code ?? null,
+                    'course_code' => $detail->course_code ?? null,
                     'subject_desc' => $detail->subject_desc ?? null,
                 ];
             } else {
@@ -302,12 +302,12 @@ class AttendanceReconciliationService
         foreach ($movedToThisDay as $change) {
             // Verify the original detail's day is different (it was moved here)
             $originalDetail = $change->scheduleDetail;
-            if ($originalDetail && $originalDetail->day_of_week !== $dayOfWeek) {
+            if ($originalDetail && $originalDetail->day !== $dayOfWeek) {
                 $entries[] = [
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
                     'source' => 'change_request',
-                    'subject_code' => $originalDetail->subject_code ?? null,
+                    'course_code' => $originalDetail->course_code ?? null,
                     'subject_desc' => $originalDetail->subject_desc ?? null,
                 ];
             }
@@ -325,7 +325,7 @@ class AttendanceReconciliationService
     ): ?array {
         $internal = InternalSchedule::where('faculty_id', $faculty->id)
             ->where('schedule_id', $detail->schedule_id)
-            ->where('day_of_week', $detail->day_of_week)
+            ->where('day_of_week', $detail->day)
             ->where('is_operational', true)
             ->first();
 
@@ -339,7 +339,7 @@ class AttendanceReconciliationService
                 ? Carbon::parse($internal->device_time_out)->format('H:i:s')
                 : Carbon::parse($internal->device_time_in)->addHours(3)->format('H:i:s'),
             'source' => 'internal',
-            'subject_code' => $detail->subject_code ?? null,
+            'course_code' => $detail->course_code ?? null,
             'subject_desc' => $detail->subject_desc ?? null,
         ];
     }
@@ -362,12 +362,12 @@ class AttendanceReconciliationService
         $entries = [];
         foreach ($movedHere as $change) {
             $originalDetail = $change->scheduleDetail;
-            if ($originalDetail && $originalDetail->day_of_week !== $dayOfWeek) {
+            if ($originalDetail && $originalDetail->day !== $dayOfWeek) {
                 $entries[] = [
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
                     'source' => 'change_request',
-                    'subject_code' => $originalDetail->subject_code ?? null,
+                    'course_code' => $originalDetail->course_code ?? null,
                     'subject_desc' => $originalDetail->subject_desc ?? null,
                 ];
             }

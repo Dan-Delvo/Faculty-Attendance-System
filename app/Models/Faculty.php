@@ -123,8 +123,8 @@ class Faculty extends Model
 
         // 1. Get all official details for active schedules (unique source of truth for class slots)
         $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
-            ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
-            ->orderBy('time_in', 'asc')
+            ->orderByRaw("FIELD(day, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+            ->orderBy('start_time', 'asc')
             ->get();
 
         // 2. Get all approved change requests to determine the "effective" current slot
@@ -143,12 +143,12 @@ class Faculty extends Model
                 // If a move was approved, show the currently effective (moved) state
                 $results[] = [
                     'id' => $detail->id,
-                    'day_of_week' => $change->requested_day_of_week,
-                    'time_in' => Carbon::parse($change->requested_time_in)->format('H:i'),
-                    'time_out' => Carbon::parse($change->requested_time_out)->format('H:i'),
-                    'subject_code' => $detail->subject_code,
+                    'day' => $change->requested_day_of_week,
+                    'start_time' => Carbon::parse($change->requested_time_in)->format('H:i'),
+                    'end_time' => Carbon::parse($change->requested_time_out)->format('H:i'),
+                    'course_code' => $detail->course_code,
                     'subject_desc' => $detail->subject_desc,
-                    'room' => $change->requested_room ?: $detail->room,
+                    'room_code' => $change->requested_room ?: $detail->room_code,
                     'schedule_code' => $meta?->schedule_code,
                     'is_changed' => true,
                 ];
@@ -156,12 +156,12 @@ class Faculty extends Model
                 // Otherwise show the official detail
                 $results[] = [
                     'id' => $detail->id,
-                    'day_of_week' => $detail->day_of_week,
-                    'time_in' => Carbon::parse($detail->time_in)->format('H:i'),
-                    'time_out' => Carbon::parse($detail->time_out)->format('H:i'),
-                    'subject_code' => $detail->subject_code,
+                    'day' => $detail->day,
+                    'start_time' => Carbon::parse($detail->start_time)->format('H:i'),
+                    'end_time' => Carbon::parse($detail->end_time)->format('H:i'),
+                    'course_code' => $detail->course_code,
                     'subject_desc' => $detail->subject_desc,
-                    'room' => $detail->room,
+                    'room_code' => $detail->room_code,
                     'schedule_code' => $meta?->schedule_code,
                     'is_changed' => false,
                 ];
@@ -205,15 +205,15 @@ class Faculty extends Model
             ->orderBy('created_at', 'desc')
             ->first();
 
-        $currDay = $latestApproved ? $latestApproved->requested_day_of_week : $scheduleDetail->day_of_week;
-        $currIn = $latestApproved ? Carbon::parse($latestApproved->requested_time_in)->format('H:i') : Carbon::parse($scheduleDetail->time_in)->format('H:i');
-        $currOut = $latestApproved ? Carbon::parse($latestApproved->requested_time_out)->format('H:i') : Carbon::parse($scheduleDetail->time_out)->format('H:i');
-        $currRoom = $latestApproved ? ($latestApproved->requested_room ?: $scheduleDetail->room) : $scheduleDetail->room;
+        $currDay = $latestApproved ? $latestApproved->requested_day_of_week : $scheduleDetail->day;
+        $currIn = $latestApproved ? Carbon::parse($latestApproved->requested_time_in)->format('H:i') : Carbon::parse($scheduleDetail->start_time)->format('H:i');
+        $currOut = $latestApproved ? Carbon::parse($latestApproved->requested_time_out)->format('H:i') : Carbon::parse($scheduleDetail->end_time)->format('H:i');
+        $currRoom = $latestApproved ? ($latestApproved->requested_room ?: $scheduleDetail->room_code) : $scheduleDetail->room_code;
 
         $reqDay = $data['requested_day_of_week'];
         $reqIn = $data['requested_time_in'];
         $reqOut = $data['requested_time_out'];
-        $reqRoom = trim($data['requested_room'] ?? '') ?: $scheduleDetail->room;
+        $reqRoom = trim($data['requested_room'] ?? '') ?: $scheduleDetail->room_code;
 
         if ($reqDay === $currDay && $reqIn === $currIn && $reqOut === $currOut && $reqRoom === $currRoom) {
             return [
@@ -233,21 +233,21 @@ class Faculty extends Model
                 $q->where('status', 'active');
             })
                 ->where('id', '!=', $data['schedule_detail_id'])
-                ->where('day_of_week', $reqDay)
-                ->where('room', $reqRoom)
+                ->where('day', $reqDay)
+                ->where('room_code', $reqRoom)
                 ->where(function ($q) use ($reqIn, $reqOut) {
-                    $q->whereRaw("TIME(time_in) < ?", [$reqOut])
-                        ->whereRaw("TIME(time_out) > ?", [$reqIn]);
+                    $q->whereRaw("TIME(start_time) < ?", [$reqOut])
+                        ->whereRaw("TIME(end_time) > ?", [$reqIn]);
                 })
                 ->first();
 
             if ($roomConflict) {
                 $roomFaculty = $roomConflict->schedule?->faculty;
                 $occupant = $roomFaculty ? $roomFaculty->full_name : 'another faculty';
-                $roomSubject = $roomConflict->subject_code ?? 'a class';
-                $roomTime = Carbon::parse($roomConflict->time_in)->format('H:i')
+                $roomSubject = $roomConflict->course_code ?? 'a class';
+                $roomTime = Carbon::parse($roomConflict->start_time)->format('H:i')
                     . '–'
-                    . Carbon::parse($roomConflict->time_out)->format('H:i');
+                    . Carbon::parse($roomConflict->end_time)->format('H:i');
 
                 return [
                     'success' => false,
@@ -332,12 +332,12 @@ class Faculty extends Model
                 return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
                     return [
                         'id' => $d->id,
-                        'day_of_week' => $d->day_of_week,
-                        'time_in' => Carbon::parse($d->time_in)->format('H:i'),
-                        'time_out' => Carbon::parse($d->time_out)->format('H:i'),
-                        'subject_code' => $d->subject_code,
+                        'day' => $d->day,
+                        'start_time' => Carbon::parse($d->start_time)->format('H:i'),
+                        'end_time' => Carbon::parse($d->end_time)->format('H:i'),
+                        'course_code' => $d->course_code,
                         'subject_desc' => $d->subject_desc,
-                        'room' => $d->room,
+                        'room_code' => $d->room_code,
                         'schedule_code' => $schedule->schedule_code,
                     ];
                 });
@@ -616,13 +616,13 @@ class Faculty extends Model
                 if ($changeReq && $changeReq->scheduleDetail) {
                     $detail = $changeReq->scheduleDetail;
                     $isChanged = true;
-                    $originalDay = $detail->day_of_week;
-                    $room = $changeReq->requested_room ?: $detail->room;
+                    $originalDay = $detail->day;
+                    $room = $changeReq->requested_room ?: $detail->room_code;
                 } else {
                     $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
                     $isChanged = false;
                     $originalDay = null;
-                    $room = $detail?->room ?? 'TBA';
+                    $room = $detail?->room_code ?? 'TBA';
                 }
 
                 $meta = $scheduleMeta->get($entry->schedule_id);
@@ -630,8 +630,8 @@ class Faculty extends Model
                 return [
                     'id' => $entry->id,
                     'subject' => $detail?->subject_desc ?? 'Operational Duty',
-                    'code' => $detail?->subject_code ?? '',
-                    'section' => $detail?->subject_code ?? '',
+                    'code' => $detail?->course_code ?? '',
+                    'section' => $detail?->course_code ?? '',
                     'room' => $room,
                     'startTime' => $timeIn->format('h:i A'),
                     'endTime' => $timeOut ? $timeOut->format('h:i A') : '--:--',
@@ -648,13 +648,13 @@ class Faculty extends Model
 
         // Fallback to official schedule details
         $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
-            ->where('day_of_week', $todayName)
-            ->orderByRaw('TIME(time_in) ASC')
+            ->where('day', $todayName)
+            ->orderByRaw('TIME(start_time) ASC')
             ->get();
 
         return $details->map(function (ScheduleDetail $detail) use ($now, $scheduleMeta) {
-            $timeIn = Carbon::parse($detail->time_in);
-            $timeOut = Carbon::parse($detail->time_out);
+            $timeIn = Carbon::parse($detail->start_time);
+            $timeOut = Carbon::parse($detail->end_time);
 
             $todayTimeIn = $now->copy()->setTimeFrom($timeIn);
             $todayTimeOut = $now->copy()->setTimeFrom($timeOut);
@@ -672,9 +672,9 @@ class Faculty extends Model
             return [
                 'id' => $detail->id,
                 'subject' => $detail->subject_desc ?? 'Untitled Subject',
-                'code' => $detail->subject_code ?? '',
-                'section' => $detail->subject_code ?? '',
-                'room' => $detail->room ?? 'TBA',
+                'code' => $detail->course_code ?? '',
+                'section' => $detail->course_code ?? '',
+                'room' => $detail->room_code ?? 'TBA',
                 'startTime' => $timeIn->format('h:i A'),
                 'endTime' => $timeOut->format('h:i A'),
                 'status' => $status,
@@ -745,9 +745,9 @@ class Faculty extends Model
             // Fallback to official schedule details
             $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             foreach ($details as $detail) {
-                $day = $detail->day_of_week;
-                $tIn = Carbon::parse($detail->time_in)->format('H:i');
-                $tOut = Carbon::parse($detail->time_out)->format('H:i');
+                $day = $detail->day;
+                $tIn = Carbon::parse($detail->start_time)->format('H:i');
+                $tOut = Carbon::parse($detail->end_time)->format('H:i');
 
                 if (!isset($scheduleLookup[$day])) {
                     $scheduleLookup[$day] = [
@@ -935,15 +935,15 @@ class Faculty extends Model
         $scheduleMeta = $activeSchedules->keyBy('id');
 
         $details = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
-            ->orderByRaw("FIELD(day_of_week, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
-            ->orderByRaw('TIME(time_in) ASC')
+            ->orderByRaw("FIELD(day, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+            ->orderByRaw('TIME(start_time) ASC')
             ->get();
 
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         $schedule = [];
 
         foreach ($days as $day) {
-            $dayDetails = $details->where('day_of_week', $day);
+            $dayDetails = $details->where('day', $day);
 
             if ($dayDetails->isEmpty()) {
                 continue;
@@ -957,12 +957,12 @@ class Faculty extends Model
                     return [
                         'id' => $detail->id,
                         'subject' => $detail->subject_desc ?? 'Untitled Subject',
-                        'code' => $detail->subject_code ?? '',
-                        'room' => $detail->room ?? 'TBA',
-                        'startTime' => Carbon::parse($detail->time_in)->format('h:i A'),
-                        'endTime' => Carbon::parse($detail->time_out)->format('h:i A'),
+                        'code' => $detail->course_code ?? '',
+                        'room' => $detail->room_code ?? 'TBA',
+                        'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
+                        'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
                         'hours' => ($detail->hours_required <= 0)
-                            ? max(0, (int) round(Carbon::parse($detail->time_out)->diffInMinutes(Carbon::parse($detail->time_in)) / 60))
+                            ? max(0, (int) round(Carbon::parse($detail->end_time)->diffInMinutes(Carbon::parse($detail->start_time)) / 60))
                             : $detail->hours_required,
                         'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                         'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
@@ -1056,13 +1056,13 @@ class Faculty extends Model
                     if ($changeReq && $changeReq->scheduleDetail) {
                         $detail = $changeReq->scheduleDetail;
                         $isChanged = true;
-                        $originalDay = $detail->day_of_week;
-                        $room = $changeReq->requested_room ?: $detail->room;
+                        $originalDay = $detail->day;
+                        $room = $changeReq->requested_room ?: $detail->room_code;
                     } else {
                         $detail = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week);
                         $isChanged = false;
                         $originalDay = null;
-                        $room = $detail?->room ?? 'TBA';
+                        $room = $detail?->room_code ?? 'TBA';
                     }
 
                     $meta = $scheduleMeta->get($entry->schedule_id);
@@ -1076,7 +1076,7 @@ class Faculty extends Model
                         'syncStatus' => $entry->sync_status,
                         'syncedAt' => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
                         'subject' => $detail?->subject_desc ?? 'Operational Duty',
-                        'code' => $detail?->subject_code ?? '',
+                        'code' => $detail?->course_code ?? '',
                         'room' => $room,
                         'scheduleCode' => $meta?->schedule_code,
                         'isChanged' => $isChanged,
@@ -1107,7 +1107,7 @@ class Faculty extends Model
                 'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
                 'dayOfWeek' => $record->day_of_week,
                 'subject' => $record->scheduleDetail?->subject_desc ?? 'N/A',
-                'subjectCode' => $record->scheduleDetail?->subject_code ?? '',
+                'subjectCode' => $record->scheduleDetail?->course_code ?? '',
                 'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
                 'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
                 'expectedTimeIn' => $record->operational_time_in

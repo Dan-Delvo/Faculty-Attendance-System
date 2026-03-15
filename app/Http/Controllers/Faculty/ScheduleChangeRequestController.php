@@ -152,9 +152,9 @@ class ScheduleChangeRequestController extends Controller
                 $occupant = $roomConflict->schedule?->faculty?->full_name ?? 'another faculty';
                 $conflicts[] = [
                     'type' => 'room',
-                    'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->subject_code} ("
-                        . Carbon::parse($roomConflict->time_in)->format('H:i') . '–'
-                        . Carbon::parse($roomConflict->time_out)->format('H:i') . ") on {$reqDay}.",
+                    'message' => "Room {$reqRoom} is occupied by {$occupant} for {$roomConflict->course_code} ("
+                        . Carbon::parse($roomConflict->start_time)->format('H:i') . '–'
+                        . Carbon::parse($roomConflict->end_time)->format('H:i') . ") on {$reqDay}.",
                 ];
             }
 
