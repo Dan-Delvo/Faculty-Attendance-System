@@ -5,6 +5,10 @@ namespace App\Http\Controllers\Faculty;
 use App\Http\Controllers\Controller;
 use App\Models\Faculty;
 use App\Models\Holiday;
+use App\Models\AttendanceRecord;
+use App\Models\OnlineAttendanceRequest;
+use App\Models\ScheduleChangeRequest;
+use App\Models\ScheduleDetail;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -132,13 +136,13 @@ class FacultyDashboardController extends Controller
         $attendanceLogs = [];
 
         if ($faculty) {
-            $records = \App\Models\AttendanceRecord::where('faculty_id', $faculty->id)
+            $records = AttendanceRecord::where('faculty_id', $faculty->id)
                 ->with(['scheduleDetail', 'justifications'])
                 ->orderBy('attendance_date', 'desc')
                 ->get();
 
             // Get all approved online attendance requests for this faculty
-            $onlineRequests = \App\Models\OnlineAttendanceRequest::where('faculty_id', $faculty->id)
+            $onlineRequests = OnlineAttendanceRequest::where('faculty_id', $faculty->id)
                 ->where('status', 'approved')
                 ->with('scheduleDetail')
                 ->get();
@@ -148,7 +152,7 @@ class FacultyDashboardController extends Controller
             $onlineByDate = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString());
             
             // Get all approved schedule change requests to handle moved classes
-            $approvedChangeRequests = \App\Models\ScheduleChangeRequest::where('faculty_id', $faculty->id)
+            $approvedChangeRequests = ScheduleChangeRequest::where('faculty_id', $faculty->id)
                 ->where('status', 'approved')
                 ->with('scheduleDetail')
                 ->get();
@@ -156,7 +160,7 @@ class FacultyDashboardController extends Controller
             // Get all active schedules and their details to map subjects to internal blocks
             $activeSchedules = $faculty->schedules()->where('status', 'active')->get();
             $activeScheduleIds = $activeSchedules->pluck('id');
-            $allDetails = \App\Models\ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
+            $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
             $holidays = Holiday::all();
 
@@ -309,10 +313,10 @@ class FacultyDashboardController extends Controller
                 if ($onlineRequest) {
                     $isOnlineAttendance = true;
                     if ($onlineRequest->time_in) {
-                        $actualTimeIn = \Carbon\Carbon::parse($onlineRequest->time_in);
+                        $actualTimeIn = Carbon::parse($onlineRequest->time_in);
                     }
                     if ($onlineRequest->time_out) {
-                        $actualTimeOut = \Carbon\Carbon::parse($onlineRequest->time_out);
+                        $actualTimeOut = Carbon::parse($onlineRequest->time_out);
                     }
                 }
 
@@ -324,10 +328,10 @@ class FacultyDashboardController extends Controller
                     'status' => $displayStatus,
                     'expected_time_in' => $record->operational_time_in
                         ? $record->operational_time_in->format('h:i A')
-                        : ($record->official_time_in ? \Carbon\Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
+                        : ($record->official_time_in ? Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
                     'expected_time_out' => $record->operational_time_out
                         ? $record->operational_time_out->format('h:i A')
-                        : ($record->official_time_out ? \Carbon\Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
+                        : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                     'actual_time_in' => $actualTimeIn
                         ? $actualTimeIn->format('h:i A') : '--:--',
                     'actual_time_out' => $actualTimeOut
@@ -373,8 +377,8 @@ class FacultyDashboardController extends Controller
                     'section_name' => null,
                 ]];
                 
-                $timeIn = $req->time_in ? \Carbon\Carbon::parse($req->time_in) : null;
-                $timeOut = $req->time_out ? \Carbon\Carbon::parse($req->time_out) : null;
+                $timeIn = $req->time_in ? Carbon::parse($req->time_in) : null;
+                $timeOut = $req->time_out ? Carbon::parse($req->time_out) : null;
                 $hours = 0;
                 if ($timeIn && $timeOut) {
                     $hours = round($timeIn->diffInMinutes($timeOut) / 60, 2);
@@ -391,10 +395,10 @@ class FacultyDashboardController extends Controller
                     'dayOfWeek' => $req->attendance_date->format('l'),
                     'status' => 'Present (Online)',
                     'expected_time_in' => $detail && $detail->start_time 
-                        ? \Carbon\Carbon::parse($detail->start_time)->format('h:i A') 
+                        ? Carbon::parse($detail->start_time)->format('h:i A') 
                         : '--:--',
                     'expected_time_out' => $detail && $detail->end_time 
-                        ? \Carbon\Carbon::parse($detail->end_time)->format('h:i A') 
+                        ? Carbon::parse($detail->end_time)->format('h:i A') 
                         : '--:--',
                     'actual_time_in' => $timeIn ? $timeIn->format('h:i A') : '--:--',
                     'actual_time_out' => $timeOut ? $timeOut->format('h:i A') : '--:--',
