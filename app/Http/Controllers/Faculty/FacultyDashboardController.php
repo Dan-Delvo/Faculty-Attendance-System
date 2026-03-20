@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Faculty;
 
 use App\Http\Controllers\Controller;
 use App\Models\Faculty;
+use App\Models\Holiday;
 use App\Services\AttendanceReconciliationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -157,8 +158,9 @@ class FacultyDashboardController extends Controller
             $activeScheduleIds = $activeSchedules->pluck('id');
             $allDetails = \App\Models\ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
+            $holidays = Holiday::all();
 
-            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay) {
+            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay, $holidays) {
                 $detail = $record->scheduleDetail;
                 $date = $record->attendance_date;
                 $dayName = $date->format('l');
@@ -257,9 +259,17 @@ class FacultyDashboardController extends Controller
                     ->where('type', 'missing_time')
                     ->first();
 
+                // Holiday check
+                $isHoliday = $holidays->contains(function ($h) use ($date) {
+                    if ($h->is_recurring) {
+                        return $h->holiday_date->format('n') === $date->format('n') && $h->holiday_date->format('j') === $date->format('j');
+                    }
+                    return $h->holiday_date->toDateString() === $date->toDateString();
+                });
+
                 // Calculate undertime minutes on the fly for UI consistency if DB column is out of sync
-                $undertimeMinutes = $record->undertime_minutes ?? 0;
-                if ($record->actual_time_out && $record->operational_time_out && $undertimeMinutes == 0) {
+                $undertimeMinutes = $isHoliday ? 0 : ($record->undertime_minutes ?? 0);
+                if (!$isHoliday && $record->actual_time_out && $record->operational_time_out && $undertimeMinutes == 0) {
                     if ($record->actual_time_out->lt($record->operational_time_out)) {
                         $undertimeMinutes = $record->actual_time_out->diffInMinutes($record->operational_time_out);
                     }
@@ -268,13 +278,19 @@ class FacultyDashboardController extends Controller
                 // Dynamically adjust status for UI consistency if DB status is out of sync
                 $displayStatus = $record->status;
                 $hasActualTimeIn = $record->actual_time_in !== null;
-                $isUndertime = ($undertimeMinutes > 0);
-                $isOvertime = ($record->overtime_minutes > 0);
+
+                // Override display status for holidays
+                if ($isHoliday) {
+                    $displayStatus = $hasActualTimeIn ? 'Holiday Present' : 'Holiday';
+                }
+
+                $isUndertime = ($undertimeMinutes > 0 && $record->actual_time_out !== null);
+                $isOvertime = ($record->overtime_minutes > 0 && $record->actual_time_out !== null);
 
                 // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
-                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
+                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule', 'holiday present'])) {
                     $displayStatus = 'Absent';
-                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
+                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime) && !$isHoliday) {
                     // Override status if has actual time-in and has undertime or overtime
                     if ($isUndertime && $isOvertime) {
                         $displayStatus = 'UNDERTIME / OVERTIME';
@@ -316,7 +332,7 @@ class FacultyDashboardController extends Controller
                         ? $actualTimeIn->format('h:i A') : '--:--',
                     'actual_time_out' => $actualTimeOut
                         ? $actualTimeOut->format('h:i A') : '--:--',
-                    'late_minutes' => $record->late_minutes ?? 0,
+                    'late_minutes' => $isHoliday ? 0 : ($record->late_minutes ?? 0),
                     'undertime_minutes' => (int) $undertimeMinutes,
                     'undertime_justification' => $undertimeJustification?->justification,
                     'undertime_status' => $undertimeJustification?->status,
@@ -325,14 +341,15 @@ class FacultyDashboardController extends Controller
                     'updated_at' => ($undertimeJustification || $missingTimeJustification)
                         ? ($undertimeJustification?->updated_at ?? $missingTimeJustification->updated_at)->toIso8601String()
                         : ($record->updated_at ? $record->updated_at->toIso8601String() : null),
-                    'overtime_minutes' => $record->overtime_minutes ?? 0,
+                    'overtime_minutes' => $isHoliday ? 0 : ($record->overtime_minutes ?? 0),
                     'night_minutes' => $record->night_minutes ?? 0,
                     'overtime_night_minutes' => $record->overtime_night_minutes ?? 0,
-                    'required_hours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
+                    'required_hours' => ($isHoliday) ? 0 : (($record->required_hours <= 0 && $record->operational_time_out && $record->operational_time_in)
                         ? (float) max(0, (int) round($record->operational_time_out->diffInMinutes($record->operational_time_in) / 60))
-                        : (float) $record->required_hours,
+                        : (float) $record->required_hours),
                     'total_hours' => $totalHours,
                     'online_attendance' => $isOnlineAttendance,
+                    'is_holiday' => $isHoliday,
                     'subjects' => $subjects,
                 ];
             })->toArray();

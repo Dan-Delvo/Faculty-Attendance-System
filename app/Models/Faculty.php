@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use App\Models\AttendanceRecord;
 use App\Models\BiometricLog;
+use App\Models\Holiday;
 
 class Faculty extends Model
 {
@@ -1325,11 +1326,20 @@ class Faculty extends Model
             $activeScheduleIds = $activeSchedules->pluck('id');
             $allDetails = \App\Models\ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
             $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
+            $holidays = Holiday::all();
 
-            return $records->map(function (AttendanceRecord $record) use ($approvedChangeRequests, $detailsByScheduleAndDay) {
+            return $records->map(function (AttendanceRecord $record) use ($approvedChangeRequests, $detailsByScheduleAndDay, $holidays) {
                 $detail = $record->scheduleDetail;
                 $date = Carbon::parse($record->attendance_date);
                 $dayName = $date->format('l');
+
+                // Holiday check
+                $isHoliday = $holidays->contains(function ($h) use ($date) {
+                    if ($h->is_recurring) {
+                        return $h->holiday_date->format('n') === $date->format('n') && $h->holiday_date->format('j') === $date->format('j');
+                    }
+                    return $h->holiday_date->toDateString() === $date->toDateString();
+                });
 
                 // Determine subjects dynamically
                 $subjectDesc = 'Operational Duty';
@@ -1363,17 +1373,21 @@ class Faculty extends Model
                     }
                 }
 
-
                 // Dynamically adjust status for UI consistency
                 $displayStatus = $record->status;
                 $hasActualTimeIn = $record->actual_time_in !== null;
-                $isUndertime = ($record->undertime_minutes ?? 0) > 0;
-                $isOvertime = ($record->overtime_minutes ?? 0) > 0;
+
+                if ($isHoliday) {
+                    $displayStatus = $hasActualTimeIn ? 'Holiday Present' : 'Holiday';
+                }
+
+                $isUndertime = !$isHoliday && ($record->undertime_minutes ?? 0) > 0 && $record->actual_time_out !== null;
+                $isOvertime = !$isHoliday && ($record->overtime_minutes ?? 0) > 0 && $record->actual_time_out !== null;
 
                 // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
-                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
+                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule', 'holiday present'])) {
                     $displayStatus = 'Absent';
-                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
+                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime) && !$isHoliday) {
                     // Override status if has actual time-in and has undertime or overtime
                     if ($isUndertime && $isOvertime) {
                         $displayStatus = 'UNDERTIME / OVERTIME';
@@ -1399,12 +1413,13 @@ class Faculty extends Model
                         ? Carbon::parse($record->operational_time_out)->format('h:i A')
                         : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
                     'hoursRendered' => (float) $record->total_hours_rendered,
-                    'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
+                    'requiredHours' => ($isHoliday) ? 0 : (($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
                         ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->actual_time_in) / 60))
-                        : (float) $record->required_hours,
-                    'lateMinutes' => $record->late_minutes,
-                    'undertimeMinutes' => $record->undertime_minutes,
+                        : (float) $record->required_hours),
+                    'lateMinutes' => $isHoliday ? 0 : $record->late_minutes,
+                    'undertimeMinutes' => $isHoliday ? 0 : $record->undertime_minutes,
                     'status' => $displayStatus,
+                    'is_holiday' => $isHoliday,
                     'remarks' => $record->remarks,
                 ];
         })->values()->toArray();

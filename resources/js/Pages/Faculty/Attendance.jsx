@@ -22,7 +22,7 @@ function statusStyle(status = '') {
         return 'bg-orange-50 text-orange-700 ring-orange-500/20 dark:bg-orange-900/30 dark:text-orange-400';
     if (s === 'absent')
         return 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400';
-    if (s === 'holiday')
+    if (s === 'holiday' || s === 'holiday present')
         return 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400';
     if (s.includes('missing') || s.includes('check'))
         return 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-400';
@@ -388,16 +388,16 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                             {log.expected_time_in} <span className="text-gray-300 dark:text-slate-500 mx-1">-</span> {log.expected_time_out}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-gray-900 dark:text-white">
-                                            <span className={log.late_minutes > 0 ? 'text-amber-600 dark:text-amber-400' : (!log.actual_time_in || log.actual_time_in === '--:--' ? 'text-rose-500 animate-pulse' : '')}>
+                                            <span className={log.late_minutes > 0 ? 'text-amber-600 dark:text-amber-400' : (!log.actual_time_in || log.actual_time_in === '--:--' ? (log.is_holiday ? 'text-gray-400' : 'text-rose-500 animate-pulse') : '')}>
                                                 {log.actual_time_in}
                                             </span>
                                             <span className="text-gray-300 dark:text-slate-500 mx-1">-</span>
-                                            <span className={log.undertime_minutes > 0 ? 'text-red-600 dark:text-red-400' : (!log.actual_time_out || log.actual_time_out === '--:--' ? 'text-rose-500 animate-pulse' : '')}>
+                                            <span className={log.undertime_minutes > 0 ? 'text-red-600 dark:text-red-400' : (!log.actual_time_out || log.actual_time_out === '--:--' ? (log.is_holiday ? 'text-gray-400' : 'text-rose-500 animate-pulse') : '')}>
                                                 {log.actual_time_out}
                                             </span>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-center">
-                                            {(log.late_minutes === 0 && log.undertime_minutes === 0 && log.actual_time_in !== '--:--' && log.actual_time_out !== '--:--') ? (
+                                            {(log.late_minutes === 0 && log.undertime_minutes === 0 && (log.is_holiday || (log.actual_time_in !== '--:--' && log.actual_time_out !== '--:--'))) ? (
                                                 <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500">
                                                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12h15" />
@@ -409,7 +409,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                     {log.undertime_minutes > 0 && log.status !== 'ABSENT' && (log.actual_time_in !== '--:--' || log.actual_time_out !== '--:--') && (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{fmtMins(log.undertime_minutes)} Early</span>
-                                                            {log.undertime_status ? (
+                                                            {!log.is_holiday && (log.undertime_status ? (
                                                                 <button type="button" onClick={() => openJustifyModal(log, 'undertime')} className={`mt-0.5 group flex items-center gap-1 text-[11px] font-extrabold uppercase transition-colors ${log.undertime_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800' : log.undertime_status === 'rejected' ? 'text-red-600 dark:text-red-400 hover:text-red-800' : 'text-amber-600 dark:text-amber-400 hover:text-amber-800'}`}>
                                                                     <span>{log.undertime_status}</span>
                                                                     <svg className="h-3 w-3 opacity-50 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
@@ -423,10 +423,10 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                                     </svg>
                                                                     Justify Undertime
                                                                 </button>
-                                                            )}
+                                                            ))}
                                                         </div>
                                                     )}
-                                                    {(log.actual_time_in === '--:--' || log.actual_time_out === '--:--') && (
+                                                    {!log.is_holiday && (log.actual_time_in === '--:--' || log.actual_time_out === '--:--') && (
                                                         <div className="flex flex-col items-center gap-1 mt-1">
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-300">
                                                                 Missing {log.actual_time_in === '--:--' ? 'In' : ''}{log.actual_time_in === '--:--' && log.actual_time_out === '--:--' ? ' & ' : ''}{log.actual_time_out === '--:--' ? 'Out' : ''}
