@@ -42,6 +42,7 @@ class DatabaseSeeder extends Seeder
                 ImportBatchSeeder::class,
                 BiometricLogSeeder::class,
                 AttendanceSeeder::class,
+                AttendanceJustificationSeeder::class,
                 LeaveApplicationSeeder::class,
                 ScheduleChangeRequestSeeder::class,
                 OnlineAttendanceSeeder::class,

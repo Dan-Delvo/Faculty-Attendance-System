@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\Request;
+use App\Models\ScheduleChangeRequest;
 
 class Schedule extends Model
 {
@@ -83,7 +84,7 @@ class Schedule extends Model
         $academicYear = $request->query('academic_year', '');
         $department   = $request->query('department', '');
 
-        $query = static::with(['faculty.department', 'scheduleDetails', 'createdBy'])
+        $query = static::with(['faculty.department', 'scheduleDetails', 'internalSchedules', 'createdBy'])
             ->orderBy('created_at', 'desc');
 
         // Search
@@ -142,7 +143,21 @@ class Schedule extends Model
             ->take($perPage)
             ->get();
 
-        $formatted = $items->map(function (Schedule $schedule) {
+        // Pre-load all approved change requests for this page's schedules in a
+        // single query, keyed by schedule_id, to avoid N+1 round-trips.
+        $scheduleIds = $items->pluck('id')->all();
+
+        $approvedRequestsBySchedule = ScheduleChangeRequest::where('status', 'approved')
+            ->whereHas('scheduleDetail', function ($q) use ($scheduleIds): void {
+                $q->whereIn('schedule_id', $scheduleIds);
+            })
+            ->with('scheduleDetail')
+            ->get()
+            ->groupBy(fn (ScheduleChangeRequest $r): int => $r->scheduleDetail?->schedule_id ?? 0);
+
+        $formatted = $items->map(function (Schedule $schedule) use ($approvedRequestsBySchedule) {
+            $approvedRequests = $approvedRequestsBySchedule->get($schedule->id, collect());
+
             return [
                 'id'             => $schedule->id,
                 'schedule_code'  => $schedule->schedule_code,
@@ -167,6 +182,34 @@ class Schedule extends Model
                         'subject_desc'   => $d->subject_desc,
                         'room_code'      => $d->room_code,
                         'hours_required' => $d->hours_required,
+                    ];
+                })->toArray(),
+                'internal_schedule' => $schedule->internalSchedules->map(function (InternalSchedule $entry) {
+                    return [
+                        'id'             => $entry->id,
+                        'day'            => $entry->day_of_week,
+                        'start_time'     => $entry->device_time_in ? Carbon::parse($entry->device_time_in)->format('H:i') : null,
+                        'end_time'       => $entry->device_time_out ? Carbon::parse($entry->device_time_out)->format('H:i') : null,
+                        'is_operational' => (bool) $entry->is_operational,
+                        'required_hours' => $entry->required_hours,
+                        'sync_status'    => $entry->sync_status,
+                        'synced_at'      => $entry->synced_at ? Carbon::parse($entry->synced_at)->format('M d, Y h:i A') : null,
+                    ];
+                })->toArray(),
+                'approved_change_requests' => $approvedRequests->map(function (ScheduleChangeRequest $req) {
+                    $detail = $req->scheduleDetail;
+                    return [
+                        'id' => $req->id,
+                        'schedule_detail_id' => $req->schedule_detail_id,
+                        'course_code' => $detail?->course_code,
+                        'subject_desc' => $detail?->subject_desc,
+                        'original_day' => $detail?->day,
+                        'original_start_time' => $detail?->start_time ? Carbon::parse($detail->start_time)->format('H:i') : null,
+                        'original_end_time' => $detail?->end_time ? Carbon::parse($detail->end_time)->format('H:i') : null,
+                        'requested_day' => $req->requested_day_of_week,
+                        'requested_time_in' => $req->requested_time_in,
+                        'requested_time_out' => $req->requested_time_out,
+                        'requested_room' => $req->requested_room,
                     ];
                 })->toArray(),
                 'created_at'     => $schedule->created_at?->format('M d, Y'),

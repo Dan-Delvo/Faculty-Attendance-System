@@ -88,6 +88,8 @@ class ScheduleChangeRequest extends Model
         $page = max(1, (int) $request->query('page', 1));
         $status = $request->query('status', '');
         $search = $request->query('search', '');
+        $semester = $request->query('semester', '');
+        $academicYear = $request->query('academic_year', '');
 
         $query = static::with(['faculty.user', 'faculty.department', 'scheduleDetail.schedule', 'reviewedBy'])
             ->orderByRaw("
@@ -102,6 +104,17 @@ class ScheduleChangeRequest extends Model
 
         if ($status) {
             $query->where('status', $status);
+        }
+
+        if ($semester || $academicYear) {
+            $query->whereHas('scheduleDetail.schedule', function ($sq) use ($semester, $academicYear) {
+                if ($semester !== '') {
+                    $sq->where('semester', (int) $semester);
+                }
+                if ($academicYear !== '') {
+                    $sq->where('academic_year', (int) $academicYear);
+                }
+            });
         }
 
         if ($search) {
@@ -198,6 +211,8 @@ class ScheduleChangeRequest extends Model
         $perPage = (int) $request->query('per_page', 10);
         $page = (int) $request->query('page', 1);
         $status = $request->query('status', '');
+        $semester = $request->query('semester', '');
+        $academicYear = $request->query('academic_year', '');
 
         $query = static::with(['scheduleDetail.schedule', 'reviewedBy'])
             ->where('faculty_id', $facultyId)
@@ -205,6 +220,17 @@ class ScheduleChangeRequest extends Model
 
         if ($status) {
             $query->where('status', $status);
+        }
+
+        if ($semester || $academicYear) {
+            $query->whereHas('scheduleDetail.schedule', function ($sq) use ($semester, $academicYear) {
+                if ($semester !== '') {
+                    $sq->where('semester', (int) $semester);
+                }
+                if ($academicYear !== '') {
+                    $sq->where('academic_year', (int) $academicYear);
+                }
+            });
         }
 
         $total = $query->count();

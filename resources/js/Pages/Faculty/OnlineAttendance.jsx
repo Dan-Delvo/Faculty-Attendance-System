@@ -72,6 +72,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             });
     }, []);
 
+
+
     // ── Create form ──────────────────────────────────────────
     const createForm = useForm({
         schedule_detail_id: '',
@@ -256,8 +258,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         key={s}
                         onClick={() => applyFilter(s)}
                         className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterStatus === s
-                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                             }`}
                     >
                         {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -376,10 +378,10 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                         type="button"
                                         onClick={() => { createForm.setData('class_type', type); createForm.clearErrors('class_type'); }}
                                         className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold text-center transition-all border-2 ${createForm.data.class_type === type
-                                                ? type === 'synchronous'
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-500'
-                                                    : 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500'
-                                                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                                            ? type === 'synchronous'
+                                                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-500'
+                                                : 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500'
+                                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
                                             }`}
                                     >
                                         <div className="flex flex-col items-center gap-1">
@@ -408,8 +410,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 type="date"
                                 className="mt-1 block w-full text-sm"
                                 value={createForm.data.attendance_date}
-                                onChange={(e) => { 
-                                    createForm.setData('attendance_date', e.target.value); 
+                                onChange={(e) => {
+                                    createForm.setData('attendance_date', e.target.value);
                                     createForm.clearErrors('attendance_date');
                                     checkAttendance(e.target.value);
                                 }}
@@ -418,8 +420,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                             <InputError message={createForm.errors.attendance_date} />
                             {attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && (
                                 <p className="mt-1 text-xs font-bold text-amber-600 dark:text-amber-400">
-                                    {attendanceCheck.hasAttendance 
-                                        ? 'Note: You already have an attendance record for this date.' 
+                                    {attendanceCheck.hasAttendance
+                                        ? 'Note: You already have an attendance record for this date.'
                                         : 'Note: You already have a pending request for this date.'}
                                 </p>
                             )}
@@ -550,7 +552,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         Duplicate Attendance Detected
                     </h2>
                     <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                        {attendanceCheck.hasAttendance 
+                        {attendanceCheck.hasAttendance
                             ? "An attendance record already exists for this date. Submitting another one might cause confusion during payroll processing."
                             : "A pending online attendance request already exists for this date."}
                         <br /><br />
@@ -560,8 +562,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         <SecondaryButton onClick={() => setShowDuplicateModal(false)}>
                             Go Back
                         </SecondaryButton>
-                        <PrimaryButton 
-                            onClick={() => submitAttendance(true)} 
+                        <PrimaryButton
+                            onClick={() => submitAttendance(true)}
                             disabled={createForm.processing}
                             className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600 shadow-amber-900/20"
                         >
@@ -650,8 +652,8 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white font-bold text-xs shadow-sm ${req.class_type === 'synchronous'
-                                ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                                : 'bg-gradient-to-br from-amber-500 to-amber-600'
+                            ? 'bg-gradient-to-br from-blue-500 to-blue-600'
+                            : 'bg-gradient-to-br from-amber-500 to-amber-600'
                             }`}>
                             {req.class_type === 'synchronous' ? 'SYN' : 'ASY'}
                         </div>
@@ -797,3 +799,4 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
         </div>
     );
 }
+

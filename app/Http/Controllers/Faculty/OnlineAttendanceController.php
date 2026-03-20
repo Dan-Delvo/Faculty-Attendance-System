@@ -68,7 +68,9 @@ class OnlineAttendanceController extends Controller
             'attendance_date'    => 'required|date|before_or_equal:today',
             'time_in'            => 'required|date_format:H:i',
             'time_out'           => 'nullable|date_format:H:i|after:time_in',
+            'time_out'           => 'nullable|date_format:H:i|after:time_in',
             'screenshot_in'      => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'screenshot_out'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'screenshot_out'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'remarks'            => 'nullable|string|max:1000',
             'force'              => 'nullable|boolean',
@@ -82,11 +84,14 @@ class OnlineAttendanceController extends Controller
         $screenshotOutPath = $request->file('screenshot_out')
             ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
             : null;
+            ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
+            : null;
 
         $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath, $force);
 
         if (!$result['success']) {
             // Clean up uploaded files on failure
+            \Illuminate\Support\Facades\Storage::disk('public')->delete(array_filter([$screenshotInPath, $screenshotOutPath]));
             \Illuminate\Support\Facades\Storage::disk('public')->delete(array_filter([$screenshotInPath, $screenshotOutPath]));
             return back()->withErrors([$result['error_field'] => $result['error_message']]);
         }

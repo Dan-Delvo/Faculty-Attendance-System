@@ -1,0 +1,163 @@
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import DtrPreviewModal from '@/Components/Admin/DtrPreviewModal';
+import { Head } from '@inertiajs/react';
+import { useMemo, useState } from 'react';
+
+export default function DtrExport({ facultyOptions = [], dtrExportDefaults = {}, dtrExportYears = [] }) {
+    const [selectedFacultyIds, setSelectedFacultyIds] = useState(
+        dtrExportDefaults.faculty_id ? [dtrExportDefaults.faculty_id] : []
+    );
+    const [selectedMonth, setSelectedMonth] = useState(dtrExportDefaults.month ?? new Date().getMonth() + 1);
+    const [selectedYear, setSelectedYear] = useState(dtrExportDefaults.year ?? new Date().getFullYear());
+    const [showPreview, setShowPreview] = useState(false);
+
+    const monthOptions = [
+        { value: 1, label: 'January' },
+        { value: 2, label: 'February' },
+        { value: 3, label: 'March' },
+        { value: 4, label: 'April' },
+        { value: 5, label: 'May' },
+        { value: 6, label: 'June' },
+        { value: 7, label: 'July' },
+        { value: 8, label: 'August' },
+        { value: 9, label: 'September' },
+        { value: 10, label: 'October' },
+        { value: 11, label: 'November' },
+        { value: 12, label: 'December' },
+    ];
+
+    const allFacultyIds = useMemo(() => facultyOptions.map((faculty) => faculty.id), [facultyOptions]);
+    const allSelected = selectedFacultyIds.length > 0 && selectedFacultyIds.length === allFacultyIds.length;
+
+    const toggleSelectAll = () => {
+        setSelectedFacultyIds(allSelected ? [] : allFacultyIds);
+    };
+
+    const toggleFaculty = (facultyId) => {
+        setSelectedFacultyIds((prev) => {
+            if (prev.includes(facultyId)) {
+                return prev.filter((id) => id !== facultyId);
+            }
+
+            return [...prev, facultyId];
+        });
+    };
+
+    const handlePreview = () => {
+        if (selectedFacultyIds.length === 0) return;
+        setShowPreview(true);
+    };
+
+    return (
+        <AuthenticatedLayout>
+            <Head title="DTR Export" />
+
+            <section className="rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+                            Export Monthly Time Record
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Select faculty, choose a month and year, then preview before exporting.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full lg:w-auto">
+                        <select
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                            className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:ring-[#7a1315] focus:border-[#7a1315]"
+                        >
+                            {monthOptions.map((month) => (
+                                <option key={month.value} value={month.value}>
+                                    {month.label}
+                                </option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(Number(e.target.value))}
+                            className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-800 dark:text-gray-100 focus:ring-[#7a1315] focus:border-[#7a1315]"
+                        >
+                            {dtrExportYears.map((year) => (
+                                <option key={year} value={year}>
+                                    {year}
+                                </option>
+                            ))}
+                        </select>
+
+                        <button
+                            type="button"
+                            onClick={handlePreview}
+                            disabled={selectedFacultyIds.length === 0}
+                            className="rounded-xl bg-gradient-to-br from-[#7a1315] to-[#cc2127] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Preview Selected ({selectedFacultyIds.length})
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-gray-200 dark:border-gray-700">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                            <tr>
+                                <th className="px-4 py-2 text-left font-semibold w-12">
+                                    <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        onChange={toggleSelectAll}
+                                        className="h-4 w-4 rounded border-gray-300 text-[#7a1315] focus:ring-[#7a1315]"
+                                    />
+                                </th>
+                                <th className="px-4 py-2 text-left font-semibold">Faculty</th>
+                                <th className="px-4 py-2 text-left font-semibold">Department</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {facultyOptions.length === 0 ? (
+                                <tr>
+                                    <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        No faculty available.
+                                    </td>
+                                </tr>
+                            ) : (
+                                facultyOptions.map((faculty) => {
+                                    const isSelected = selectedFacultyIds.includes(faculty.id);
+
+                                    return (
+                                        <tr key={faculty.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => toggleFaculty(faculty.id)}
+                                                    className="h-4 w-4 rounded border-gray-300 text-[#7a1315] focus:ring-[#7a1315]"
+                                                />
+                                            </td>
+                                            <td className="px-4 py-2 font-medium text-gray-900 dark:text-gray-100">
+                                                {faculty.name}
+                                            </td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+                                                {faculty.department}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <DtrPreviewModal
+                open={showPreview}
+                onClose={() => setShowPreview(false)}
+                facultyIds={selectedFacultyIds}
+                month={selectedMonth}
+                year={selectedYear}
+            />
+        </AuthenticatedLayout>
+    );
+}
