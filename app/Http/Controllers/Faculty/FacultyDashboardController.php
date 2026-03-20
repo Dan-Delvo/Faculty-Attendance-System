@@ -146,15 +146,26 @@ class FacultyDashboardController extends Controller
             $onlineByDateAndSchedule = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString() . '-' . ($req->schedule_detail_id ?? ''));
             $onlineByDate = $onlineRequests->keyBy(fn($req) => $req->attendance_date->toDateString());
             
-            // Track which online requests have been matched
-            $matchedOnlineIds = [];
+            // Get all approved schedule change requests to handle moved classes
+            $approvedChangeRequests = \App\Models\ScheduleChangeRequest::where('faculty_id', $faculty->id)
+                ->where('status', 'approved')
+                ->with('scheduleDetail')
+                ->get();
+            
+            // Get all active schedules and their details to map subjects to internal blocks
+            $activeSchedules = $faculty->schedules()->where('status', 'active')->get();
+            $activeScheduleIds = $activeSchedules->pluck('id');
+            $allDetails = \App\Models\ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
+            $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
 
-            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds) {
+            $attendanceLogs = $records->map(function ($record) use ($onlineByDateAndSchedule, $onlineByDate, &$matchedOnlineIds, $approvedChangeRequests, $detailsByScheduleAndDay) {
                 $detail = $record->scheduleDetail;
+                $date = $record->attendance_date;
+                $dayName = $date->format('l');
 
                 // Check if there's an approved online attendance request for this record
                 $scheduleDetailId = $record->schedule_detail_id ?? $detail?->id ?? '';
-                $dateStr = $record->attendance_date->toDateString();
+                $dateStr = $date->toDateString();
                 
                 // Try matching by date+schedule_detail_id first, then by date only
                 $onlineRequest = $onlineByDateAndSchedule->get($dateStr . '-' . $scheduleDetailId) 
@@ -164,15 +175,70 @@ class FacultyDashboardController extends Controller
                     $matchedOnlineIds[] = $onlineRequest->id;
                 }
 
-                // Build subjects array from the linked schedule detail
+                // Build subjects array from the linked schedule detail or online request
                 $subjects = [];
-                if ($detail) {
+                $resolvedDetail = $detail ?: ($onlineRequest ? $onlineRequest->scheduleDetail : null);
+
+                if ($resolvedDetail && ($resolvedDetail->course_code || $resolvedDetail->subject_desc)) {
                     $subjects[] = [
-                        'code' => $detail->course_code ?? '',
-                        'desc' => $detail->subject_desc ?? null,
-                        'program_code' => $detail->program_code,
-                        'year_level' => $detail->year_level,
-                        'section_name' => $detail->section_name,
+                        'code' => $resolvedDetail->course_code ?? '',
+                        'desc' => (trim($resolvedDetail->subject_desc) !== '') ? $resolvedDetail->subject_desc : 'Operational Duty',
+                        'program_code' => $resolvedDetail->program_code,
+                        'year_level' => $resolvedDetail->year_level,
+                        'section_name' => $resolvedDetail->section_name,
+                    ];
+                } 
+
+                // If subjects are still empty, try matching based on the date and faculty's internal schedule mapping
+                if (empty($subjects)) {
+                    // Try to find matching official subjects for this day and time
+                    // 1. Check for staying official details (not moved away)
+                    foreach ($detailsByScheduleAndDay as $key => $todayDetails) {
+                        [$sId, $dDay] = explode('-', $key);
+                        if ($dDay !== $dayName) continue;
+
+                        $staying = $todayDetails->reject(function ($d) use ($approvedChangeRequests) {
+                            return $approvedChangeRequests->contains('schedule_detail_id', $d->id);
+                        });
+
+                        foreach ($staying as $d) {
+                            $subjects[] = [
+                                'code' => $d->course_code ?? '',
+                                'desc' => $d->subject_desc ?: 'Operational Duty',
+                                'program_code' => $d->program_code,
+                                'year_level' => $d->year_level,
+                                'section_name' => $d->section_name,
+                            ];
+                        }
+                    }
+
+                    // 2. Check for classes moved INTO this day
+                    $movedIn = $approvedChangeRequests->filter(function ($req) use ($dayName) {
+                        return $req->requested_day_of_week === $dayName;
+                    });
+
+                    foreach ($movedIn as $req) {
+                        $d = $req->scheduleDetail;
+                        if ($d) {
+                            $subjects[] = [
+                                'code' => $d->course_code ?? '',
+                                'desc' => $d->subject_desc ?: 'Operational Duty',
+                                'program_code' => $d->program_code,
+                                'year_level' => $d->year_level,
+                                'section_name' => $d->section_name,
+                            ];
+                        }
+                    }
+                }
+
+                // Final fallback if absolutely no subjects were found for this day
+                if (empty($subjects)) {
+                    $subjects[] = [
+                        'code' => '',
+                        'desc' => 'Operational Duty',
+                        'program_code' => null,
+                        'year_level' => null,
+                        'section_name' => null,
                     ];
                 }
 
@@ -276,13 +342,19 @@ class FacultyDashboardController extends Controller
             
             $onlineOnlyLogs = $unmatchedOnline->map(function ($req) {
                 $detail = $req->scheduleDetail;
-                $subjects = $detail ? [[
+                $subjects = ($detail && ($detail->course_code || $detail->subject_desc)) ? [[
                     'code' => $detail->course_code ?? '',
-                    'desc' => $detail->subject_desc ?? null,
+                    'desc' => (trim($detail->subject_desc) !== '') ? $detail->subject_desc : 'Operational Duty',
                     'program_code' => $detail->program_code ?? null,
                     'year_level' => $detail->year_level ?? null,
                     'section_name' => $detail->section_name ?? null,
-                ]] : [];
+                ]] : [[
+                    'code' => '',
+                    'desc' => 'Operational Duty',
+                    'program_code' => null,
+                    'year_level' => null,
+                    'section_name' => null,
+                ]];
                 
                 $timeIn = $req->time_in ? \Carbon\Carbon::parse($req->time_in) : null;
                 $timeOut = $req->time_out ? \Carbon\Carbon::parse($req->time_out) : null;

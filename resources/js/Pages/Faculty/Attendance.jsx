@@ -352,11 +352,11 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                                 <div className="flex flex-col gap-1">
                                                     {log.subjects.map((s, i) => (
                                                         <div key={i}>
-                                                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-300/50 dark:ring-amber-500/30">
+                                                            <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 ring-1 ring-inset ring-amber-300/50 dark:ring-amber-500/30 ${!s.code ? 'hidden' : ''}`}>
                                                                 {s.code}
                                                             </span>
                                                             {s.desc && (
-                                                                <div className="mt-0.5 text-[11px] text-white leading-tight" title={s.desc}>
+                                                                <div className="mt-0.5 text-[11px] text-gray-900 dark:text-white leading-tight" title={s.desc}>
                                                                     {s.desc}
                                                                 </div>
                                                             )}
@@ -406,7 +406,7 @@ export default function FacultyAttendance({ attendanceLogs }) {
                                             ) : (
                                                 <div className="flex flex-col gap-1 items-center">
                                                     {log.late_minutes > 0 && <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300">{fmtMins(log.late_minutes)} Late</span>}
-                                                    {log.undertime_minutes > 0 && (
+                                                    {log.undertime_minutes > 0 && log.status !== 'ABSENT' && (log.actual_time_in !== '--:--' || log.actual_time_out !== '--:--') && (
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-300">{fmtMins(log.undertime_minutes)} Early</span>
                                                             {log.undertime_status ? (

@@ -1077,8 +1077,8 @@ class Faculty extends Model
                         'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
                         'hours' => ($detail->hours_required <= 0)
-                            ? max(0, (int) round(Carbon::parse($detail->end_time)->diffInMinutes(Carbon::parse($detail->start_time)) / 60))
-                            : $detail->hours_required,
+                            ? (float) max(0, (int) round(Carbon::parse($detail->end_time)->diffInMinutes(Carbon::parse($detail->start_time)) / 60))
+                            : (float) $detail->hours_required,
                         'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                         'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                         'scheduleCode' => $meta?->schedule_code,
@@ -1259,9 +1259,9 @@ class Faculty extends Model
                         $targetEnd = $item['end'] ? Carbon::parse($item['end']) : null;
 
                         $storedHours = (float) $entry->required_hours;
-                        $requiredHours = ($storedHours <= 0 && $timeOut)
+                        $requiredHours = (float) (($storedHours <= 0 && $timeOut)
                             ? max(0, (int) round($timeOut->diffInMinutes($timeIn) / 60))
-                            : $storedHours;
+                            : $storedHours);
 
                         $meta = $scheduleMeta->get($entry->schedule_id);
 
@@ -1290,6 +1290,12 @@ class Faculty extends Model
                             'originalScheduleDetailId' => $isChanged ? $detail?->id : null,
                             'hasRequestHistory' => $hasRequestHistory,
                             'isApproved' => $isApproved,
+                            'comparison' => $detail ? [
+                                'day' => $detail->day,
+                                'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
+                                'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
+                                'room' => $detail->room_code ?: 'TBA',
+                            ] : null,
                         ];
                     })->all();
                 })->values()->toArray(),
@@ -1310,51 +1316,97 @@ class Faculty extends Model
             ->limit($limit)
             ->get();
 
-        return $records->map(function (AttendanceRecord $record) {
-            // Dynamically adjust status for UI consistency
-            $displayStatus = $record->status;
-            $hasActualTimeIn = $record->actual_time_in !== null;
-            $isUndertime = ($record->undertime_minutes ?? 0) > 0;
-            $isOvertime = ($record->overtime_minutes ?? 0) > 0;
+            // Pre-fetch data for dynamic subject resolution
+            $approvedChangeRequests = \App\Models\ScheduleChangeRequest::where('faculty_id', $this->id)
+                ->where('status', 'approved')
+                ->with('scheduleDetail')
+                ->get();
+            $activeSchedules = $this->schedules()->where('status', 'active')->get();
+            $activeScheduleIds = $activeSchedules->pluck('id');
+            $allDetails = \App\Models\ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
+            $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
 
-            // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
-            if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
-                $displayStatus = 'Absent';
-            } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
-                // Override status if has actual time-in and has undertime or overtime
-                if ($isUndertime && $isOvertime) {
-                    $displayStatus = 'UNDERTIME / OVERTIME';
-                } elseif ($isUndertime) {
-                    $displayStatus = 'UNDERTIME';
-                } elseif ($isOvertime) {
-                    $displayStatus = 'OVERTIME';
+            return $records->map(function (AttendanceRecord $record) use ($approvedChangeRequests, $detailsByScheduleAndDay) {
+                $detail = $record->scheduleDetail;
+                $date = Carbon::parse($record->attendance_date);
+                $dayName = $date->format('l');
+
+                // Determine subjects dynamically
+                $subjectDesc = 'Operational Duty';
+                $subjectCode = '';
+
+                if ($detail && (trim($detail->subject_desc) !== '')) {
+                    $subjectDesc = $detail->subject_desc;
+                    $subjectCode = $detail->course_code;
+                } else {
+                    // Try to find matching official subjects for this day
+                    foreach ($detailsByScheduleAndDay as $key => $todayDetails) {
+                        [$sId, $dDay] = explode('-', $key);
+                        if ($dDay !== $dayName) continue;
+
+                        $staying = $todayDetails->reject(fn($d) => $approvedChangeRequests->contains('schedule_detail_id', $d->id));
+                        if ($staying->isNotEmpty()) {
+                            $first = $staying->first();
+                            $subjectDesc = $first->subject_desc;
+                            $subjectCode = $first->course_code;
+                            break;
+                        }
+                    }
+
+                    // Check for moves if still empty
+                    if ($subjectDesc === 'Operational Duty') {
+                        $movedIn = $approvedChangeRequests->firstWhere('requested_day_of_week', $dayName);
+                        if ($movedIn && $movedIn->scheduleDetail) {
+                            $subjectDesc = $movedIn->scheduleDetail->subject_desc;
+                            $subjectCode = $movedIn->scheduleDetail->course_code;
+                        }
+                    }
                 }
-            }
 
 
-            return [
-                'id' => $record->id,
-                'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
-                'dayOfWeek' => $record->day_of_week,
-                'subject' => $record->scheduleDetail?->subject_desc ?? 'N/A',
-                'subjectCode' => $record->scheduleDetail?->course_code ?? '',
-                'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
-                'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
-                'expectedTimeIn' => $record->operational_time_in
-                    ? Carbon::parse($record->operational_time_in)->format('h:i A')
-                    : ($record->official_time_in ? Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
-                'expectedTimeOut' => $record->operational_time_out
-                    ? Carbon::parse($record->operational_time_out)->format('h:i A')
-                    : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
-                'hoursRendered' => (float) $record->total_hours_rendered,
-                'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
-                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->actual_time_in) / 60))
-                    : (float) $record->required_hours,
-                'lateMinutes' => $record->late_minutes,
-                'undertimeMinutes' => $record->undertime_minutes,
-                'status' => $displayStatus,
-                'remarks' => $record->remarks,
-            ];
+                // Dynamically adjust status for UI consistency
+                $displayStatus = $record->status;
+                $hasActualTimeIn = $record->actual_time_in !== null;
+                $isUndertime = ($record->undertime_minutes ?? 0) > 0;
+                $isOvertime = ($record->overtime_minutes ?? 0) > 0;
+
+                // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
+                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
+                    $displayStatus = 'Absent';
+                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
+                    // Override status if has actual time-in and has undertime or overtime
+                    if ($isUndertime && $isOvertime) {
+                        $displayStatus = 'UNDERTIME / OVERTIME';
+                    } elseif ($isUndertime) {
+                        $displayStatus = 'UNDERTIME';
+                    } elseif ($isOvertime) {
+                        $displayStatus = 'OVERTIME';
+                    }
+                }
+
+                return [
+                    'id' => $record->id,
+                    'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
+                    'dayOfWeek' => $record->day_of_week,
+                    'subject' => $subjectDesc,
+                    'subjectCode' => $subjectCode,
+                    'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
+                    'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
+                    'expectedTimeIn' => $record->operational_time_in
+                        ? Carbon::parse($record->operational_time_in)->format('h:i A')
+                        : ($record->official_time_in ? Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
+                    'expectedTimeOut' => $record->operational_time_out
+                        ? Carbon::parse($record->operational_time_out)->format('h:i A')
+                        : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
+                    'hoursRendered' => (float) $record->total_hours_rendered,
+                    'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
+                        ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->actual_time_in) / 60))
+                        : (float) $record->required_hours,
+                    'lateMinutes' => $record->late_minutes,
+                    'undertimeMinutes' => $record->undertime_minutes,
+                    'status' => $displayStatus,
+                    'remarks' => $record->remarks,
+                ];
         })->values()->toArray();
     }
 
