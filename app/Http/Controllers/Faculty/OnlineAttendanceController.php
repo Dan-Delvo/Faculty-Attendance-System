@@ -66,8 +66,18 @@ class OnlineAttendanceController extends Controller
             return back()->withErrors(['error' => 'Faculty profile not found.']);
         }
 
+        // Parse composite ID if provided (from the new dropdown logic)
+        if ($request->has('schedule_detail_id') && is_string($request->schedule_detail_id) && str_contains($request->schedule_detail_id, '-')) {
+            $parts = explode('-', $request->schedule_detail_id);
+            $request->merge([
+                'internal_schedule_id' => $parts[0],
+                'schedule_detail_id' => $parts[1] ?: null,
+            ]);
+        }
+
         $validated = $request->validate([
             'schedule_detail_id' => 'nullable|exists:schedule_details,id',
+            'internal_schedule_id' => 'nullable|exists:internal_schedules,id',
             'class_type' => 'required|in:synchronous,asynchronous',
             'attendance_date' => 'required|date|before_or_equal:today',
             'time_in' => 'required|date_format:H:i',

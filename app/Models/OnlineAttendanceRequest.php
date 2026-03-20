@@ -20,6 +20,7 @@ class OnlineAttendanceRequest extends Model
     protected $fillable = [
         'faculty_id',
         'schedule_detail_id',
+        'internal_schedule_id',
         'class_type',
         'attendance_date',
         'time_in',
@@ -53,6 +54,11 @@ class OnlineAttendanceRequest extends Model
     public function scheduleDetail(): BelongsTo
     {
         return $this->belongsTo(ScheduleDetail::class);
+    }
+
+    public function internalSchedule(): BelongsTo
+    {
+        return $this->belongsTo(InternalSchedule::class);
     }
 
     public function reviewedBy(): BelongsTo
@@ -92,7 +98,7 @@ class OnlineAttendanceRequest extends Model
         $page = (int) $request->query('page', 1);
         $status = $request->query('status', '');
 
-        $query = static::with(['scheduleDetail.schedule', 'reviewedBy'])
+        $query = static::with(['scheduleDetail.schedule', 'internalSchedule', 'reviewedBy'])
             ->where('faculty_id', $facultyId)
             ->orderBy('created_at', 'desc');
 
@@ -107,6 +113,7 @@ class OnlineAttendanceRequest extends Model
 
         $formatted = $items->map(function (self $req) {
             $detail = $req->scheduleDetail;
+            $internal = $req->internalSchedule;
 
             return [
                 'id' => $req->id,
@@ -118,12 +125,14 @@ class OnlineAttendanceRequest extends Model
                 'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
                 'remarks' => $req->remarks,
                 'status' => $req->status,
-                'course_code' => $detail->course_code,
-                'subject_desc' => $detail?->subject_desc ?? null,
+                'subject_code' => $detail?->course_code ?? '',
+                'subject_desc' => $detail?->subject_desc ?? 'Operational Duty',
                 'program_code' => $detail?->program_code ?? null,
                 'year_level' => $detail?->year_level ?? null,
                 'section_name' => $detail?->section_name ?? null,
-                'day' => $detail?->day ?? null,
+                'is_official' => $detail !== null,
+                'type' => $detail ? 'Official Class' : 'Internal Duty',
+                'day' => $detail?->day ?? $internal?->day_of_week,
                 'start_time' => Carbon::parse($req->time_in)->format('h:i A'),
                 'end_time' => Carbon::parse($req->time_out)->format('h:i A'),
                 'reviewed_by' => $req->reviewedBy?->email ?? null,
@@ -175,6 +184,7 @@ class OnlineAttendanceRequest extends Model
                 'faculty.user:id,email',
                 'scheduleDetail:id,course_code,subject_desc,day',
                 'scheduleDetail.schedule:id',
+                'internalSchedule',
                 'reviewedBy:id,email'
             ])
             ->orderBy('created_at', 'desc');
@@ -215,6 +225,7 @@ class OnlineAttendanceRequest extends Model
         $formatted = $items->map(function (self $req) {
             $detail = $req->scheduleDetail;
             $faculty = $req->faculty;
+            $internal = $req->internalSchedule;
 
             return [
                 'id' => $req->id,
@@ -229,12 +240,14 @@ class OnlineAttendanceRequest extends Model
                 'screenshot_out' => $req->screenshot_out ? Storage::url($req->screenshot_out) : null,
                 'remarks' => $req->remarks,
                 'status' => $req->status,
-                'course_code' => $detail->course_code ?? 'N/A',
-                'subject_desc' => $detail?->subject_desc ?? 'N/A',
+                'subject_code' => $detail->course_code ?? '',
+                'subject_desc' => $detail?->subject_desc ?? 'Operational Duty',
                 'program_code' => $detail?->program_code ?? null,
                 'year_level' => $detail?->year_level ?? null,
                 'section_name' => $detail?->section_name ?? null,
-                'day' => $detail?->day ?? 'N/A',
+                'is_official' => $detail !== null,
+                'type' => $detail ? 'Official Class' : 'Internal Duty',
+                'day' => $detail?->day ?? $internal?->day_of_week ?? 'N/A',
                 'start_time' => Carbon::parse($req->time_in)->format('h:i A'),
                 'end_time' => $req->time_out ? Carbon::parse($req->time_out)->format('h:i A') : 'N/A',
                 'reviewed_by' => $req->reviewedBy?->email ?? null,

@@ -135,6 +135,11 @@ class OnlineAttendanceSyncService
         OnlineAttendanceRequest $request,
         ?ScheduleDetail $scheduleDetail = null
     ): ?int {
+        // If the request already has an explicitly selected internal schedule, use it.
+        if ($request->internal_schedule_id) {
+            return (int) $request->internal_schedule_id;
+        }
+
         $dayOfWeek = Carbon::parse($request->attendance_date)->format('l');
         $scheduleDetail = $scheduleDetail ?? ($request->schedule_detail_id ? ScheduleDetail::find($request->schedule_detail_id) : null);
 
@@ -143,7 +148,6 @@ class OnlineAttendanceSyncService
                 ->where('faculty_id', $request->faculty_id)
                 ->where('schedule_id', $scheduleDetail->schedule_id)
                 ->where('day_of_week', $dayOfWeek)
-                ->where('is_operational', true)
                 ->orderByDesc('id')
                 ->first();
 
@@ -155,7 +159,6 @@ class OnlineAttendanceSyncService
         $fallback = InternalSchedule::query()
             ->where('faculty_id', $request->faculty_id)
             ->where('day_of_week', $dayOfWeek)
-            ->where('is_operational', true)
             ->orderByDesc('id')
             ->first();
 
