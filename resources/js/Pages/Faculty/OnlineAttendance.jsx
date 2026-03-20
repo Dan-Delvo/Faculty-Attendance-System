@@ -28,6 +28,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     const [showScreenshotModal, setShowScreenshotModal] = useState(false);
     const [screenshotUrl, setScreenshotUrl] = useState('');
     const [screenshotLabel, setScreenshotLabel] = useState('');
+    const [showDuplicateModal, setShowDuplicateModal] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [filterStatus, setFilterStatus] = useState(filters.status || '');
 
@@ -71,6 +72,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             });
     }, []);
 
+
+
     // ── Create form ──────────────────────────────────────────
     const createForm = useForm({
         schedule_detail_id: '',
@@ -100,35 +103,38 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
     };
 
     const handleCreate = (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
 
-        // Use FormData for file uploads
-        const formData = new FormData();
-        formData.append('schedule_detail_id', createForm.data.schedule_detail_id || '');
-        formData.append('class_type', createForm.data.class_type);
-        formData.append('attendance_date', createForm.data.attendance_date);
-        formData.append('time_in', createForm.data.time_in);
-        formData.append('time_out', createForm.data.time_out);
-        formData.append('remarks', createForm.data.remarks || '');
-
-        if (createForm.data.screenshot_in) {
-            formData.append('screenshot_in', createForm.data.screenshot_in);
-        }
-        if (createForm.data.screenshot_out) {
-            formData.append('screenshot_out', createForm.data.screenshot_out);
+        // If duplicate detected and not yet confirmed via modal
+        if (attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && !showDuplicateModal) {
+            setShowDuplicateModal(true);
+            return;
         }
 
+        submitAttendance();
+    };
+
+    const submitAttendance = (forceArg = false) => {
+        // Register the transformation separately to avoid chaining errors
+        createForm.transform((data) => ({
+            ...data,
+            force: forceArg ? '1' : '0'
+        }));
+
+        // Now call post() on the createForm object
         createForm.post(route('faculty.online-attendance.store'), {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () => {
                 setShowCreateModal(false);
+                setShowDuplicateModal(false);
                 createForm.reset();
                 setPreviewIn(null);
                 setPreviewOut(null);
                 fetchRequests(filterStatus, 1);
             },
             onError: () => {
+                setShowDuplicateModal(false);
                 toast.error('Please fix the errors and try again.');
             },
         });
@@ -240,8 +246,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         key={s}
                         onClick={() => applyFilter(s)}
                         className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterStatus === s
-                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                             }`}
                     >
                         {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -360,10 +366,10 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                         type="button"
                                         onClick={() => { createForm.setData('class_type', type); createForm.clearErrors('class_type'); }}
                                         className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold text-center transition-all border-2 ${createForm.data.class_type === type
-                                                ? type === 'synchronous'
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-500'
-                                                    : 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500'
-                                                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                                            ? type === 'synchronous'
+                                                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-500'
+                                                : 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500'
+                                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
                                             }`}
                                     >
                                         <div className="flex flex-col items-center gap-1">
@@ -392,19 +398,19 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                                 type="date"
                                 className="mt-1 block w-full text-sm"
                                 value={createForm.data.attendance_date}
-                                onChange={(e) => { 
-                                    createForm.setData('attendance_date', e.target.value); 
+                                onChange={(e) => {
+                                    createForm.setData('attendance_date', e.target.value);
                                     createForm.clearErrors('attendance_date');
                                     checkAttendance(e.target.value);
                                 }}
                                 max={new Date().toISOString().split('T')[0]}
                             />
                             <InputError message={createForm.errors.attendance_date} />
-                            {attendanceCheck.checked && !attendanceCheck.canSubmit && (
-                                <p className="mt-1 text-xs font-bold text-red-600 dark:text-red-400">
-                                    {attendanceCheck.hasAttendance 
-                                        ? 'You already have an attendance record for this date.' 
-                                        : 'You already have a pending request for this date.'}
+                            {attendanceCheck.checked && (attendanceCheck.hasAttendance || attendanceCheck.hasPendingRequest) && (
+                                <p className="mt-1 text-xs font-bold text-amber-600 dark:text-amber-400">
+                                    {attendanceCheck.hasAttendance
+                                        ? 'Note: You already have an attendance record for this date.'
+                                        : 'Note: You already have a pending request for this date.'}
                                 </p>
                             )}
                         </div>
@@ -521,6 +527,43 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
             </Modal>
 
             {/* ═══════════════════════════════════════════════════
+                 DUPLICATE CONFIRMATION MODAL
+                ═══════════════════════════════════════════════════ */}
+            <Modal show={showDuplicateModal} onClose={() => setShowDuplicateModal(false)} maxWidth="md">
+                <div className="p-6">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 mb-4">
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                        </svg>
+                    </div>
+                    <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                        Duplicate Attendance Detected
+                    </h2>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        {attendanceCheck.hasAttendance
+                            ? "An attendance record already exists for this date. Submitting another one might cause confusion during payroll processing."
+                            : "You already have a pending online attendance request for this date. Submitting this will replace your previous screenshots and details."}
+                        <br /><br />
+                        {attendanceCheck.hasPendingRequest
+                            ? "Do you want to replace your existing request with this new information?"
+                            : "Are you sure you want to proceed with this new request?"}
+                    </p>
+                    <div className="mt-6 flex justify-end gap-3">
+                        <SecondaryButton onClick={() => setShowDuplicateModal(false)}>
+                            Go Back
+                        </SecondaryButton>
+                        <PrimaryButton
+                            onClick={() => submitAttendance(true)}
+                            disabled={createForm.processing}
+                            className={`${attendanceCheck.hasPendingRequest ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-600 shadow-blue-900/20' : 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-600 shadow-amber-900/20'}`}
+                        >
+                            {createForm.processing ? 'Submitting…' : (attendanceCheck.hasPendingRequest ? 'Yes, Replace Request' : 'Yes, Submit Anyway')}
+                        </PrimaryButton>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* ═══════════════════════════════════════════════════
                  CANCEL CONFIRMATION MODAL
                 ═══════════════════════════════════════════════════ */}
             <Modal show={showCancelModal} onClose={() => setShowCancelModal(false)} maxWidth="md">
@@ -599,8 +642,8 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white font-bold text-xs shadow-sm ${req.class_type === 'synchronous'
-                                ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                                : 'bg-gradient-to-br from-amber-500 to-amber-600'
+                            ? 'bg-gradient-to-br from-blue-500 to-blue-600'
+                            : 'bg-gradient-to-br from-amber-500 to-amber-600'
                             }`}>
                             {req.class_type === 'synchronous' ? 'SYN' : 'ASY'}
                         </div>
@@ -746,3 +789,4 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
         </div>
     );
 }
+

@@ -18,16 +18,16 @@ class OnlineAttendanceController extends Controller
 
         if (!$faculty) {
             return Inertia::render('Faculty/OnlineAttendance', [
-                'requests'        => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
+                'requests' => ['data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1],
                 'scheduleDetails' => [],
-                'filters'         => ['status' => ''],
+                'filters' => ['status' => ''],
             ]);
         }
 
         return Inertia::render('Faculty/OnlineAttendance', [
-            'requests'        => OnlineAttendanceRequest::getForFaculty($faculty->id, $request),
+            'requests' => OnlineAttendanceRequest::getForFaculty($faculty->id, $request),
             'scheduleDetails' => $faculty->getScheduleDetailsForOnlineAttendance(),
-            'filters'         => [
+            'filters' => [
                 'status' => $request->query('status', ''),
             ],
         ]);
@@ -42,7 +42,11 @@ class OnlineAttendanceController extends Controller
 
         if (!$faculty) {
             return response()->json([
-                'data' => [], 'total' => 0, 'per_page' => 10, 'current_page' => 1, 'last_page' => 1,
+                'data' => [],
+                'total' => 0,
+                'per_page' => 10,
+                'current_page' => 1,
+                'last_page' => 1,
             ]);
         }
 
@@ -64,26 +68,31 @@ class OnlineAttendanceController extends Controller
 
         $validated = $request->validate([
             'schedule_detail_id' => 'nullable|exists:schedule_details,id',
-            'class_type'         => 'required|in:synchronous,asynchronous',
-            'attendance_date'    => 'required|date|before_or_equal:today',
-            'time_in'            => 'required|date_format:H:i',
-            'time_out'           => 'nullable|date_format:H:i|after:time_in',
-            'screenshot_in'      => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'screenshot_out'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'remarks'            => 'nullable|string|max:1000',
+            'class_type' => 'required|in:synchronous,asynchronous',
+            'attendance_date' => 'required|date|before_or_equal:today',
+            'time_in' => 'required|date_format:H:i',
+            'time_out' => 'nullable|date_format:H:i|after:time_in',
+            'screenshot_in' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'screenshot_out' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'remarks' => 'nullable|string|max:1000',
+            'force' => 'nullable|boolean',
         ]);
 
+        $force = (bool) ($validated['force'] ?? false);
+
         // Store screenshots
-        $screenshotInPath  = $request->file('screenshot_in')
+        $screenshotInPath = $request->file('screenshot_in')
             ->store("online-attendance/{$faculty->id}", 'public');
         $screenshotOutPath = $request->file('screenshot_out')
             ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
             : null;
 
-        $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath);
+
+        $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath, $force);
 
         if (!$result['success']) {
             // Clean up uploaded files on failure
+            \Illuminate\Support\Facades\Storage::disk('public')->delete(array_filter([$screenshotInPath, $screenshotOutPath]));
             \Illuminate\Support\Facades\Storage::disk('public')->delete(array_filter([$screenshotInPath, $screenshotOutPath]));
             return back()->withErrors([$result['error_field'] => $result['error_message']]);
         }
@@ -142,7 +151,7 @@ class OnlineAttendanceController extends Controller
         return response()->json([
             'has_attendance' => $hasAttendance,
             'has_pending_request' => $hasPendingRequest,
-            'can_submit' => !$hasAttendance && !$hasPendingRequest,
+            'can_submit' => true, // We now allow submission with confirmation modal
         ]);
     }
 }

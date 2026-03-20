@@ -60,11 +60,6 @@ class OnlineAttendanceRequest extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
-    public function attendanceRecords(): HasMany
-    {
-        return $this->hasMany(AttendanceRecord::class, 'online_attendance_id');
-    }
-
     /* ------------------------------------------------------------------ */
     /*  Scopes                                                            */
     /* ------------------------------------------------------------------ */
