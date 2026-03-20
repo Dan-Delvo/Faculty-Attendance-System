@@ -114,26 +114,14 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
         submitAttendance();
     };
 
-    const submitAttendance = (force = false) => {
-        // Use FormData for file uploads
-        const formData = new FormData();
-        formData.append('schedule_detail_id', createForm.data.schedule_detail_id || '');
-        formData.append('class_type', createForm.data.class_type);
-        formData.append('attendance_date', createForm.data.attendance_date);
-        formData.append('time_in', createForm.data.time_in);
-        formData.append('time_out', createForm.data.time_out);
-        formData.append('remarks', createForm.data.remarks || '');
-        if (force) {
-            formData.append('force', '1');
-        }
+    const submitAttendance = (forceArg = false) => {
+        // Register the transformation separately to avoid chaining errors
+        createForm.transform((data) => ({
+            ...data,
+            force: forceArg ? '1' : '0'
+        }));
 
-        if (createForm.data.screenshot_in) {
-            formData.append('screenshot_in', createForm.data.screenshot_in);
-        }
-        if (createForm.data.screenshot_out) {
-            formData.append('screenshot_out', createForm.data.screenshot_out);
-        }
-
+        // Now call post() on the createForm object
         createForm.post(route('faculty.online-attendance.store'), {
             forceFormData: true,
             preserveScroll: true,
@@ -554,9 +542,11 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                     <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
                         {attendanceCheck.hasAttendance
                             ? "An attendance record already exists for this date. Submitting another one might cause confusion during payroll processing."
-                            : "A pending online attendance request already exists for this date."}
+                            : "You already have a pending online attendance request for this date. Submitting this will replace your previous screenshots and details."}
                         <br /><br />
-                        Are you sure you want to proceed with this new request?
+                        {attendanceCheck.hasPendingRequest
+                            ? "Do you want to replace your existing request with this new information?"
+                            : "Are you sure you want to proceed with this new request?"}
                     </p>
                     <div className="mt-6 flex justify-end gap-3">
                         <SecondaryButton onClick={() => setShowDuplicateModal(false)}>
@@ -565,9 +555,9 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                         <PrimaryButton
                             onClick={() => submitAttendance(true)}
                             disabled={createForm.processing}
-                            className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600 shadow-amber-900/20"
+                            className={`${attendanceCheck.hasPendingRequest ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-600 shadow-blue-900/20' : 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-600 shadow-amber-900/20'}`}
                         >
-                            {createForm.processing ? 'Submitting…' : 'Yes, Submit Anyway'}
+                            {createForm.processing ? 'Submitting…' : (attendanceCheck.hasPendingRequest ? 'Yes, Replace Request' : 'Yes, Submit Anyway')}
                         </PrimaryButton>
                     </div>
                 </div>

@@ -367,13 +367,14 @@ class Faculty extends Model
      */
     public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, ?string $screenshotOutPath = null, bool $force = false): array
     {
+        // 1. Seek existing pending request for this date
+        $existingPending = $this->onlineAttendanceRequests()
+            ->where('attendance_date', $data['attendance_date'])
+            ->where('status', 'pending')
+            ->first();
+
         if (!$force) {
             // Block duplicate pending request for the same date
-            $existingPending = $this->onlineAttendanceRequests()
-                ->where('attendance_date', $data['attendance_date'])
-                ->where('status', 'pending')
-                ->exists();
-
             if ($existingPending) {
                 return [
                     'success' => false,
@@ -411,6 +412,30 @@ class Faculty extends Model
             }
         }
 
+        // 2. If forcing and a pending request exists, UPDATE IT instead of creating a new one
+        if ($force && $existingPending) {
+            // Remove old screenshots to save storage
+            if ($existingPending->screenshot_in) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($existingPending->screenshot_in);
+            }
+            if ($existingPending->screenshot_out) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($existingPending->screenshot_out);
+            }
+
+            $existingPending->update([
+                'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+                'class_type' => $data['class_type'],
+                'time_in' => $data['time_in'],
+                'time_out' => $data['time_out'],
+                'screenshot_in' => $screenshotInPath,
+                'screenshot_out' => $screenshotOutPath,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            return ['success' => true];
+        }
+
+        // 3. Otherwise, create a new request
         $this->onlineAttendanceRequests()->create([
             'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
             'class_type' => $data['class_type'],
@@ -612,18 +637,19 @@ class Faculty extends Model
             // Filter out internal entries that represent "original" days for classes moved AWAY from today.
             $internals = $internals->filter(function ($entry) use ($flatApprovedRequests, $detailsByScheduleAndDay) {
                 $officialDetails = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
-                if ($officialDetails->isEmpty()) return true;
+                if ($officialDetails->isEmpty())
+                    return true;
 
-                $hasStayingClass = $officialDetails->contains(function($d) use ($flatApprovedRequests) {
+                $hasStayingClass = $officialDetails->contains(function ($d) use ($flatApprovedRequests) {
                     $move = $flatApprovedRequests->firstWhere('schedule_detail_id', $d->id);
                     return !$move || $move->requested_day_of_week === $d->day;
                 });
 
-                $hasMovedInClass = $flatApprovedRequests->contains(function($req) use ($entry) {
+                $hasMovedInClass = $flatApprovedRequests->contains(function ($req) use ($entry) {
                     return $req->scheduleDetail &&
-                           $req->scheduleDetail->schedule_id === $entry->schedule_id &&
-                           $req->requested_day_of_week === $entry->day_of_week &&
-                           $req->requested_day_of_week !== $req->scheduleDetail->day;
+                        $req->scheduleDetail->schedule_id === $entry->schedule_id &&
+                        $req->requested_day_of_week === $entry->day_of_week &&
+                        $req->requested_day_of_week !== $req->scheduleDetail->day;
                 });
 
                 return $hasStayingClass || $hasMovedInClass;
@@ -636,11 +662,11 @@ class Faculty extends Model
                 $changeReqsForToday = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
                 $officialForToday = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
 
-                $stayingOfficial = $officialForToday->reject(function($d) use ($flatApprovedRequests) {
+                $stayingOfficial = $officialForToday->reject(function ($d) use ($flatApprovedRequests) {
                     return $flatApprovedRequests->contains('schedule_detail_id', $d->id);
                 });
 
-                $candidates = $stayingOfficial->map(function($d) {
+                $candidates = $stayingOfficial->map(function ($d) {
                     return [
                         'detail' => $d,
                         'isChanged' => false,
@@ -649,7 +675,7 @@ class Faculty extends Model
                         'end' => $d->end_time,
                         'room' => $d->room_code ?: 'TBA',
                     ];
-                })->concat($changeReqsForToday->map(function($req) {
+                })->concat($changeReqsForToday->map(function ($req) {
                     $d = $req->scheduleDetail;
                     return [
                         'detail' => $d,
@@ -661,21 +687,23 @@ class Faculty extends Model
                     ];
                 }));
 
-                $matched = $candidates->filter(function($c) use ($timeIn, $timeOut) {
+                $matched = $candidates->filter(function ($c) use ($timeIn, $timeOut) {
                     $cStart = Carbon::parse($c['start']);
                     return $cStart->format('H:i') >= $timeIn->format('H:i') &&
-                           (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
+                        (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
                 });
 
                 if ($matched->isEmpty()) {
-                    $matched = collect([[
-                        'detail' => null,
-                        'isChanged' => false,
-                        'originalDay' => null,
-                        'start' => $entry->device_time_in,
-                        'end' => $entry->device_time_out,
-                        'room' => 'TBA'
-                    ]]);
+                    $matched = collect([
+                        [
+                            'detail' => null,
+                            'isChanged' => false,
+                            'originalDay' => null,
+                            'start' => $entry->device_time_in,
+                            'end' => $entry->device_time_out,
+                            'room' => 'TBA'
+                        ]
+                    ]);
                 }
 
                 return $matched->map(function ($item) use ($entry, $now, $timeIn, $timeOut, $scheduleMeta) {
@@ -722,7 +750,7 @@ class Faculty extends Model
                         'programTitle' => $detail?->program_title ?? '',
                         'yearLevel' => $detail?->year_level ?? '',
                         'sectionName' => $detail?->section_name ?? '',
-                        ];
+                    ];
                 });
             })->values()->toArray();
         }
@@ -1120,20 +1148,21 @@ class Faculty extends Model
         // Filter out internal entries that represent "original" days for classes moved AWAY from today.
         $internals = $internals->filter(function ($entry) use ($flatApprovedRequests, $detailsByScheduleAndDay) {
             $officialDetails = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
-            if ($officialDetails->isEmpty()) return true;
+            if ($officialDetails->isEmpty())
+                return true;
 
             // Check if ANY official details for this block are staying today
-            $hasStayingClass = $officialDetails->contains(function($d) use ($flatApprovedRequests) {
+            $hasStayingClass = $officialDetails->contains(function ($d) use ($flatApprovedRequests) {
                 $move = $flatApprovedRequests->firstWhere('schedule_detail_id', $d->id);
                 return !$move || $move->requested_day_of_week === $d->day;
             });
 
             // Also check if any classes were moved INTO this block today from another day
-            $hasMovedInClass = $flatApprovedRequests->contains(function($req) use ($entry) {
+            $hasMovedInClass = $flatApprovedRequests->contains(function ($req) use ($entry) {
                 return $req->scheduleDetail &&
-                       $req->scheduleDetail->schedule_id === $entry->schedule_id &&
-                       $req->requested_day_of_week === $entry->day_of_week &&
-                       $req->requested_day_of_week !== $req->scheduleDetail->day;
+                    $req->scheduleDetail->schedule_id === $entry->schedule_id &&
+                    $req->requested_day_of_week === $entry->day_of_week &&
+                    $req->requested_day_of_week !== $req->scheduleDetail->day;
             });
 
             return $hasStayingClass || $hasMovedInClass;
@@ -1156,14 +1185,16 @@ class Faculty extends Model
             $processedEntries = $dayEntries;
             if ($dayEntries->isEmpty() && $hasApprovedToThisDay) {
                 // We'll use a placeholder to allow the flatMap to run and find the move-ins
-                $processedEntries = collect([new InternalSchedule([
-                    'day_of_week' => $day,
-                    'device_time_in' => '00:00:00',
-                    'device_time_out' => '23:59:59',
-                    'is_operational' => true,
-                    'schedule_id' => $activeScheduleIds->first(),
-                    'sync_status' => 'pending'
-                ])]);
+                $processedEntries = collect([
+                    new InternalSchedule([
+                        'day_of_week' => $day,
+                        'device_time_in' => '00:00:00',
+                        'device_time_out' => '23:59:59',
+                        'is_operational' => true,
+                        'schedule_id' => $activeScheduleIds->first(),
+                        'sync_status' => 'pending'
+                    ])
+                ]);
             }
 
             $schedule[] = [
@@ -1176,11 +1207,11 @@ class Faculty extends Model
                     $changeReqsForToday = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
                     $officialForToday = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
 
-                    $stayingOfficial = $officialForToday->reject(function($d) use ($flatApprovedRequests) {
+                    $stayingOfficial = $officialForToday->reject(function ($d) use ($flatApprovedRequests) {
                         return $flatApprovedRequests->contains('schedule_detail_id', $d->id);
                     });
 
-                    $candidates = $stayingOfficial->map(function($d) {
+                    $candidates = $stayingOfficial->map(function ($d) {
                         return [
                             'detail' => $d,
                             'isChanged' => false,
@@ -1189,7 +1220,7 @@ class Faculty extends Model
                             'end' => $d->end_time,
                             'room' => $d->room_code ?: 'TBA',
                         ];
-                    })->concat($changeReqsForToday->map(function($req) {
+                    })->concat($changeReqsForToday->map(function ($req) {
                         $d = $req->scheduleDetail;
                         return [
                             'detail' => $d,
@@ -1201,21 +1232,23 @@ class Faculty extends Model
                         ];
                     }));
 
-                    $matched = $candidates->filter(function($c) use ($timeIn, $timeOut) {
+                    $matched = $candidates->filter(function ($c) use ($timeIn, $timeOut) {
                         $cStart = Carbon::parse($c['start']);
                         return $cStart->format('H:i') >= $timeIn->format('H:i') &&
-                               (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
+                            (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
                     });
 
                     if ($matched->isEmpty()) {
-                        $matched = collect([[
-                            'detail' => null,
-                            'isChanged' => false,
-                            'originalDay' => null,
-                            'start' => $entry->device_time_in,
-                            'end' => $entry->device_time_out,
-                            'room' => 'TBA'
-                        ]]);
+                        $matched = collect([
+                            [
+                                'detail' => null,
+                                'isChanged' => false,
+                                'originalDay' => null,
+                                'start' => $entry->device_time_in,
+                                'end' => $entry->device_time_out,
+                                'room' => 'TBA'
+                            ]
+                        ]);
                     }
 
                     return $matched->map(function ($item) use ($entry, $timeIn, $timeOut, $scheduleMeta, $requestsByScheduleDetail, $flatApprovedRequests) {
