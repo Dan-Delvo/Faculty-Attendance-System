@@ -71,7 +71,10 @@ class OnlineAttendanceController extends Controller
             'screenshot_in'      => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
             'screenshot_out'     => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'remarks'            => 'nullable|string|max:1000',
+            'force'              => 'nullable|boolean',
         ]);
+
+        $force = (bool) ($validated['force'] ?? false);
 
         // Store screenshots
         $screenshotInPath  = $request->file('screenshot_in')
@@ -80,7 +83,7 @@ class OnlineAttendanceController extends Controller
             ? $request->file('screenshot_out')->store("online-attendance/{$faculty->id}", 'public')
             : null;
 
-        $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath);
+        $result = $faculty->createOnlineAttendanceRequest($validated, $screenshotInPath, $screenshotOutPath, $force);
 
         if (!$result['success']) {
             // Clean up uploaded files on failure
@@ -142,7 +145,7 @@ class OnlineAttendanceController extends Controller
         return response()->json([
             'has_attendance' => $hasAttendance,
             'has_pending_request' => $hasPendingRequest,
-            'can_submit' => !$hasAttendance && !$hasPendingRequest,
+            'can_submit' => true, // We now allow submission with confirmation modal
         ]);
     }
 }
