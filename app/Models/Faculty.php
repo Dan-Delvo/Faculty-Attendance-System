@@ -327,34 +327,106 @@ class Faculty extends Model
     /* ------------------------------------------------------------------ */
 
     /**
-     * Get active schedule details formatted for the online attendance dropdown.
+     * Get all active schedule blocks (both official and internal) for the online attendance dropdown. 
+     * Accounts for approved schedule change requests (moved slots).
      */
     public function getScheduleDetailsForOnlineAttendance(): array
     {
-        return $this->schedules()
-            ->where('status', 'active')
-            ->with('scheduleDetails')
+        $activeSchedules = $this->schedules()->where('status', 'active')->get();
+        if ($activeSchedules->isEmpty()) return [];
+
+        $activeScheduleIds = $activeSchedules->pluck('id');
+        $scheduleMeta = $activeSchedules->keyBy('id');
+
+        // 1. Get Official/Moved Classes (Same logic as Change Request)
+        $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
+            ->orderByRaw("FIELD(day, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+            ->orderBy('start_time', 'asc')
+            ->get();
+
+        $approvedChanges = ScheduleChangeRequest::where('faculty_id', $this->id)
+            ->where('status', 'approved')
             ->get()
-            ->flatMap(function ($schedule) {
-                return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
-                    return [
-                        'id' => $d->id,
-                        'day_of_week' => $d->day,
-                        'time_in' => Carbon::parse($d->start_time)->format('H:i'),
-                        'time_out' => Carbon::parse($d->end_time)->format('H:i'),
-                        'subject_code' => $d->course_code,
-                        'subject_desc' => $d->subject_desc,
-                        'room' => $d->room_code ?? 'TBA',
-                        'schedule_code' => $schedule->schedule_code,
-                        'program_code' => $d->program_code,
-                        'year_level' => $d->year_level,
-                        'section_name' => $d->section_name,
-                        'is_changed' => false,
-                    ];
-                });
-            })
-            ->values()
-            ->toArray();
+            ->keyBy('schedule_detail_id');
+
+        $results = [];
+
+        // 2. Add classes first
+        foreach ($allDetails as $detail) {
+            $meta = $scheduleMeta->get($detail->schedule_id);
+            $change = $approvedChanges->get($detail->id);
+            
+            $day = $change ? $change->requested_day_of_week : $detail->day;
+            $timeIn = $change ? $change->requested_time_in : $detail->start_time;
+            $timeOut = $change ? $change->requested_time_out : $detail->end_time;
+            $room = $change ? ($change->requested_room ?: $detail->room_code) : $detail->room_code;
+            $isChanged = $change !== null;
+
+            $results[] = [
+                'composite_id' => '0-' . $detail->id,
+                'id' => $detail->id,
+                'internal_schedule_id' => null,
+                'type' => 'Official',
+                'day_of_week' => $day,
+                'time_in' => Carbon::parse($timeIn)->format('H:i'),
+                'time_out' => Carbon::parse($timeOut)->format('H:i'),
+                'subject_code' => $detail->course_code,
+                'subject_desc' => $detail->subject_desc,
+                'room' => $room ?? 'TBA',
+                'schedule_code' => $meta?->schedule_code,
+                'program_code' => $detail->program_code,
+                'year_level' => $detail->year_level,
+                'section_name' => $detail->section_name,
+                'is_changed' => $isChanged,
+            ];
+        }
+
+        // 3. Append pure Internal Duty blocks (those without a matched subject)
+        $internals = InternalSchedule::where('faculty_id', $this->id)
+            ->whereIn('schedule_id', $activeScheduleIds)
+            ->get();
+
+        foreach ($internals as $entry) {
+            // Check if this internal block is already "covered" by a class (official or moved)
+            $isOccupied = false;
+            foreach ($results as &$res) {
+                if ($res['day_of_week'] === $entry->day_of_week) {
+                    $resIn = Carbon::parse($res['time_in']);
+                    $entIn = Carbon::parse($entry->device_time_in);
+                    // If times match closely, we assume it's the same slot
+                    if ($resIn->diffInMinutes($entIn) < 30) {
+                        $isOccupied = true;
+                        // Update the composite ID to link them if they are the same slot
+                        $res['composite_id'] = $entry->id . '-' . $res['id'];
+                        break;
+                    }
+                }
+            }
+            unset($res);
+
+            if (!$isOccupied) {
+                $meta = $scheduleMeta->get($entry->schedule_id);
+                $results[] = [
+                    'composite_id' => $entry->id . '-0',
+                    'id' => null,
+                    'internal_schedule_id' => $entry->id,
+                    'type' => 'Internal',
+                    'day_of_week' => $entry->day_of_week,
+                    'time_in' => Carbon::parse($entry->device_time_in)->format('H:i'),
+                    'time_out' => $entry->device_time_out ? Carbon::parse($entry->device_time_out)->format('H:i') : null,
+                    'subject_code' => '',
+                    'subject_desc' => 'Operational Duty',
+                    'room' => 'TBA',
+                    'schedule_code' => $meta?->schedule_code,
+                    'program_code' => '',
+                    'year_level' => '',
+                    'section_name' => '',
+                    'is_changed' => false,
+                ];
+            }
+        }
+
+        return $results;
     }
 
     /**
@@ -425,6 +497,7 @@ class Faculty extends Model
 
             $existingPending->update([
                 'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+                'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
                 'class_type' => $data['class_type'],
                 'time_in' => $data['time_in'],
                 'time_out' => $data['time_out'],
@@ -439,6 +512,7 @@ class Faculty extends Model
         // 3. Otherwise, create a new request
         $this->onlineAttendanceRequests()->create([
             'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+            'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
             'class_type' => $data['class_type'],
             'attendance_date' => $data['attendance_date'],
             'time_in' => $data['time_in'],

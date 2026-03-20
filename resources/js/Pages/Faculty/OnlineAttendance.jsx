@@ -11,6 +11,17 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 
+const formatTime12 = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    let h = parseInt(hours);
+    const m = minutes || '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12; // the hour '0' should be '12'
+    return `${h}:${m} ${ampm}`;
+};
+
 const STATUS_STYLES = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-400 dark:ring-amber-400/30',
     approved: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-400/10 dark:text-emerald-400 dark:ring-emerald-400/30',
@@ -339,7 +350,7 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                     <div className="px-6 py-5 space-y-5 max-h-[60dvh] overflow-y-auto">
                         {/* Schedule selector (optional) */}
                         <div>
-                            <InputLabel value="Subject / Schedule (optional)" htmlFor="schedule_detail_id" />
+                            <InputLabel value="Official Class or Internal Duty (Optional)" htmlFor="schedule_detail_id" />
                             <select
                                 id="schedule_detail_id"
                                 value={createForm.data.schedule_detail_id}
@@ -348,8 +359,8 @@ export default function OnlineAttendance({ requests: initialRequests, scheduleDe
                             >
                                 <option value="">— No specific schedule —</option>
                                 {scheduleDetails.map((d) => (
-                                    <option key={d.id} value={d.id}>
-                                        {d.day_of_week} · {d.time_in}–{d.time_out} · {d.subject_code} {d.subject_desc ? `- ${d.subject_desc}` : ''} · {d.program_code} {(d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : ''}
+                                    <option key={d.composite_id} value={d.composite_id}>
+                                         [{d.schedule_code}] {d.day_of_week} · {formatTime12(d.time_in)}–{formatTime12(d.time_out)} · {d.subject_code} {d.subject_desc ? `- ${d.subject_desc}` : ''} · {[d.program_code, (d.year_level || d.section_name) ? [d.year_level, d.section_name].filter(Boolean).join('-') : null].filter(Boolean).join(' ')} ({d.room}) {d.is_changed ? ' (Internal)' : ''}
                                     </option>
                                 ))}
                             </select>
@@ -649,7 +660,7 @@ function RequestCard({ req, onCancel, onOpenScreenshot }) {
                         </div>
                         <div>
                             <h3 className="font-bold text-gray-900 dark:text-white">
-                                {req.subject_code || 'Online Class'}
+                                {req.is_official ? (req.subject_code || 'Official Class') : 'Internal Duty'}
                                 {req.subject_desc && (
                                     <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 leading-tight">
                                         {req.subject_desc}
