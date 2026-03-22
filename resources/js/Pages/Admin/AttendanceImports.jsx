@@ -2,8 +2,11 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Pagination from '@/Components/Pagination';
 import Modal from '@/Components/Modal';
 import InputError from '@/Components/InputError';
+import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import DangerButton from '@/Components/DangerButton';
+import TextInput from '@/Components/TextInput';
 import { Head, router, useForm } from '@inertiajs/react';
 import toast from 'react-hot-toast';
 import { useMemo, useRef, useState } from 'react';
@@ -71,16 +74,44 @@ function formatLogType(type) {
     return type || '—';
 }
 
+function toDateTimeLocalValue(value) {
+    if (!value) return '';
+
+    const [date = '', time = ''] = String(value).split(' ');
+    if (!date || !time) return '';
+
+    return `${date}T${time.slice(0, 5)}`;
+}
+
+function toDateTimePayload(value) {
+    return value ? String(value).replace('T', ' ') : '';
+}
+
 export default function AttendanceImports({ batches, filters }) {
     const form = useForm({
         file: null,
     });
+    const [editLogForm, setEditLogForm] = useState({
+        id: null,
+        biometric_id: '',
+        log_datetime: '',
+        log_type: 'IN',
+        device_id: '',
+    });
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
+    const [showEditLogModal, setShowEditLogModal] = useState(false);
+    const [showDeleteBatchModal, setShowDeleteBatchModal] = useState(false);
+    const [showDeleteLogModal, setShowDeleteLogModal] = useState(false);
     const [selectedBatch, setSelectedBatch] = useState(null);
+    const [batchToDelete, setBatchToDelete] = useState(null);
     const [batchDetails, setBatchDetails] = useState(null);
+    const [logToDelete, setLogToDelete] = useState(null);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [detailsError, setDetailsError] = useState('');
+    const [editLogErrors, setEditLogErrors] = useState({});
+    const [savingLog, setSavingLog] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const syncTargetRef = useRef(null);
 
@@ -133,9 +164,22 @@ export default function AttendanceImports({ batches, filters }) {
     const closeDetailsModal = () => {
         setShowDetailsModal(false);
         setShowSyncModal(false);
+        setShowEditLogModal(false);
+        setShowDeleteBatchModal(false);
+        setShowDeleteLogModal(false);
         setSelectedBatch(null);
+        setBatchToDelete(null);
         setBatchDetails(null);
+        setLogToDelete(null);
         setDetailsError('');
+        setEditLogErrors({});
+        setEditLogForm({
+            id: null,
+            biometric_id: '',
+            log_datetime: '',
+            log_type: 'IN',
+            device_id: '',
+        });
     };
 
     const syncBatch = async (batchOverride) => {
@@ -162,11 +206,159 @@ export default function AttendanceImports({ batches, filters }) {
         }
     };
 
+    const openEditLogModal = (log) => {
+        setEditLogErrors({});
+        setEditLogForm({
+            id: log.id,
+            biometric_id: log.biometric_id ?? '',
+            log_datetime: toDateTimeLocalValue(log.log_datetime),
+            log_type: String(log.log_type ?? '').toUpperCase().includes('OUT') ? 'OUT' : 'IN',
+            device_id: log.device_id ?? '',
+        });
+        setShowEditLogModal(true);
+    };
+
+    const closeEditLogModal = () => {
+        if (savingLog) {
+            return;
+        }
+
+        setShowEditLogModal(false);
+        setEditLogErrors({});
+    };
+
+    const openDeleteBatchModal = (batchOverride) => {
+        const batch = batchOverride ?? selectedBatch;
+
+        if (!batch) {
+            return;
+        }
+
+        setBatchToDelete(batch);
+        setShowDeleteBatchModal(true);
+    };
+
+    const closeDeleteBatchModal = () => {
+        if (deleting) {
+            return;
+        }
+
+        setShowDeleteBatchModal(false);
+        setBatchToDelete(null);
+    };
+
+    const openDeleteLogModal = (log) => {
+        if (!log) {
+            return;
+        }
+
+        setLogToDelete(log);
+        setShowDeleteLogModal(true);
+    };
+
+    const closeDeleteLogModal = () => {
+        if (deleting) {
+            return;
+        }
+
+        setShowDeleteLogModal(false);
+        setLogToDelete(null);
+    };
+
+    const saveEditedLog = async () => {
+        if (!selectedBatch || !editLogForm.id || savingLog) {
+            return;
+        }
+
+        setSavingLog(true);
+        setEditLogErrors({});
+
+        try {
+            const { data } = await window.axios.patch(
+                route('admin.attendance-imports.logs.update', { batch: selectedBatch.id, log: editLogForm.id }),
+                {
+                    biometric_id: editLogForm.biometric_id,
+                    log_datetime: toDateTimePayload(editLogForm.log_datetime),
+                    log_type: editLogForm.log_type,
+                    device_id: editLogForm.device_id || null,
+                },
+            );
+
+            toast.success(data?.message ?? 'Imported log updated successfully.');
+            setShowEditLogModal(false);
+            await loadBatchDetails(selectedBatch);
+            router.reload({ only: ['batches'], preserveState: true, preserveScroll: true });
+        } catch (error) {
+            if (error?.response?.status === 422) {
+                setEditLogErrors(error.response.data?.errors ?? {});
+            } else {
+                toast.error(error?.response?.data?.message || error?.message || 'Failed to update imported log.');
+            }
+        } finally {
+            setSavingLog(false);
+        }
+    };
+
+    const deleteBatch = async () => {
+        const batch = batchToDelete ?? selectedBatch;
+
+        if (!batch || deleting) {
+            return;
+        }
+
+        setDeleting(true);
+
+        try {
+            const { data } = await window.axios.delete(route('admin.attendance-imports.destroy', batch.id));
+            toast.success(data?.message ?? 'Import batch deleted successfully.');
+            setShowDeleteBatchModal(false);
+
+            if (selectedBatch?.id === batch.id) {
+                closeDetailsModal();
+            } else {
+                setBatchToDelete(null);
+            }
+
+            router.reload({ only: ['batches'], preserveState: true, preserveScroll: true });
+        } catch (error) {
+            toast.error(error?.response?.data?.message || error?.message || 'Failed to delete import batch.');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    const deleteLog = async (log) => {
+        const targetLog = log ?? logToDelete;
+
+        if (!selectedBatch || !targetLog?.id || deleting) {
+            return;
+        }
+
+        setDeleting(true);
+
+        try {
+            const { data } = await window.axios.delete(
+                route('admin.attendance-imports.logs.destroy', { batch: selectedBatch.id, log: targetLog.id }),
+            );
+
+            toast.success(data?.message ?? 'Imported log deleted successfully.');
+            setShowDeleteLogModal(false);
+            setLogToDelete(null);
+            await loadBatchDetails(selectedBatch);
+            router.reload({ only: ['batches'], preserveState: true, preserveScroll: true });
+        } catch (error) {
+            toast.error(error?.response?.data?.message || error?.message || 'Failed to delete imported log.');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     const unsyncedLogsCount = Number(batchDetails?.batch?.unsynced_logs ?? 0);
     const unrecognizedLogsCount = Number(batchDetails?.batch?.unrecognized_logs ?? 0);
     // Logs that are unsynced AND have a recognized faculty (can actually be synced).
     const syncableLogsCount = Math.max(0, unsyncedLogsCount - unrecognizedLogsCount);
     const duplicateLogs = batchDetails?.duplicates ?? [];
+    const canDeleteSelectedBatch = Boolean(batchDetails?.batch?.can_delete);
 
     return (
         <AuthenticatedLayout
@@ -268,13 +460,24 @@ export default function AttendanceImports({ batches, filters }) {
                                                 )}
                                             </td>
                                             <td className="py-3 pl-3 text-right align-top">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => loadBatchDetails(batch)}
-                                                    className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                                >
-                                                    View Details
-                                                </button>
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => loadBatchDetails(batch)}
+                                                        className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                                    >
+                                                        View Details
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openDeleteBatchModal(batch)}
+                                                        disabled={deleting || Number(batch.synced_logs ?? 0) > 0}
+                                                        className="inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
+                                                        title={Number(batch.synced_logs ?? 0) > 0 ? 'Synced batches cannot be deleted.' : 'Delete this import batch'}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -300,7 +503,7 @@ export default function AttendanceImports({ batches, filters }) {
                 </div>
             </div>
 
-            <Modal show={showDetailsModal} onClose={() => { if (!showSyncModal) closeDetailsModal(); }} maxWidth="4xl">
+            <Modal show={showDetailsModal} onClose={() => { if (!showSyncModal && !showEditLogModal && !showDeleteBatchModal && !showDeleteLogModal) closeDetailsModal(); }} maxWidth="4xl">
                 <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-start justify-between gap-4">
                         <div>
@@ -309,7 +512,20 @@ export default function AttendanceImports({ batches, filters }) {
                                 {selectedBatch?.file_name ?? '—'}
                             </p>
                         </div>
-                        {selectedBatch && <StatusBadge status={selectedBatch.status} />}
+                        <div className="flex items-center gap-3">
+                            {batchDetails && (
+                                <button
+                                    type="button"
+                                    onClick={() => openDeleteBatchModal(selectedBatch)}
+                                    disabled={deleting || !canDeleteSelectedBatch}
+                                    className="inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
+                                    title={canDeleteSelectedBatch ? 'Delete this import batch' : 'Synced batches cannot be deleted.'}
+                                >
+                                    Delete Batch
+                                </button>
+                            )}
+                            {selectedBatch && <StatusBadge status={batchDetails?.batch?.status ?? selectedBatch.status} />}
+                        </div>
                     </div>
                 </div>
 
@@ -351,6 +567,10 @@ export default function AttendanceImports({ batches, filters }) {
                                 </div>
                             )}
 
+                            <div className="rounded-xl border border-blue-200 dark:border-blue-800/50 bg-blue-50/70 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+                                Unsynced logs can be edited or deleted here. Synced logs are locked to avoid breaking attendance records that were already created from them.
+                            </div>
+
                             <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
                                 <table className="w-full min-w-[780px] text-sm">
                                     <thead>
@@ -361,6 +581,7 @@ export default function AttendanceImports({ batches, filters }) {
                                             <th className="py-3 px-3">Type</th>
                                             <th className="py-3 px-3">ID Status</th>
                                             <th className="py-3 px-3">Synced</th>
+                                            <th className="py-3 px-3 text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -403,11 +624,34 @@ export default function AttendanceImports({ batches, filters }) {
                                                             {log.is_processed ? 'Synced' : 'Not Synced'}
                                                         </span>
                                                     </td>
+                                                    <td className="py-3 px-3 align-top text-right">
+                                                        {log.can_edit ? (
+                                                            <div className="flex justify-end gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openEditLogModal(log)}
+                                                                    className="inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openDeleteLogModal(log)}
+                                                                    disabled={deleting}
+                                                                    className="inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/20"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400">Locked after sync</span>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                                <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                                                     No biometric logs found for this batch.
                                                 </td>
                                             </tr>
@@ -515,6 +759,210 @@ export default function AttendanceImports({ batches, filters }) {
 
                 <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
                     <SecondaryButton onClick={closeDetailsModal}>Close</SecondaryButton>
+                </div>
+            </Modal>
+
+            <Modal show={showEditLogModal} onClose={closeEditLogModal} maxWidth="lg">
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        saveEditedLog();
+                    }}
+                >
+                    <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.25 2.25 0 1 1 3.182 3.182L7.5 20.213 3 21l.787-4.5L16.862 4.487Z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                                    Edit Imported Log
+                                </h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Update the raw biometric entry before it is synced to attendance.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="px-6 py-5 space-y-4">
+                        <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 p-4">
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Editing Entry
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                                <div>
+                                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Batch</p>
+                                    <p className="text-gray-700 dark:text-gray-300">{selectedBatch?.file_name ?? '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Current Type</p>
+                                    <p className="text-gray-700 dark:text-gray-300">{formatLogType(editLogForm.log_type)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Sync Status</p>
+                                    <p className="text-amber-700 dark:text-amber-400">Not Synced</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <InputLabel htmlFor="edit-biometric-id" value="Biometric ID" />
+                            <TextInput
+                                id="edit-biometric-id"
+                                value={editLogForm.biometric_id}
+                                onChange={(event) => setEditLogForm((current) => ({ ...current, biometric_id: event.target.value }))}
+                                className="mt-1 block w-full"
+                            />
+                            <InputError message={editLogErrors.biometric_id?.[0] ?? editLogErrors.biometric_id} className="mt-2" />
+                        </div>
+
+                        <div>
+                            <InputLabel htmlFor="edit-log-datetime" value="Log Date & Time" />
+                            <TextInput
+                                id="edit-log-datetime"
+                                type="datetime-local"
+                                value={editLogForm.log_datetime}
+                                onChange={(event) => setEditLogForm((current) => ({ ...current, log_datetime: event.target.value }))}
+                                className="mt-1 block w-full"
+                            />
+                            <InputError message={editLogErrors.log_datetime?.[0] ?? editLogErrors.log_datetime} className="mt-2" />
+                        </div>
+
+                        <div>
+                            <InputLabel htmlFor="edit-log-type" value="Log Type" />
+                            <select
+                                id="edit-log-type"
+                                value={editLogForm.log_type}
+                                onChange={(event) => setEditLogForm((current) => ({ ...current, log_type: event.target.value }))}
+                                className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-[#7a1315] focus:ring-[#7a1315] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:focus:border-red-500 dark:focus:ring-red-500 dark:[color-scheme:dark] transition-all duration-300"
+                            >
+                                <option value="IN">Time In</option>
+                                <option value="OUT">Time Out</option>
+                            </select>
+                            <InputError message={editLogErrors.log_type?.[0] ?? editLogErrors.log_type} className="mt-2" />
+                        </div>
+
+                        <div>
+                            <InputLabel htmlFor="edit-device-id" value="Device ID" />
+                            <TextInput
+                                id="edit-device-id"
+                                value={editLogForm.device_id}
+                                onChange={(event) => setEditLogForm((current) => ({ ...current, device_id: event.target.value }))}
+                                className="mt-1 block w-full"
+                            />
+                            <InputError message={editLogErrors.device_id?.[0] ?? editLogErrors.device_id} className="mt-2" />
+                        </div>
+                    </div>
+
+                    <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+                        <SecondaryButton type="button" onClick={closeEditLogModal} disabled={savingLog}>
+                            Cancel
+                        </SecondaryButton>
+                        <PrimaryButton type="submit" disabled={savingLog}>
+                            {savingLog ? 'Saving…' : 'Save Changes'}
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </Modal>
+
+            <Modal show={showDeleteBatchModal} onClose={closeDeleteBatchModal} maxWidth="lg">
+                <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 7.5h12m-9.75 0V6A1.5 1.5 0 0 1 9.75 4.5h4.5A1.5 1.5 0 0 1 15.75 6v1.5m-7.5 0v9.75A2.25 2.25 0 0 0 10.5 19.5h3a2.25 2.25 0 0 0 2.25-2.25V7.5m-6 3v5.25m4.5-5.25v5.25" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                                Delete Import Batch
+                            </h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Remove a mistakenly uploaded batch and all of its remaining unsynced logs.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-5 space-y-4">
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 p-4 text-sm">
+                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                            Batch Summary
+                        </p>
+                        <p className="font-bold text-gray-800 dark:text-gray-200">{batchToDelete?.file_name ?? '—'}</p>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                            Imported on {formatDateTime(batchToDelete?.started_at)}
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400">
+                            This action permanently removes the batch record and its unsynced biometric logs.
+                        </p>
+                    </div>
+
+                    <div className="rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                        This action cannot be undone.
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+                    <SecondaryButton type="button" onClick={closeDeleteBatchModal} disabled={deleting}>
+                        Cancel
+                    </SecondaryButton>
+                    <DangerButton type="button" onClick={deleteBatch} disabled={deleting}>
+                        {deleting ? 'Deleting…' : 'Delete Batch'}
+                    </DangerButton>
+                </div>
+            </Modal>
+
+            <Modal show={showDeleteLogModal} onClose={closeDeleteLogModal} maxWidth="lg">
+                <div className="px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 7.5h12m-9.75 0V6A1.5 1.5 0 0 1 9.75 4.5h4.5A1.5 1.5 0 0 1 15.75 6v1.5m-7.5 0v9.75A2.25 2.25 0 0 0 10.5 19.5h3a2.25 2.25 0 0 0 2.25-2.25V7.5m-6 3v5.25m4.5-5.25v5.25" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+                                Delete Imported Log
+                            </h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Remove this unsynced raw biometric entry from the selected import batch.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="px-6 py-5 space-y-4">
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 p-4 text-sm">
+                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                            Log Summary
+                        </p>
+                        <p className="font-bold text-gray-800 dark:text-gray-200">
+                            {logToDelete?.faculty_name ?? logToDelete?.biometric_id ?? '—'}
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                            {formatDate(logToDelete?.log_datetime)} · {formatTime(logToDelete?.log_datetime)} · {formatLogType(logToDelete?.log_type)}
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400">
+                            Batch: {selectedBatch?.file_name ?? '—'}
+                        </p>
+                    </div>
+
+                    <div className="rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                        This action cannot be undone.
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+                    <SecondaryButton type="button" onClick={closeDeleteLogModal} disabled={deleting}>
+                        Cancel
+                    </SecondaryButton>
+                    <DangerButton type="button" onClick={() => deleteLog()} disabled={deleting}>
+                        {deleting ? 'Deleting…' : 'Delete Log'}
+                    </DangerButton>
                 </div>
             </Modal>
 

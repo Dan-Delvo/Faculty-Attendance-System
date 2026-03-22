@@ -157,8 +157,17 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/attendance-imports/{batch}/details', [AdminAttendanceImportController::class, 'details'])
         ->name('admin.attendance-imports.details');
 
+    Route::patch('/attendance-imports/{batch}/logs/{log}', [AdminAttendanceImportController::class, 'updateLog'])
+        ->name('admin.attendance-imports.logs.update');
+
+    Route::delete('/attendance-imports/{batch}/logs/{log}', [AdminAttendanceImportController::class, 'destroyLog'])
+        ->name('admin.attendance-imports.logs.destroy');
+
     Route::patch('/attendance-imports/{batch}/sync', [AdminAttendanceImportController::class, 'sync'])
         ->name('admin.attendance-imports.sync');
+
+    Route::delete('/attendance-imports/{batch}', [AdminAttendanceImportController::class, 'destroy'])
+        ->name('admin.attendance-imports.destroy');
 
     Route::get('/attendance-imports/template', [AdminAttendanceImportController::class, 'downloadTemplate'])
         ->name('admin.attendance-imports.template');

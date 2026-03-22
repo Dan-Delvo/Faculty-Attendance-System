@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
@@ -194,7 +195,10 @@ class AdminAttendanceImportController extends Controller
                 'biometric_id' => $log->biometric_id,
                 'log_datetime' => optional($log->log_datetime)->format('Y-m-d H:i:s'),
                 'log_type' => $log->log_type,
+                'device_id' => $log->device_id,
                 'is_processed' => (bool) $log->is_processed,
+                'can_edit' => ! $log->is_processed,
+                'can_delete' => ! $log->is_processed,
             ];
         });
 
@@ -227,9 +231,112 @@ class AdminAttendanceImportController extends Controller
                 'synced_logs' => $syncedLogs,
                 'unsynced_logs' => $totalLogs - $syncedLogs,
                 'unrecognized_logs' => $unrecognizedLogs,
+                'can_delete' => $syncedLogs === 0,
             ],
             'logs' => $paginated,
             'duplicates' => $duplicateLogs,
+        ]);
+    }
+
+    public function updateLog(Request $request, ImportBatch $batch, BiometricLog $log): JsonResponse
+    {
+        $this->ensureLogBelongsToBatch($batch, $log);
+
+        if ($log->is_processed) {
+            return response()->json([
+                'message' => 'Synced logs cannot be edited. Update the attendance record separately if needed.',
+            ], 409);
+        }
+
+        $validated = $request->validate([
+            'biometric_id' => ['required', 'string', 'max:255'],
+            'log_datetime' => ['required'],
+            'log_type' => ['required', 'string', 'max:50'],
+            'device_id' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $parsedDateTime = $this->parseDateTime($validated['log_datetime']);
+        if (! $parsedDateTime) {
+            throw ValidationException::withMessages([
+                'log_datetime' => 'Invalid log date/time format. Use YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS.',
+            ]);
+        }
+
+        $normalizedLogType = $this->normalizeLogType($validated['log_type']);
+        if (! in_array($normalizedLogType, ['IN', 'OUT'], true)) {
+            throw ValidationException::withMessages([
+                'log_type' => 'Log type must be IN or OUT.',
+            ]);
+        }
+
+        try {
+            $log->update([
+                'biometric_id' => trim((string) $validated['biometric_id']),
+                'log_datetime' => $parsedDateTime,
+                'log_type' => $normalizedLogType,
+                'device_id' => filled($validated['device_id'] ?? null)
+                    ? trim((string) $validated['device_id'])
+                    : null,
+            ]);
+        } catch (QueryException $e) {
+            if ($this->isDuplicateKeyException($e)) {
+                throw ValidationException::withMessages([
+                    'log_datetime' => 'Another biometric log with the same faculty ID, date/time, and log type already exists.',
+                ]);
+            }
+
+            throw $e;
+        }
+
+        $this->refreshBatchSummary($batch->fresh());
+
+        return response()->json([
+            'message' => 'Imported log updated successfully.',
+        ]);
+    }
+
+    public function destroyLog(ImportBatch $batch, BiometricLog $log): JsonResponse
+    {
+        $this->ensureLogBelongsToBatch($batch, $log);
+
+        if ($log->is_processed) {
+            return response()->json([
+                'message' => 'Synced logs cannot be deleted from the import batch.',
+            ], 409);
+        }
+
+        $log->delete();
+
+        $this->refreshBatchSummary($batch->fresh());
+
+        return response()->json([
+            'message' => 'Imported log deleted successfully.',
+        ]);
+    }
+
+    public function destroy(ImportBatch $batch): JsonResponse
+    {
+        $hasSyncedLogs = BiometricLog::query()
+            ->where('import_batch_id', $batch->id)
+            ->where('is_processed', true)
+            ->exists();
+
+        if ($hasSyncedLogs) {
+            return response()->json([
+                'message' => 'This import batch contains synced logs and cannot be deleted safely.',
+            ], 409);
+        }
+
+        DB::transaction(function () use ($batch): void {
+            BiometricLog::query()
+                ->where('import_batch_id', $batch->id)
+                ->delete();
+
+            $batch->delete();
+        });
+
+        return response()->json([
+            'message' => 'Import batch deleted successfully.',
         ]);
     }
 
@@ -450,45 +557,87 @@ class AdminAttendanceImportController extends Controller
             return;
         }
 
-        // A batch is complete once it no longer has any recognized unresolved pair
-        // that could still form a valid time-in/time-out sync.
+        if ($this->batchHasSyncableRemaining($batch)) {
+            $batch->update([
+                'status' => 'pending',
+                'completed_at' => null,
+            ]);
+        } else {
+            $batch->update([
+                'status' => 'completed',
+                'completed_at' => $batch->completed_at ?? now(),
+            ]);
+        }
+    }
+
+    private function batchHasSyncableRemaining(ImportBatch $batch): bool
+    {
         $unresolvedRecognizedLogs = BiometricLog::query()
             ->where('import_batch_id', $batch->id)
             ->where('is_processed', false)
             ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
             ->get(['id', 'biometric_id', 'log_datetime', 'log_type']);
 
-        $hasSyncableRemaining = false;
+        if ($unresolvedRecognizedLogs->isEmpty()) {
+            return false;
+        }
 
-        if ($unresolvedRecognizedLogs->isNotEmpty()) {
-            $facultyIdMap = Faculty::query()
-                ->whereIn('biometric_id', $unresolvedRecognizedLogs->pluck('biometric_id')->unique()->values())
-                ->pluck('id', 'biometric_id');
+        $facultyIdMap = Faculty::query()
+            ->whereIn('biometric_id', $unresolvedRecognizedLogs->pluck('biometric_id')->unique()->values())
+            ->pluck('id', 'biometric_id');
 
-            $groupedUnresolved = $unresolvedRecognizedLogs->groupBy(function (BiometricLog $log) use ($facultyIdMap): string {
-                return $this->makeFacultyDateKey(
-                    $facultyIdMap->get($log->biometric_id),
-                    $log->log_datetime?->toDateString()
-                );
-            });
+        $groupedUnresolved = $unresolvedRecognizedLogs->groupBy(function (BiometricLog $log) use ($facultyIdMap): string {
+            return $this->makeFacultyDateKey(
+                $facultyIdMap->get($log->biometric_id),
+                $log->log_datetime?->toDateString()
+            );
+        });
 
-            foreach ($groupedUnresolved as $group) {
-                $hasIn = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'IN');
-                $hasOut = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'OUT');
+        foreach ($groupedUnresolved as $group) {
+            $hasIn = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'IN');
+            $hasOut = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'OUT');
 
-                if ($hasIn && $hasOut) {
-                    $hasSyncableRemaining = true;
-                    break;
-                }
+            if ($hasIn && $hasOut) {
+                return true;
             }
         }
 
-        if (! $hasSyncableRemaining) {
-            $batch->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-            ]);
+        return false;
+    }
+
+    private function refreshBatchSummary(ImportBatch $batch): void
+    {
+        $counts = BiometricLog::query()
+            ->where('import_batch_id', $batch->id)
+            ->selectRaw('COUNT(*) as total')
+            ->first();
+
+        $batch->update([
+            'total_records' => (int) ($counts->total ?? 0),
+            'processed_records' => (int) ($counts->total ?? 0),
+        ]);
+
+        $this->refreshBatchCompletionStatus($batch->fresh());
+    }
+
+    private function ensureLogBelongsToBatch(ImportBatch $batch, BiometricLog $log): void
+    {
+        abort_unless((int) $log->import_batch_id === (int) $batch->id, 404);
+    }
+
+    private function normalizeLogType(?string $value): string
+    {
+        $normalized = strtolower(trim((string) $value));
+
+        if (str_contains($normalized, 'out')) {
+            return 'OUT';
         }
+
+        if (str_contains($normalized, 'in')) {
+            return 'IN';
+        }
+
+        return strtoupper($normalized);
     }
 
     private function makeFacultyDateKey($facultyId, ?string $date): string
