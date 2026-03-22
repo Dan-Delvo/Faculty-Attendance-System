@@ -84,10 +84,10 @@ class ScheduleSeeder extends Seeder
                             'program_title'  => $entry['program_title'] ?? null,
                             'year_level'     => isset($entry['year_level']) ? (int) $entry['year_level'] : null,
                             'section_name'   => isset($entry['section_name']) ? (string) $entry['section_name'] : null,
-                            'course_title'   => $entry['course_title'] ?? null,
-                            'course_code'    => $entry['course_code'] ?? null,
+                            'course_title'   => $entry['course_details']['course_title'] ?? ($entry['course_title'] ?? null),
+                            'course_code'    => $entry['course_details']['course_code'] ?? ($entry['course_code'] ?? null),
                             'room_code'      => $entry['room_code'] ?? null,
-                            'subject_desc'   => $entry['course_title'] ?? null,
+                            'subject_desc'   => $entry['course_details']['course_title'] ?? ($entry['course_title'] ?? null),
                             'hours_required' => $hours,
                         ]
                     );
