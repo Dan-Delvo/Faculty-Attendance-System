@@ -37,6 +37,7 @@ function formatDateTime(value) {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
+        hour12: true,
     });
 }
 
@@ -62,6 +63,7 @@ function formatTime(value) {
     return parsedDate.toLocaleTimeString('en-PH', {
         hour: '2-digit',
         minute: '2-digit',
+        hour12: true,
     });
 }
 
