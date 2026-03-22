@@ -241,15 +241,8 @@ class AdminAttendanceImportController extends Controller
             ], 409);
         }
 
-        // Only recognized, unsynced logs are candidates for attendance sync.
-        $candidateLogs = BiometricLog::query()
-            ->where('import_batch_id', $batch->id)
-            ->where('is_processed', false)
-            ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
-            ->with(['faculty:id,biometric_id'])
-            ->orderBy('log_datetime')
-            ->orderBy('id')
-            ->get();
+        $syncGroups = $this->resolveSyncGroupsForBatch($batch);
+        $candidateLogs = $this->loadUnprocessedLogsForSyncGroups($syncGroups);
 
         if ($candidateLogs->isEmpty()) {
             return response()->json([
@@ -322,6 +315,17 @@ class AdminAttendanceImportController extends Controller
             }
         });
 
+        $processedLogIds = array_values(array_unique($logsToMarkProcessed));
+        $affectedBatchIds = empty($processedLogIds)
+            ? collect([$batch->id])
+            : BiometricLog::query()
+                ->whereIn('id', $processedLogIds)
+                ->pluck('import_batch_id')
+                ->filter()
+                ->push($batch->id)
+                ->unique()
+                ->values();
+
         if ($syncedCount > 0) {
             $logLabel = $syncedCount === 1 ? 'entry was' : 'entries were';
             $recordLabel = $attendanceRecordsCount === 1 ? 'record was' : 'records were';
@@ -335,10 +339,119 @@ class AdminAttendanceImportController extends Controller
                 : 'This batch is already fully synced.';
         }
 
-        // Determine whether any truly syncable logs remain. A group is syncable only
-        // when there is at least one unprocessed IN *and* one unprocessed OUT log for
-        // the same recognized faculty/date pair. Logs that can never form a complete
-        // pair are excluded so they do not block the batch from reaching 'completed'.
+        foreach ($affectedBatchIds as $affectedBatchId) {
+            $affectedBatch = $affectedBatchId === $batch->id
+                ? $batch
+                : ImportBatch::find($affectedBatchId);
+
+            if ($affectedBatch) {
+                $this->refreshBatchCompletionStatus($affectedBatch);
+            }
+        }
+
+        return response()->json([
+            'message' => $message,
+            'synced_count' => $syncedCount,
+            'skipped_count' => $skippedCount,
+            'attendance_records_count' => $attendanceRecordsCount,
+        ]);
+    }
+
+    private function resolveSyncGroupsForBatch(ImportBatch $batch)
+    {
+        $groups = collect();
+
+        $batchLogs = BiometricLog::query()
+            ->where('import_batch_id', $batch->id)
+            ->where('is_processed', false)
+            ->whereIn('biometric_id', Faculty::query()->select('biometric_id'))
+            ->with(['faculty:id,biometric_id'])
+            ->get();
+
+        $groups = $groups->merge($batchLogs->map(function (BiometricLog $log): array {
+            return [
+                'faculty_id' => $log->faculty?->id,
+                'date' => $log->log_datetime?->toDateString(),
+            ];
+        }));
+
+        if ($batch->file_path) {
+            try {
+                $rows = $this->parseImportFile(Storage::path($batch->file_path));
+                $facultyIdMap = Faculty::query()
+                    ->whereIn('biometric_id', collect($rows)->pluck('biometric_id')->filter()->unique()->values())
+                    ->pluck('id', 'biometric_id');
+
+                $groups = $groups->merge(collect($rows)->map(function (array $row) use ($facultyIdMap): ?array {
+                    $biometricId = trim((string) ($row['biometric_id'] ?? ''));
+                    if ($biometricId === '' || ! $facultyIdMap->has($biometricId)) {
+                        return null;
+                    }
+
+                    $parsedDateTime = $this->parseDateTime($row['log_datetime'] ?? '');
+                    if (! $parsedDateTime) {
+                        return null;
+                    }
+
+                    return [
+                        'faculty_id' => $facultyIdMap->get($biometricId),
+                        'date' => Carbon::parse($parsedDateTime)->toDateString(),
+                    ];
+                })->filter());
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return $groups
+            ->filter(fn (array $group): bool => ! empty($group['faculty_id']) && ! empty($group['date']))
+            ->unique(fn (array $group): string => $this->makeFacultyDateKey($group['faculty_id'], $group['date']))
+            ->values();
+    }
+
+    private function loadUnprocessedLogsForSyncGroups($syncGroups)
+    {
+        if ($syncGroups->isEmpty()) {
+            return collect();
+        }
+
+        $facultyBiometricIds = Faculty::query()
+            ->whereIn('id', $syncGroups->pluck('faculty_id')->unique()->values())
+            ->pluck('biometric_id')
+            ->filter()
+            ->values();
+
+        if ($facultyBiometricIds->isEmpty()) {
+            return collect();
+        }
+
+        $groupKeys = $syncGroups->mapWithKeys(fn (array $group): array => [
+            $this->makeFacultyDateKey($group['faculty_id'], $group['date']) => true,
+        ]);
+
+        return BiometricLog::query()
+            ->where('is_processed', false)
+            ->whereIn('biometric_id', $facultyBiometricIds)
+            ->with(['faculty:id,biometric_id'])
+            ->orderBy('log_datetime')
+            ->orderBy('id')
+            ->get()
+            ->filter(function (BiometricLog $log) use ($groupKeys): bool {
+                return $groupKeys->has($this->makeFacultyDateKey(
+                    $log->faculty?->id,
+                    $log->log_datetime?->toDateString()
+                ));
+            })
+            ->values();
+    }
+
+    private function refreshBatchCompletionStatus(ImportBatch $batch): void
+    {
+        if ($batch->status === 'failed') {
+            return;
+        }
+
+        // A batch is complete once it no longer has any recognized unresolved pair
+        // that could still form a valid time-in/time-out sync.
         $unresolvedRecognizedLogs = BiometricLog::query()
             ->where('import_batch_id', $batch->id)
             ->where('is_processed', false)
@@ -353,14 +466,14 @@ class AdminAttendanceImportController extends Controller
                 ->pluck('id', 'biometric_id');
 
             $groupedUnresolved = $unresolvedRecognizedLogs->groupBy(function (BiometricLog $log) use ($facultyIdMap): string {
-                $facultyId = $facultyIdMap->get($log->biometric_id) ?? '0';
-                $date = $log->log_datetime?->toDateString() ?? '';
-
-                return $facultyId . '|' . $date;
+                return $this->makeFacultyDateKey(
+                    $facultyIdMap->get($log->biometric_id),
+                    $log->log_datetime?->toDateString()
+                );
             });
 
             foreach ($groupedUnresolved as $group) {
-                $hasIn  = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'IN');
+                $hasIn = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'IN');
                 $hasOut = $group->contains(fn (BiometricLog $l): bool => strtoupper(trim((string) $l->log_type)) === 'OUT');
 
                 if ($hasIn && $hasOut) {
@@ -370,19 +483,41 @@ class AdminAttendanceImportController extends Controller
             }
         }
 
-        if (! $hasSyncableRemaining && $batch->status !== 'failed') {
+        if (! $hasSyncableRemaining) {
             $batch->update([
                 'status' => 'completed',
                 'completed_at' => now(),
             ]);
         }
+    }
 
-        return response()->json([
-            'message' => $message,
-            'synced_count' => $syncedCount,
-            'skipped_count' => $skippedCount,
-            'attendance_records_count' => $attendanceRecordsCount,
-        ]);
+    private function makeFacultyDateKey($facultyId, ?string $date): string
+    {
+        return ($facultyId ?? '0') . '|' . ($date ?? '');
+    }
+
+    private function findClosestOperationalSchedule(
+        Faculty $faculty,
+        string $dayOfWeek,
+        Carbon $targetTime,
+        ?int $scheduleId = null
+    ): ?InternalSchedule {
+        $query = InternalSchedule::query()
+            ->where('faculty_id', $faculty->id)
+            ->where('day_of_week', $dayOfWeek)
+            ->where('is_operational', true);
+
+        if ($scheduleId !== null) {
+            $query->where('schedule_id', $scheduleId);
+        }
+
+        return $query->get()->sortBy(function (InternalSchedule $schedule) use ($targetTime): int {
+            if (! $schedule->device_time_in) {
+                return PHP_INT_MAX;
+            }
+
+            return abs(Carbon::parse($schedule->device_time_in)->diffInMinutes($targetTime, false));
+        })->first();
     }
 
     /**
@@ -459,13 +594,12 @@ class AdminAttendanceImportController extends Controller
             // Select the InternalSchedule row whose device_time_in most closely matches
             // the official start time, ensuring the correct block is chosen when
             // multiple operational rows exist for the same faculty/schedule/day.
-            $internalSchedule = InternalSchedule::query()
-                ->where('faculty_id', $faculty->id)
-                ->where('schedule_id', $detail->schedule_id)
-                ->where('day_of_week', $dayOfWeek)
-                ->where('is_operational', true)
-                ->orderByRaw('ABS(TIMESTAMPDIFF(MINUTE, TIME(device_time_in), TIME(?)))', [$officialTimeIn->format('H:i:s')])
-                ->first();
+            $internalSchedule = $this->findClosestOperationalSchedule(
+                $faculty,
+                $dayOfWeek,
+                $officialTimeIn,
+                $detail->schedule_id
+            );
 
             if ($internalSchedule) {
                 $operationalTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($internalSchedule->device_time_in)->format('H:i:s'));
@@ -589,12 +723,11 @@ class AdminAttendanceImportController extends Controller
                 $actualTimeIn = $unusedIn->log_datetime;
                 $actualTimeOut = $unusedOut->log_datetime;
 
-                $fallbackInternal = InternalSchedule::query()
-                    ->where('faculty_id', $faculty->id)
-                    ->where('day_of_week', $dayOfWeek)
-                    ->where('is_operational', true)
-                    ->orderByRaw('ABS(TIMESTAMPDIFF(MINUTE, TIME(device_time_in), TIME(?)))', [$actualTimeIn->format('H:i:s')])
-                    ->first();
+                $fallbackInternal = $this->findClosestOperationalSchedule(
+                    $faculty,
+                    $dayOfWeek,
+                    $actualTimeIn
+                );
 
                 if ($fallbackInternal) {
                     $officialTimeIn = Carbon::parse($targetDate->toDateString() . ' ' . Carbon::parse($fallbackInternal->device_time_in)->format('H:i:s'));
