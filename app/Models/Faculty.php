@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use App\Models\AttendanceRecord;
 use App\Models\BiometricLog;
+use App\Models\Holiday;
 
 class Faculty extends Model
 {
@@ -326,34 +327,106 @@ class Faculty extends Model
     /* ------------------------------------------------------------------ */
 
     /**
-     * Get active schedule details formatted for the online attendance dropdown.
+     * Get all active schedule blocks (both official and internal) for the online attendance dropdown. 
+     * Accounts for approved schedule change requests (moved slots).
      */
     public function getScheduleDetailsForOnlineAttendance(): array
     {
-        return $this->schedules()
-            ->where('status', 'active')
-            ->with('scheduleDetails')
+        $activeSchedules = $this->schedules()->where('status', 'active')->get();
+        if ($activeSchedules->isEmpty()) return [];
+
+        $activeScheduleIds = $activeSchedules->pluck('id');
+        $scheduleMeta = $activeSchedules->keyBy('id');
+
+        // 1. Get Official/Moved Classes (Same logic as Change Request)
+        $allDetails = ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)
+            ->orderByRaw("FIELD(day, 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')")
+            ->orderBy('start_time', 'asc')
+            ->get();
+
+        $approvedChanges = ScheduleChangeRequest::where('faculty_id', $this->id)
+            ->where('status', 'approved')
             ->get()
-            ->flatMap(function ($schedule) {
-                return $schedule->scheduleDetails->map(function (ScheduleDetail $d) use ($schedule) {
-                    return [
-                        'id' => $d->id,
-                        'day_of_week' => $d->day,
-                        'time_in' => Carbon::parse($d->start_time)->format('H:i'),
-                        'time_out' => Carbon::parse($d->end_time)->format('H:i'),
-                        'subject_code' => $d->course_code,
-                        'subject_desc' => $d->subject_desc,
-                        'room' => $d->room_code ?? 'TBA',
-                        'schedule_code' => $schedule->schedule_code,
-                        'program_code' => $d->program_code,
-                        'year_level' => $d->year_level,
-                        'section_name' => $d->section_name,
-                        'is_changed' => false,
-                    ];
-                });
-            })
-            ->values()
-            ->toArray();
+            ->keyBy('schedule_detail_id');
+
+        $results = [];
+
+        // 2. Add classes first
+        foreach ($allDetails as $detail) {
+            $meta = $scheduleMeta->get($detail->schedule_id);
+            $change = $approvedChanges->get($detail->id);
+            
+            $day = $change ? $change->requested_day_of_week : $detail->day;
+            $timeIn = $change ? $change->requested_time_in : $detail->start_time;
+            $timeOut = $change ? $change->requested_time_out : $detail->end_time;
+            $room = $change ? ($change->requested_room ?: $detail->room_code) : $detail->room_code;
+            $isChanged = $change !== null;
+
+            $results[] = [
+                'composite_id' => '0-' . $detail->id,
+                'id' => $detail->id,
+                'internal_schedule_id' => null,
+                'type' => 'Official',
+                'day_of_week' => $day,
+                'time_in' => Carbon::parse($timeIn)->format('H:i'),
+                'time_out' => Carbon::parse($timeOut)->format('H:i'),
+                'subject_code' => $detail->course_code,
+                'subject_desc' => $detail->subject_desc,
+                'room' => $room ?? 'TBA',
+                'schedule_code' => $meta?->schedule_code,
+                'program_code' => $detail->program_code,
+                'year_level' => $detail->year_level,
+                'section_name' => $detail->section_name,
+                'is_changed' => $isChanged,
+            ];
+        }
+
+        // 3. Append pure Internal Duty blocks (those without a matched subject)
+        $internals = InternalSchedule::where('faculty_id', $this->id)
+            ->whereIn('schedule_id', $activeScheduleIds)
+            ->get();
+
+        foreach ($internals as $entry) {
+            // Check if this internal block is already "covered" by a class (official or moved)
+            $isOccupied = false;
+            foreach ($results as &$res) {
+                if ($res['day_of_week'] === $entry->day_of_week) {
+                    $resIn = Carbon::parse($res['time_in']);
+                    $entIn = Carbon::parse($entry->device_time_in);
+                    // If times match closely, we assume it's the same slot
+                    if ($resIn->diffInMinutes($entIn) < 30) {
+                        $isOccupied = true;
+                        // Update the composite ID to link them if they are the same slot
+                        $res['composite_id'] = $entry->id . '-' . $res['id'];
+                        break;
+                    }
+                }
+            }
+            unset($res);
+
+            if (!$isOccupied) {
+                $meta = $scheduleMeta->get($entry->schedule_id);
+                $results[] = [
+                    'composite_id' => $entry->id . '-0',
+                    'id' => null,
+                    'internal_schedule_id' => $entry->id,
+                    'type' => 'Internal',
+                    'day_of_week' => $entry->day_of_week,
+                    'time_in' => Carbon::parse($entry->device_time_in)->format('H:i'),
+                    'time_out' => $entry->device_time_out ? Carbon::parse($entry->device_time_out)->format('H:i') : null,
+                    'subject_code' => '',
+                    'subject_desc' => 'Operational Duty',
+                    'room' => 'TBA',
+                    'schedule_code' => $meta?->schedule_code,
+                    'program_code' => '',
+                    'year_level' => '',
+                    'section_name' => '',
+                    'is_changed' => false,
+                ];
+            }
+        }
+
+        return $results;
     }
 
     /**
@@ -362,35 +435,39 @@ class Faculty extends Model
      * @param  array  $data       Validated form data.
      * @param  string $screenshotInPath  Storage path for time-in screenshot.
      * @param  string $screenshotOutPath Storage path for time-out screenshot.
+     * @param  bool   $force      Whether to bypass duplicate checks.
      * @return array{success: bool, error_field?: string, error_message?: string}
      */
-    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, ?string $screenshotOutPath = null): array
+    public function createOnlineAttendanceRequest(array $data, string $screenshotInPath, ?string $screenshotOutPath = null, bool $force = false): array
     {
-        // Block duplicate pending request for the same date
+        // 1. Seek existing pending request for this date
         $existingPending = $this->onlineAttendanceRequests()
             ->where('attendance_date', $data['attendance_date'])
             ->where('status', 'pending')
-            ->exists();
+            ->first();
 
-        if ($existingPending) {
-            return [
-                'success' => false,
-                'error_field' => 'attendance_date',
-                'error_message' => 'You already have a pending online attendance request for this date.',
-            ];
-        }
+        if (!$force) {
+            // Block duplicate pending request for the same date
+            if ($existingPending) {
+                return [
+                    'success' => false,
+                    'error_field' => 'attendance_date',
+                    'error_message' => 'You already have a pending online attendance request for this date.',
+                ];
+            }
 
-        // Block if there's already an attendance record for this date (biometric or previous online)
-        $existingAttendance = $this->attendanceRecords()
-            ->where('attendance_date', $data['attendance_date'])
-            ->exists();
+            // Block if there's already an attendance record for this date (biometric or previous online)
+            $existingAttendance = $this->attendanceRecords()
+                ->where('attendance_date', $data['attendance_date'])
+                ->exists();
 
-        if ($existingAttendance) {
-            return [
-                'success' => false,
-                'error_field' => 'attendance_date',
-                'error_message' => 'You already have an attendance record for this date.',
-            ];
+            if ($existingAttendance) {
+                return [
+                    'success' => false,
+                    'error_field' => 'attendance_date',
+                    'error_message' => 'You already have an attendance record for this date.',
+                ];
+            }
         }
 
         // Verify schedule detail belongs to this faculty (if provided)
@@ -408,8 +485,34 @@ class Faculty extends Model
             }
         }
 
+        // 2. If forcing and a pending request exists, UPDATE IT instead of creating a new one
+        if ($force && $existingPending) {
+            // Remove old screenshots to save storage
+            if ($existingPending->screenshot_in) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($existingPending->screenshot_in);
+            }
+            if ($existingPending->screenshot_out) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($existingPending->screenshot_out);
+            }
+
+            $existingPending->update([
+                'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+                'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
+                'class_type' => $data['class_type'],
+                'time_in' => $data['time_in'],
+                'time_out' => $data['time_out'],
+                'screenshot_in' => $screenshotInPath,
+                'screenshot_out' => $screenshotOutPath,
+                'remarks' => $data['remarks'] ?? null,
+            ]);
+
+            return ['success' => true];
+        }
+
+        // 3. Otherwise, create a new request
         $this->onlineAttendanceRequests()->create([
             'schedule_detail_id' => $data['schedule_detail_id'] ?: null,
+            'internal_schedule_id' => $data['internal_schedule_id'] ?? null,
             'class_type' => $data['class_type'],
             'attendance_date' => $data['attendance_date'],
             'time_in' => $data['time_in'],
@@ -609,18 +712,19 @@ class Faculty extends Model
             // Filter out internal entries that represent "original" days for classes moved AWAY from today.
             $internals = $internals->filter(function ($entry) use ($flatApprovedRequests, $detailsByScheduleAndDay) {
                 $officialDetails = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
-                if ($officialDetails->isEmpty()) return true;
+                if ($officialDetails->isEmpty())
+                    return true;
 
-                $hasStayingClass = $officialDetails->contains(function($d) use ($flatApprovedRequests) {
+                $hasStayingClass = $officialDetails->contains(function ($d) use ($flatApprovedRequests) {
                     $move = $flatApprovedRequests->firstWhere('schedule_detail_id', $d->id);
                     return !$move || $move->requested_day_of_week === $d->day;
                 });
 
-                $hasMovedInClass = $flatApprovedRequests->contains(function($req) use ($entry) {
+                $hasMovedInClass = $flatApprovedRequests->contains(function ($req) use ($entry) {
                     return $req->scheduleDetail &&
-                           $req->scheduleDetail->schedule_id === $entry->schedule_id &&
-                           $req->requested_day_of_week === $entry->day_of_week &&
-                           $req->requested_day_of_week !== $req->scheduleDetail->day;
+                        $req->scheduleDetail->schedule_id === $entry->schedule_id &&
+                        $req->requested_day_of_week === $entry->day_of_week &&
+                        $req->requested_day_of_week !== $req->scheduleDetail->day;
                 });
 
                 return $hasStayingClass || $hasMovedInClass;
@@ -633,11 +737,11 @@ class Faculty extends Model
                 $changeReqsForToday = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
                 $officialForToday = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
 
-                $stayingOfficial = $officialForToday->reject(function($d) use ($flatApprovedRequests) {
+                $stayingOfficial = $officialForToday->reject(function ($d) use ($flatApprovedRequests) {
                     return $flatApprovedRequests->contains('schedule_detail_id', $d->id);
                 });
 
-                $candidates = $stayingOfficial->map(function($d) {
+                $candidates = $stayingOfficial->map(function ($d) {
                     return [
                         'detail' => $d,
                         'isChanged' => false,
@@ -646,7 +750,7 @@ class Faculty extends Model
                         'end' => $d->end_time,
                         'room' => $d->room_code ?: 'TBA',
                     ];
-                })->concat($changeReqsForToday->map(function($req) {
+                })->concat($changeReqsForToday->map(function ($req) {
                     $d = $req->scheduleDetail;
                     return [
                         'detail' => $d,
@@ -658,21 +762,23 @@ class Faculty extends Model
                     ];
                 }));
 
-                $matched = $candidates->filter(function($c) use ($timeIn, $timeOut) {
+                $matched = $candidates->filter(function ($c) use ($timeIn, $timeOut) {
                     $cStart = Carbon::parse($c['start']);
                     return $cStart->format('H:i') >= $timeIn->format('H:i') &&
-                           (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
+                        (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
                 });
 
                 if ($matched->isEmpty()) {
-                    $matched = collect([[
-                        'detail' => null,
-                        'isChanged' => false,
-                        'originalDay' => null,
-                        'start' => $entry->device_time_in,
-                        'end' => $entry->device_time_out,
-                        'room' => 'TBA'
-                    ]]);
+                    $matched = collect([
+                        [
+                            'detail' => null,
+                            'isChanged' => false,
+                            'originalDay' => null,
+                            'start' => $entry->device_time_in,
+                            'end' => $entry->device_time_out,
+                            'room' => 'TBA'
+                        ]
+                    ]);
                 }
 
                 return $matched->map(function ($item) use ($entry, $now, $timeIn, $timeOut, $scheduleMeta) {
@@ -719,7 +825,7 @@ class Faculty extends Model
                         'programTitle' => $detail?->program_title ?? '',
                         'yearLevel' => $detail?->year_level ?? '',
                         'sectionName' => $detail?->section_name ?? '',
-                        ];
+                    ];
                 });
             })->values()->toArray();
         }
@@ -1046,8 +1152,8 @@ class Faculty extends Model
                         'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
                         'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
                         'hours' => ($detail->hours_required <= 0)
-                            ? max(0, (int) round(Carbon::parse($detail->end_time)->diffInMinutes(Carbon::parse($detail->start_time)) / 60))
-                            : $detail->hours_required,
+                            ? (float) max(0, (int) round(Carbon::parse($detail->end_time)->diffInMinutes(Carbon::parse($detail->start_time)) / 60))
+                            : (float) $detail->hours_required,
                         'effectiveFrom' => $meta ? Carbon::parse($meta->effective_from)->format('M d, Y') : null,
                         'effectiveUntil' => $meta ? Carbon::parse($meta->effective_until)->format('M d, Y') : null,
                         'scheduleCode' => $meta?->schedule_code,
@@ -1113,23 +1219,25 @@ class Faculty extends Model
 
         $requestsByScheduleDetail = $allRequests->groupBy('schedule_detail_id');
 
+
         // Filter out internal entries that represent "original" days for classes moved AWAY from today.
         $internals = $internals->filter(function ($entry) use ($flatApprovedRequests, $detailsByScheduleAndDay) {
             $officialDetails = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
-            if ($officialDetails->isEmpty()) return true;
+            if ($officialDetails->isEmpty())
+                return true;
 
             // Check if ANY official details for this block are staying today
-            $hasStayingClass = $officialDetails->contains(function($d) use ($flatApprovedRequests) {
+            $hasStayingClass = $officialDetails->contains(function ($d) use ($flatApprovedRequests) {
                 $move = $flatApprovedRequests->firstWhere('schedule_detail_id', $d->id);
                 return !$move || $move->requested_day_of_week === $d->day;
             });
 
             // Also check if any classes were moved INTO this block today from another day
-            $hasMovedInClass = $flatApprovedRequests->contains(function($req) use ($entry) {
+            $hasMovedInClass = $flatApprovedRequests->contains(function ($req) use ($entry) {
                 return $req->scheduleDetail &&
-                       $req->scheduleDetail->schedule_id === $entry->schedule_id &&
-                       $req->requested_day_of_week === $entry->day_of_week &&
-                       $req->requested_day_of_week !== $req->scheduleDetail->day;
+                    $req->scheduleDetail->schedule_id === $entry->schedule_id &&
+                    $req->requested_day_of_week === $entry->day_of_week &&
+                    $req->requested_day_of_week !== $req->scheduleDetail->day;
             });
 
             return $hasStayingClass || $hasMovedInClass;
@@ -1152,14 +1260,16 @@ class Faculty extends Model
             $processedEntries = $dayEntries;
             if ($dayEntries->isEmpty() && $hasApprovedToThisDay) {
                 // We'll use a placeholder to allow the flatMap to run and find the move-ins
-                $processedEntries = collect([new InternalSchedule([
-                    'day_of_week' => $day,
-                    'device_time_in' => '00:00:00',
-                    'device_time_out' => '23:59:59',
-                    'is_operational' => true,
-                    'schedule_id' => $activeScheduleIds->first(),
-                    'sync_status' => 'pending'
-                ])]);
+                $processedEntries = collect([
+                    new InternalSchedule([
+                        'day_of_week' => $day,
+                        'device_time_in' => '00:00:00',
+                        'device_time_out' => '23:59:59',
+                        'is_operational' => true,
+                        'schedule_id' => $activeScheduleIds->first(),
+                        'sync_status' => 'pending'
+                    ])
+                ]);
             }
 
             $schedule[] = [
@@ -1172,11 +1282,11 @@ class Faculty extends Model
                     $changeReqsForToday = $approvedRequests->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
                     $officialForToday = $detailsByScheduleAndDay->get($entry->schedule_id . '-' . $entry->day_of_week, collect());
 
-                    $stayingOfficial = $officialForToday->reject(function($d) use ($flatApprovedRequests) {
+                    $stayingOfficial = $officialForToday->reject(function ($d) use ($flatApprovedRequests) {
                         return $flatApprovedRequests->contains('schedule_detail_id', $d->id);
                     });
 
-                    $candidates = $stayingOfficial->map(function($d) {
+                    $candidates = $stayingOfficial->map(function ($d) {
                         return [
                             'detail' => $d,
                             'isChanged' => false,
@@ -1185,7 +1295,7 @@ class Faculty extends Model
                             'end' => $d->end_time,
                             'room' => $d->room_code ?: 'TBA',
                         ];
-                    })->concat($changeReqsForToday->map(function($req) {
+                    })->concat($changeReqsForToday->map(function ($req) {
                         $d = $req->scheduleDetail;
                         return [
                             'detail' => $d,
@@ -1197,21 +1307,23 @@ class Faculty extends Model
                         ];
                     }));
 
-                    $matched = $candidates->filter(function($c) use ($timeIn, $timeOut) {
+                    $matched = $candidates->filter(function ($c) use ($timeIn, $timeOut) {
                         $cStart = Carbon::parse($c['start']);
                         return $cStart->format('H:i') >= $timeIn->format('H:i') &&
-                               (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
+                            (!$timeOut || $cStart->format('H:i') < $timeOut->format('H:i'));
                     });
 
                     if ($matched->isEmpty()) {
-                        $matched = collect([[
-                            'detail' => null,
-                            'isChanged' => false,
-                            'originalDay' => null,
-                            'start' => $entry->device_time_in,
-                            'end' => $entry->device_time_out,
-                            'room' => 'TBA'
-                        ]]);
+                        $matched = collect([
+                            [
+                                'detail' => null,
+                                'isChanged' => false,
+                                'originalDay' => null,
+                                'start' => $entry->device_time_in,
+                                'end' => $entry->device_time_out,
+                                'room' => 'TBA'
+                            ]
+                        ]);
                     }
 
                     return $matched->map(function ($item) use ($entry, $timeIn, $timeOut, $scheduleMeta, $requestsByScheduleDetail, $flatApprovedRequests) {
@@ -1222,9 +1334,9 @@ class Faculty extends Model
                         $targetEnd = $item['end'] ? Carbon::parse($item['end']) : null;
 
                         $storedHours = (float) $entry->required_hours;
-                        $requiredHours = ($storedHours <= 0 && $timeOut)
+                        $requiredHours = (float) (($storedHours <= 0 && $timeOut)
                             ? max(0, (int) round($timeOut->diffInMinutes($timeIn) / 60))
-                            : $storedHours;
+                            : $storedHours);
 
                         $meta = $scheduleMeta->get($entry->schedule_id);
 
@@ -1253,6 +1365,12 @@ class Faculty extends Model
                             'originalScheduleDetailId' => $isChanged ? $detail?->id : null,
                             'hasRequestHistory' => $hasRequestHistory,
                             'isApproved' => $isApproved,
+                            'comparison' => $detail ? [
+                                'day' => $detail->day,
+                                'startTime' => Carbon::parse($detail->start_time)->format('h:i A'),
+                                'endTime' => Carbon::parse($detail->end_time)->format('h:i A'),
+                                'room' => $detail->room_code ?: 'TBA',
+                            ] : null,
                         ];
                     })->all();
                 })->values()->toArray(),
@@ -1273,50 +1391,111 @@ class Faculty extends Model
             ->limit($limit)
             ->get();
 
-        return $records->map(function (AttendanceRecord $record) {
-            // Dynamically adjust status for UI consistency
-            $displayStatus = $record->status;
-            $hasActualTimeIn = $record->actual_time_in !== null;
-            $isUndertime = ($record->undertime_minutes ?? 0) > 0;
-            $isOvertime = ($record->overtime_minutes ?? 0) > 0;
+            // Pre-fetch data for dynamic subject resolution
+            $approvedChangeRequests = \App\Models\ScheduleChangeRequest::where('faculty_id', $this->id)
+                ->where('status', 'approved')
+                ->with('scheduleDetail')
+                ->get();
+            $activeSchedules = $this->schedules()->where('status', 'active')->get();
+            $activeScheduleIds = $activeSchedules->pluck('id');
+            $allDetails = \App\Models\ScheduleDetail::whereIn('schedule_id', $activeScheduleIds)->get();
+            $detailsByScheduleAndDay = $allDetails->groupBy(fn($d) => $d->schedule_id . '-' . $d->day);
+            $holidays = Holiday::all();
 
-            // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
-            if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule'])) {
-                $displayStatus = 'Absent';
-            } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime)) {
-                // Override status if has actual time-in and has undertime or overtime
-                if ($isUndertime && $isOvertime) {
-                    $displayStatus = 'UNDERTIME / OVERTIME';
-                } elseif ($isUndertime) {
-                    $displayStatus = 'UNDERTIME';
-                } elseif ($isOvertime) {
-                    $displayStatus = 'OVERTIME';
+            return $records->map(function (AttendanceRecord $record) use ($approvedChangeRequests, $detailsByScheduleAndDay, $holidays) {
+                $detail = $record->scheduleDetail;
+                $date = Carbon::parse($record->attendance_date);
+                $dayName = $date->format('l');
+
+                // Holiday check
+                $isHoliday = $holidays->contains(function ($h) use ($date) {
+                    if ($h->is_recurring) {
+                        return $h->holiday_date->format('n') === $date->format('n') && $h->holiday_date->format('j') === $date->format('j');
+                    }
+                    return $h->holiday_date->toDateString() === $date->toDateString();
+                });
+
+                // Determine subjects dynamically
+                $subjectDesc = 'Operational Duty';
+                $subjectCode = '';
+
+                if ($detail && (trim($detail->subject_desc) !== '')) {
+                    $subjectDesc = $detail->subject_desc;
+                    $subjectCode = $detail->course_code;
+                } else {
+                    // Try to find matching official subjects for this day
+                    foreach ($detailsByScheduleAndDay as $key => $todayDetails) {
+                        [$sId, $dDay] = explode('-', $key);
+                        if ($dDay !== $dayName) continue;
+
+                        $staying = $todayDetails->reject(fn($d) => $approvedChangeRequests->contains('schedule_detail_id', $d->id));
+                        if ($staying->isNotEmpty()) {
+                            $first = $staying->first();
+                            $subjectDesc = $first->subject_desc;
+                            $subjectCode = $first->course_code;
+                            break;
+                        }
+                    }
+
+                    // Check for moves if still empty
+                    if ($subjectDesc === 'Operational Duty') {
+                        $movedIn = $approvedChangeRequests->firstWhere('requested_day_of_week', $dayName);
+                        if ($movedIn && $movedIn->scheduleDetail) {
+                            $subjectDesc = $movedIn->scheduleDetail->subject_desc;
+                            $subjectCode = $movedIn->scheduleDetail->course_code;
+                        }
+                    }
                 }
-            }
 
-            return [
-                'id' => $record->id,
-                'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
-                'dayOfWeek' => $record->day_of_week,
-                'subject' => $record->scheduleDetail?->subject_desc ?? 'N/A',
-                'subjectCode' => $record->scheduleDetail?->course_code ?? '',
-                'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
-                'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
-                'expectedTimeIn' => $record->operational_time_in
-                    ? Carbon::parse($record->operational_time_in)->format('h:i A')
-                    : ($record->official_time_in ? Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
-                'expectedTimeOut' => $record->operational_time_out
-                    ? Carbon::parse($record->operational_time_out)->format('h:i A')
-                    : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
-                'hoursRendered' => (float) $record->total_hours_rendered,
-                'requiredHours' => ($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
-                    ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->actual_time_in) / 60))
-                    : (float) $record->required_hours,
-                'lateMinutes' => $record->late_minutes,
-                'undertimeMinutes' => $record->undertime_minutes,
-                'status' => $displayStatus,
-                'remarks' => $record->remarks,
-            ];
+                // Dynamically adjust status for UI consistency
+                $displayStatus = $record->status;
+                $hasActualTimeIn = $record->actual_time_in !== null;
+
+                if ($isHoliday) {
+                    $displayStatus = $hasActualTimeIn ? 'Holiday Present' : 'Holiday';
+                }
+
+                $isUndertime = !$isHoliday && ($record->undertime_minutes ?? 0) > 0 && $record->actual_time_out !== null;
+                $isOvertime = !$isHoliday && ($record->overtime_minutes ?? 0) > 0 && $record->actual_time_out !== null;
+
+                // If no actual time-in, set to Absent (unless it's already Holiday or No Schedule)
+                if (!$hasActualTimeIn && !in_array(strtolower($displayStatus), ['holiday', 'no schedule', 'holiday present'])) {
+                    $displayStatus = 'Absent';
+                } elseif ($hasActualTimeIn && ($isUndertime || $isOvertime) && !$isHoliday) {
+                    // Override status if has actual time-in and has undertime or overtime
+                    if ($isUndertime && $isOvertime) {
+                        $displayStatus = 'UNDERTIME / OVERTIME';
+                    } elseif ($isUndertime) {
+                        $displayStatus = 'UNDERTIME';
+                    } elseif ($isOvertime) {
+                        $displayStatus = 'OVERTIME';
+                    }
+                }
+
+                return [
+                    'id' => $record->id,
+                    'date' => Carbon::parse($record->attendance_date)->format('M d, Y'),
+                    'dayOfWeek' => $record->day_of_week,
+                    'subject' => $subjectDesc,
+                    'subjectCode' => $subjectCode,
+                    'timeIn' => $record->actual_time_in ? Carbon::parse($record->actual_time_in)->format('h:i A') : '--:--',
+                    'timeOut' => $record->actual_time_out ? Carbon::parse($record->actual_time_out)->format('h:i A') : '--:--',
+                    'expectedTimeIn' => $record->operational_time_in
+                        ? Carbon::parse($record->operational_time_in)->format('h:i A')
+                        : ($record->official_time_in ? Carbon::parse($record->official_time_in)->format('h:i A') : '--:--'),
+                    'expectedTimeOut' => $record->operational_time_out
+                        ? Carbon::parse($record->operational_time_out)->format('h:i A')
+                        : ($record->official_time_out ? Carbon::parse($record->official_time_out)->format('h:i A') : '--:--'),
+                    'hoursRendered' => (float) $record->total_hours_rendered,
+                    'requiredHours' => ($isHoliday) ? 0 : (($record->required_hours <= 0 && $record->operational_time_out && $record->actual_time_in)
+                        ? max(0, (int) round($record->operational_time_out->diffInMinutes($record->actual_time_in) / 60))
+                        : (float) $record->required_hours),
+                    'lateMinutes' => $isHoliday ? 0 : $record->late_minutes,
+                    'undertimeMinutes' => $isHoliday ? 0 : $record->undertime_minutes,
+                    'status' => $displayStatus,
+                    'is_holiday' => $isHoliday,
+                    'remarks' => $record->remarks,
+                ];
         })->values()->toArray();
     }
 

@@ -23,33 +23,12 @@ class OnlineAttendanceSyncService
             return;
         }
 
-        // Primary path: use direct linkage to the online request.
-        $attendanceRecord = AttendanceRecord::query()
-            ->where('online_attendance_id', $request->id)
-            ->lockForUpdate()
-            ->first();
-
-        // Backward compatibility path for old rows that were synced before FK existed.
-        if (!$attendanceRecord) {
-            $attendanceRecord = $this->findLegacyAttendanceRecord($request);
-
-            if ($attendanceRecord) {
-                if (
-                    $attendanceRecord->online_attendance_id !== null
-                    && (int) $attendanceRecord->online_attendance_id !== (int) $request->id
-                ) {
-                    throw new RuntimeException('Attendance record is already linked to another online attendance request.');
-                }
-
-                $attendanceRecord->online_attendance_id = $request->id;
-            }
-        }
+        // Find existing record by matching date, faculty, and schedule
+        $attendanceRecord = $this->findExistingAttendanceRecord($request);
 
         if (!$attendanceRecord) {
             $attendanceRecord = $this->createAttendanceRecordFromOnlineRequest($request);
         }
-
-        $attendanceRecord->online_attendance_id = $request->id;
 
         if (!$attendanceRecord->internal_schedule_id) {
             $attendanceRecord->internal_schedule_id = $this->resolveInternalScheduleId($request);
@@ -69,13 +48,9 @@ class OnlineAttendanceSyncService
         $attendanceRecord->actual_time_in = $actualTimeIn;
         $attendanceRecord->actual_time_out = $actualTimeOut;
 
-        $lateMinutes = 0;
-        $undertimeMinutes = 0;
-        $overtimeMinutes = 0;
-
-        $attendanceRecord->late_minutes = $lateMinutes;
-        $attendanceRecord->undertime_minutes = $undertimeMinutes;
-        $attendanceRecord->overtime_minutes = $overtimeMinutes;
+        $attendanceRecord->late_minutes = 0;
+        $attendanceRecord->undertime_minutes = 0;
+        $attendanceRecord->overtime_minutes = 0;
 
         $totalMinutesRendered = max(0, $actualTimeIn->diffInMinutes($actualTimeOut, false));
         $attendanceRecord->total_hours_rendered = round($totalMinutesRendered / 60, 2);
@@ -86,11 +61,11 @@ class OnlineAttendanceSyncService
     }
 
     /**
-     * Find pre-existing attendance rows created before online_attendance_id linkage existed.
+     * Find pre-existing attendance rows by matching attributes.
      *
      * @throws RuntimeException
      */
-    private function findLegacyAttendanceRecord(OnlineAttendanceRequest $request): ?AttendanceRecord
+    private function findExistingAttendanceRecord(OnlineAttendanceRequest $request): ?AttendanceRecord
     {
         $attendanceQuery = AttendanceRecord::query()
             ->where('faculty_id', $request->faculty_id)
@@ -100,24 +75,7 @@ class OnlineAttendanceSyncService
             $attendanceQuery->where('schedule_detail_id', $request->schedule_detail_id);
         }
 
-        $attendanceRecord = $attendanceQuery->lockForUpdate()->first();
-
-        // Fallback for old rows with missing schedule_detail_id, but keep it safe against ambiguous matches.
-        if (!$attendanceRecord && $request->schedule_detail_id) {
-            $fallbackQuery = AttendanceRecord::query()
-                ->where('faculty_id', $request->faculty_id)
-                ->whereDate('attendance_date', $request->attendance_date)
-                ->whereNull('online_attendance_id');
-
-            $fallbackCount = (clone $fallbackQuery)->count();
-            if ($fallbackCount > 1) {
-                throw new RuntimeException('Multiple legacy attendance records found for this faculty and date. Please resolve duplicates first.');
-            }
-
-            $attendanceRecord = $fallbackQuery->lockForUpdate()->first();
-        }
-
-        return $attendanceRecord;
+        return $attendanceQuery->lockForUpdate()->first();
     }
 
     /**
@@ -146,7 +104,6 @@ class OnlineAttendanceSyncService
 
         return AttendanceRecord::create([
             'faculty_id' => $request->faculty_id,
-            'online_attendance_id' => $request->id,
             'schedule_detail_id' => $request->schedule_detail_id,
             'internal_schedule_id' => $resolvedInternalScheduleId,
             'attendance_date' => $attendanceDate,
@@ -161,8 +118,6 @@ class OnlineAttendanceSyncService
             'late_minutes' => 0,
             'undertime_minutes' => 0,
             'overtime_minutes' => 0,
-            'night_minutes' => 0,
-            'overtime_night_minutes' => 0,
             'total_hours_rendered' => 0,
             'required_hours' => $requiredHours,
             'status' => 'absent',
@@ -180,6 +135,11 @@ class OnlineAttendanceSyncService
         OnlineAttendanceRequest $request,
         ?ScheduleDetail $scheduleDetail = null
     ): ?int {
+        // If the request already has an explicitly selected internal schedule, use it.
+        if ($request->internal_schedule_id) {
+            return (int) $request->internal_schedule_id;
+        }
+
         $dayOfWeek = Carbon::parse($request->attendance_date)->format('l');
         $scheduleDetail = $scheduleDetail ?? ($request->schedule_detail_id ? ScheduleDetail::find($request->schedule_detail_id) : null);
 
@@ -188,7 +148,6 @@ class OnlineAttendanceSyncService
                 ->where('faculty_id', $request->faculty_id)
                 ->where('schedule_id', $scheduleDetail->schedule_id)
                 ->where('day_of_week', $dayOfWeek)
-                ->where('is_operational', true)
                 ->orderByDesc('id')
                 ->first();
 
@@ -200,7 +159,6 @@ class OnlineAttendanceSyncService
         $fallback = InternalSchedule::query()
             ->where('faculty_id', $request->faculty_id)
             ->where('day_of_week', $dayOfWeek)
-            ->where('is_operational', true)
             ->orderByDesc('id')
             ->first();
 

@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ScrollToTop from '@/Components/ScrollToTop';
+import Modal from '@/Components/Modal';
 import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -21,23 +22,22 @@ const SYNC_STYLES = {
     failed: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-400/10 dark:text-red-400 dark:ring-red-400/30',
 };
 
-const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
+const ScheduleCard = ({ item, dayShort, isInternalView = false, onClick }) => {
     const isInternal = item.type === 'internal' || item.syncStatus !== undefined;
 
     return (
-        <div className={`group relative flex flex-col rounded-2xl border p-4 shadow-sm transition-all duration-200 
-            ${isInternal
-                ? 'bg-blue-50/10 dark:bg-blue-900/10 border-blue-200/50 dark:border-blue-800/40'
-                : 'border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-800'
-            } hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.01]`}>
-
+        <div 
+            onClick={() => onClick(item)}
+            className={`group relative flex flex-col rounded-2xl border p-4 shadow-sm transition-all duration-200 cursor-pointer
+                ${isInternal
+                    ? 'bg-blue-50/10 dark:bg-blue-900/10 border-blue-200/50 dark:border-blue-800/40'
+                    : 'border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-800'
+                } hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.01]`}
+        >
             {/* Header: Badges */}
-            <div className="flex justify-between items-start mb-4 gap-2">
+            <div className="flex justify-between items-start mb-4 gap-2 pointer-events-none">
                 <div className="flex flex-wrap items-center gap-2">
-                    {/* Day Indicator Dot */}
                     <div className={`h-2.5 w-2.5 shrink-0 rounded-full bg-gradient-to-r ${DAY_COLORS[dayShort] ?? 'from-gray-400 to-gray-500'} shadow-sm`} />
-
-                    {/* Type Badge */}
                     <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset 
                         ${isInternal
                             ? 'bg-amber-100 text-amber-700 ring-amber-600/20 dark:bg-amber-900/40 dark:text-amber-300'
@@ -45,8 +45,6 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                         }`}>
                         {isInternal ? 'Internal' : 'Official'}
                     </span>
-
-                    {/* Operational Status (only in Internal tab) */}
                     {isInternalView && isInternal && item.isOperational !== undefined && (
                         <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ring-1 ring-inset 
                             ${item.isOperational
@@ -57,13 +55,6 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                         </span>
                     )}
                 </div>
-
-                {/* Sync Status (only in Internal tab) */}
-                {isInternalView && isInternal && item.syncStatus && (
-                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${SYNC_STYLES[item.syncStatus?.toLowerCase()] ?? SYNC_STYLES.pending}`}>
-                        {item.syncStatus}
-                    </span>
-                )}
             </div>
 
             {/* Subject & Details */}
@@ -72,13 +63,7 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                     <h4 className="font-extrabold text-gray-900 dark:text-white leading-tight break-words text-sm sm:text-base">
                         {item.subject || (isInternal ? 'Operational Duty' : 'Untitled Subject')}
                     </h4>
-                    {item.isChanged && isInternalView && (
-                        <span className="shrink-0 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400" title={`Moved from ${item.originalDay}`}>
-                            Changed
-                        </span>
-                    )}
                 </div>
-                {/* Subject Code & Room */}
                 <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
                     <span>{item.code}</span>
                     {item.room && item.room !== 'TBA' && (
@@ -88,7 +73,6 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                         </>
                     )}
                 </p>
-                {/* Program & Section */}
                 {(item.programCode || item.yearLevel || item.sectionName) && (
                     <p className="mt-1.5 text-xs font-bold text-amber-600 dark:text-amber-500">
                         {[item.programCode, (item.yearLevel || item.sectionName) ? [item.yearLevel, item.sectionName].filter(Boolean).join('-') : null].filter(Boolean).join(' ')}
@@ -96,7 +80,7 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                 )}
             </div>
 
-            {/* Time Section (Unified) */}
+            {/* Time Section */}
             <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-700/50">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -105,7 +89,7 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                             </svg>
                         </div>
-                        <div className="flex items-center gap-1.5 text-sm font-extrabold text-gray-900 dark:text-white">
+                        <div className="flex items-center gap-1.5 text-sm font-extrabold text-gray-900 dark:text-white tabular-nums">
                             <span>{item.startTime}</span>
                             <span className="text-gray-300 dark:text-gray-600">→</span>
                             <span>{item.endTime}</span>
@@ -113,7 +97,7 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                     </div>
                 </div>
 
-                {/* Footer: Metadata */}
+                {/* Footer Meta */}
                 <div className="flex items-center justify-between pt-3 border-t border-gray-50 dark:border-gray-700/50 border-dashed">
                     <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
@@ -129,23 +113,7 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
                                 </>
                             )}
                         </div>
-                        {item.effectiveFrom && (
-                            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-600 tabular-nums">
-                                {item.effectiveFrom} — {item.effectiveUntil || 'Present'}
-                            </span>
-                        )}
                     </div>
-
-                    {isInternal && item.syncedAt && (
-                        <div className="group/sync relative">
-                            <svg className="h-3.5 w-3.5 text-emerald-500 cursor-help" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                            <div className="absolute bottom-full right-0 mb-2 invisible group-hover/sync:visible w-32 px-2 py-1 bg-gray-900 text-white text-[10px] rounded shadow-xl z-10 text-center">
-                                Synced: {item.syncedAt}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
@@ -155,6 +123,11 @@ const ScheduleCard = ({ item, dayShort, isInternalView = false }) => {
 
 export default function Schedule({ weeklySchedule, internalSchedule, facultyName }) {
     const [activeTab, setActiveTab] = useState('overall');
+    const [selectedSchedule, setSelectedSchedule] = useState(null);
+
+    const handleCardClick = (item) => {
+        setSelectedSchedule(item);
+    };
 
     const toMin = (t) => {
         if (!t || t === '--:--') return 9999;
@@ -349,7 +322,12 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                 </div>
                                 <div className="p-4 bg-gray-50/10 dark:bg-gray-800/20 flex-1 flex flex-col gap-4">
                                     {dayData.items.map((item) => (
-                                        <ScheduleCard key={`${item.type}-${item.id}`} item={item} dayShort={dayData.shortDay} />
+                                        <ScheduleCard 
+                                            key={`${item.type}-${item.id}`} 
+                                            item={item} 
+                                            dayShort={dayData.shortDay} 
+                                            onClick={handleCardClick}
+                                        />
                                     ))}
                                 </div>
 
@@ -401,7 +379,12 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
 
                                         <div className="p-4 bg-gray-50/10 dark:bg-gray-800/20 flex-1 flex flex-col gap-4">
                                             {dayData.classes.map((cls) => (
-                                                <ScheduleCard key={cls.id} item={cls} dayShort={dayData.shortDay} />
+                                                <ScheduleCard 
+                                                    key={cls.id} 
+                                                    item={cls} 
+                                                    dayShort={dayData.shortDay} 
+                                                    onClick={handleCardClick}
+                                                />
                                             ))}
                                         </div>
 
@@ -472,7 +455,13 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                                     {/* Classes Cards */}
                                     <div className="p-4 bg-gray-50/10 dark:bg-gray-800/20 flex-1 flex flex-col gap-4">
                                         {dayData.entries.map((entry) => (
-                                            <ScheduleCard key={entry.id} item={entry} dayShort={dayData.shortDay} isInternalView={true} />
+                                            <ScheduleCard 
+                                                key={entry.id} 
+                                                item={entry} 
+                                                dayShort={dayData.shortDay} 
+                                                isInternalView={true} 
+                                                onClick={handleCardClick}
+                                            />
                                         ))}
                                     </div>
 
@@ -498,6 +487,164 @@ export default function Schedule({ weeklySchedule, internalSchedule, facultyName
                     </div>
                 </>
             )}
+
+            <Modal show={!!selectedSchedule} onClose={() => setSelectedSchedule(null)} maxWidth="xl">
+                {selectedSchedule && (
+                    <div className="flex flex-col h-full bg-white dark:bg-gray-800 overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-[#7a1315] to-[#5a0d0f] p-6">
+                            <div className="flex items-center gap-3">
+                                <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest ring-1 ring-inset ${
+                                    selectedSchedule.type === 'internal' 
+                                    ? 'bg-amber-400/20 text-amber-300 ring-amber-400/30' 
+                                    : 'bg-emerald-400/20 text-emerald-300 ring-emerald-400/30'
+                                }`}>
+                                    {selectedSchedule.type} load
+                                </span>
+                                {selectedSchedule.isChanged && (
+                                    <span className="rounded-lg bg-orange-500/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-orange-300 ring-1 ring-inset ring-orange-500/30">
+                                        Modified
+                                    </span>
+                                )}
+                            </div>
+                            <h2 className="mt-4 text-xl font-black text-white leading-tight line-clamp-2">
+                                {selectedSchedule.subject || 'Operational Duty'}
+                            </h2>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-4 mb-8">
+                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700/50 p-4">
+                                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Time Schedule</p>
+                                    <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+                                        <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                        </svg>
+                                        <span className="text-sm font-black tabular-nums">{selectedSchedule.startTime} — {selectedSchedule.endTime}</span>
+                                    </div>
+                                </div>
+                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700/50 p-4">
+                                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Load Credits</p>
+                                    <div className="flex items-center gap-2 text-gray-900 dark:text-white">
+                                        <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                        </svg>
+                                        <span className="text-sm font-black whitespace-nowrap">{selectedSchedule.hours || selectedSchedule.requiredHours} Required Hours</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Academic Details */}
+                                <div>
+                                    <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2 after:content-[''] after:h-px after:flex-1 after:bg-gray-100 dark:after:bg-gray-700">
+                                        Classification
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div className="flex items-start justify-between">
+                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Class Code</span>
+                                            <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">{selectedSchedule.code || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex items-start justify-between">
+                                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Venue / Room</span>
+                                            <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">{selectedSchedule.room || 'TBA'}</span>
+                                        </div>
+                                        {(selectedSchedule.programCode || selectedSchedule.sectionName) && (
+                                            <div className="flex items-start justify-between">
+                                                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Program / Section</span>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-black text-gray-900 dark:text-white uppercase">{selectedSchedule.programCode || 'N/A'}</p>
+                                                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider">{selectedSchedule.yearLevel}-{selectedSchedule.sectionName || 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* External Identifiers */}
+                                {(selectedSchedule.scheduleCode || selectedSchedule.effectiveFrom) && (
+                                    <div>
+                                        <h3 className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2 after:content-[''] after:h-px after:flex-1 after:bg-gray-100 dark:after:bg-gray-700">
+                                            Configuration
+                                        </h3>
+                                        <div className="space-y-4">
+                                            {selectedSchedule.scheduleCode && (
+                                                <div className="flex items-start justify-between">
+                                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Schedule Ref</span>
+                                                    <span className="text-xs font-mono font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{selectedSchedule.scheduleCode}</span>
+                                                </div>
+                                            )}
+                                            {selectedSchedule.effectiveFrom && (
+                                                <div className="flex items-start justify-between">
+                                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Active Period</span>
+                                                    <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                                        {selectedSchedule.effectiveFrom} — {selectedSchedule.effectiveUntil || 'Present'}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {selectedSchedule.syncedAt && (
+                                                <div className="flex items-start justify-between pt-2 border-t border-gray-50 dark:border-gray-700/50 border-dashed">
+                                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Biometric Sync</span>
+                                                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase">{selectedSchedule.syncedAt}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Comparison Reference */}
+                                {selectedSchedule.comparison && (
+                                    <div className="rounded-2xl bg-blue-50/30 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 p-5 mt-4">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em] flex items-center gap-3">
+                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                </svg>
+                                                Official Schedule Comparison
+                                            </h3>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                                            <div className="space-y-1">
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Original Load</p>
+                                                <p className="text-xs font-black text-gray-700 dark:text-gray-300 tabular-nums uppercase">
+                                                    {selectedSchedule.comparison.startTime}<br/>
+                                                    <span className="text-[10px] text-gray-400 italic">to</span><br/>
+                                                    {selectedSchedule.comparison.endTime}
+                                                </p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Official Venue</p>
+                                                <p className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase italic">
+                                                    {selectedSchedule.comparison.room}
+                                                </p>
+                                            </div>
+                                            {selectedSchedule.comparison.day !== selectedSchedule.day && (
+                                                <div className="col-span-2 pt-3 border-t border-blue-100/50 dark:border-blue-800/20 space-y-1">
+                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Basis Day</p>
+                                                    <p className="text-xs font-black text-amber-600 dark:text-amber-500 uppercase">
+                                                        {selectedSchedule.comparison.day}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700">
+                            <button 
+                                onClick={() => setSelectedSchedule(null)}
+                                className="w-full py-3 rounded-2xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all"
+                            >
+                                Close Details
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             <ScrollToTop />
         </AuthenticatedLayout>
