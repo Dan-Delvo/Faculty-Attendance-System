@@ -42,6 +42,35 @@ const toMinutes = (timeValue) => {
     return (hourPart * 60) + minutePart;
 };
 
+const formatTimeToAmPm = (timeValue) => {
+    if (!timeValue || typeof timeValue !== 'string') {
+        return timeValue;
+    }
+
+    const normalized = timeValue.trim();
+
+    if (/\b(AM|PM)\b/i.test(normalized)) {
+        return normalized.toUpperCase();
+    }
+
+    const match = normalized.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+        return normalized;
+    }
+
+    const hours24 = Number(match[1]);
+    const minutes = match[2];
+
+    if (Number.isNaN(hours24) || hours24 < 0 || hours24 > 23) {
+        return normalized;
+    }
+
+    const period = hours24 >= 12 ? 'PM' : 'AM';
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+
+    return `${String(hours12).padStart(2, '0')}:${minutes} ${period}`;
+};
+
 /* ──────────────────────────────────────────────
    Status badge component
    ────────────────────────────────────────────── */
@@ -802,18 +831,19 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                     <div className="space-y-2">
                                         {officialDetails.length > 0 ? (
                                             officialDetails.map((d, i) => (
-                                                <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
-                                                    <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day?.substring(0, 3) ?? '—'}</span>
-                                                    <span className="text-sm text-gray-700 dark:text-gray-300">{d.start_time} – {d.end_time}</span>
-                                                    <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.course_code || '—'}</span>
-                                                    <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{d.subject_desc || '—'}</span>
-                                                    <span className="text-xs text-gray-400 dark:text-gray-500">{d.room_code || 'TBA'}</span>
-                                                    {detailUsesInternal(d) && (
-                                                        <span className="text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400">
-                                                            Uses Internal
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                <ViewScheduleEntryRow
+                                                    key={i}
+                                                    day={d.day}
+                                                    startTime={d.start_time}
+                                                    endTime={d.end_time}
+                                                    courseCode={d.course_code}
+                                                    subjectDesc={d.subject_desc}
+                                                    roomCode={d.room_code}
+                                                    badges={detailUsesInternal(d) ? [{
+                                                        label: 'Uses Internal',
+                                                        className: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400',
+                                                    }] : []}
+                                                />
                                             ))
                                         ) : (
                                             <p className="text-sm text-gray-500 dark:text-gray-400">No official schedule entries.</p>
@@ -828,33 +858,34 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                             internalEntries.map((entry, i) => {
                                                 const linked = findInternalLink(entry);
                                                 return (
-                                                <div key={entry.id ?? i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10 px-4 py-3">
-                                                    <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{entry.day?.substring(0, 3) ?? '—'}</span>
-                                                    <span className="text-sm text-gray-700 dark:text-gray-300">{entry.start_time ?? '--:--'} – {entry.end_time ?? '--:--'}</span>
-                                                    <span className={`text-xs font-bold uppercase tracking-wider ${entry.is_operational ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                                                        {entry.is_operational ? 'Operational' : 'Non-Operational'}
-                                                    </span>
-                                                    {entry.required_hours !== null && entry.required_hours !== undefined && (
-                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                            {Number(entry.required_hours)} hr{Number(entry.required_hours) === 1 ? '' : 's'}
-                                                        </span>
-                                                    )}
-                                                    {entry.sync_status && (
-                                                        <span className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider">{entry.sync_status}</span>
-                                                    )}
-                                                    {linked ? (
-                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                            Linked to: <span className="font-semibold text-gray-700 dark:text-gray-300">{linked.course_code || '—'}</span>
-                                                            {linked.subject_desc ? ` — ${linked.subject_desc}` : ''}
-                                                            {linked.original_day && linked.original_start_time && linked.original_end_time
-                                                                ? ` (Orig: ${linked.original_day.substring(0, 3)} ${linked.original_start_time}–${linked.original_end_time})`
-                                                                : ''}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-gray-400 dark:text-gray-500">No linked official schedule</span>
-                                                    )}
-                                                </div>
-                                            );
+                                                    <ViewScheduleEntryRow
+                                                        key={entry.id ?? i}
+                                                        day={entry.day}
+                                                        startTime={entry.start_time ?? '--:--'}
+                                                        endTime={entry.end_time ?? '--:--'}
+                                                        courseCode={linked?.course_code ?? '—'}
+                                                        subjectDesc={linked?.subject_desc ?? 'No linked official schedule'}
+                                                        roomCode={linked?.requested_room || 'TBA'}
+                                                        tone="internal"
+                                                        badges={[
+                                                            {
+                                                                label: entry.is_operational ? 'Operational' : 'Non-Operational',
+                                                                className: entry.is_operational
+                                                                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                                                    : 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400',
+                                                            },
+                                                            ...(entry.required_hours !== null && entry.required_hours !== undefined
+                                                                ? [{
+                                                                    label: `${Number(entry.required_hours)} hr${Number(entry.required_hours) === 1 ? '' : 's'}`,
+                                                                    className: 'bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50',
+                                                                }]
+                                                                : []),
+                                                        ]}
+                                                        meta={linked
+                                                            ? `Original: ${linked.original_day?.substring(0, 3) ?? '—'} ${formatTimeToAmPm(linked.original_start_time ?? '--:--')}–${formatTimeToAmPm(linked.original_end_time ?? '--:--')}`
+                                                            : 'No linked official schedule'}
+                                                    />
+                                                );
                                             })
                                         ) : (
                                             <p className="text-sm text-gray-500 dark:text-gray-400">No internal schedule entries.</p>
@@ -1338,6 +1369,57 @@ function InfoField({ label, value }) {
         <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{label}</p>
             <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">{value ?? '—'}</p>
+        </div>
+    );
+}
+
+function ViewScheduleEntryRow({
+    day,
+    startTime,
+    endTime,
+    courseCode,
+    subjectDesc,
+    roomCode,
+    badges = [],
+    meta = null,
+    tone = 'official',
+}) {
+    const toneClasses = tone === 'internal'
+        ? 'border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10'
+        : 'border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40';
+
+    return (
+        <div className={`rounded-xl px-4 py-3 ${toneClasses}`}>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">
+                    {day?.substring(0, 3) ?? '—'}
+                </span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {formatTimeToAmPm(startTime ?? '--:--')} – {formatTimeToAmPm(endTime ?? '--:--')}
+                </span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {courseCode || '—'}
+                </span>
+                <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">
+                    {subjectDesc || '—'}
+                </span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {roomCode || 'TBA'}
+                </span>
+                {badges.map((badge, index) => (
+                    <span
+                        key={`${badge.label}-${index}`}
+                        className={`text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 ring-1 ring-inset ${badge.className}`}
+                    >
+                        {badge.label}
+                    </span>
+                ))}
+            </div>
+            {meta && (
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {meta}
+                </p>
+            )}
         </div>
     );
 }
