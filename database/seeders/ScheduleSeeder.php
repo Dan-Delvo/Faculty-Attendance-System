@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Faculty;
+use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
 use App\Models\User;
@@ -22,6 +23,9 @@ class ScheduleSeeder extends Seeder
             $records = $this->fetchFacultySchedulesFromApi();
 
             $adminUser = User::where('username', 'admin')->first();
+
+            /** @var array<string, int> $roomCodeToId */
+            $roomCodeToId = Room::pluck('id', 'room_code')->all();
 
             foreach ($records as $item) {
                 $externalFacultyId = (int) ($item['faculty_id'] ?? 0);
@@ -72,6 +76,9 @@ class ScheduleSeeder extends Seeder
                         $hours = 1;
                     }
 
+                    $roomCode = $entry['room_code'] ?? null;
+                    $roomId = $roomCode ? ($roomCodeToId[$roomCode] ?? null) : null;
+
                     $detail = ScheduleDetail::firstOrCreate(
                         [
                             'schedule_id' => $schedule->id,
@@ -84,10 +91,11 @@ class ScheduleSeeder extends Seeder
                             'program_title'  => $entry['program_title'] ?? null,
                             'year_level'     => isset($entry['year_level']) ? (int) $entry['year_level'] : null,
                             'section_name'   => isset($entry['section_name']) ? (string) $entry['section_name'] : null,
-                            'course_title'   => $entry['course_details']['course_title'] ?? ($entry['course_title'] ?? null),
-                            'course_code'    => $entry['course_details']['course_code'] ?? ($entry['course_code'] ?? null),
-                            'room_code'      => $entry['room_code'] ?? null,
-                            'subject_desc'   => $entry['course_details']['course_title'] ?? ($entry['course_title'] ?? null),
+                            'course_title'   => $entry['course_title'] ?? null,
+                            'course_code'    => $entry['course_code'] ?? null,
+                            'room_code'      => $roomCode,
+                            'room_id'        => $roomId,
+                            'subject_desc'   => $entry['course_title'] ?? null,
                             'hours_required' => $hours,
                         ]
                     );
