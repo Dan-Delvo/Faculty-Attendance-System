@@ -71,6 +71,20 @@ class FlssBackendClient
         return $this->request('GET', $url, $query);
     }
 
+    /**
+     * Call the configured rooms endpoint.
+     */
+    public function getRooms(array $query = []): Response
+    {
+        $url = (string) config('services.flss_backend.rooms_url');
+
+        if ($url === '') {
+            throw new RuntimeException('FLSS rooms URL is not configured.');
+        }
+
+        return $this->request('GET', $url, $query);
+    }
+
     private function buildSignedUrl(string $url, array $query = []): string
     {
         if (empty($query)) {

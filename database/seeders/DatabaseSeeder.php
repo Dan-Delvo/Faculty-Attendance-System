@@ -36,6 +36,7 @@ class DatabaseSeeder extends Seeder
                 DepartmentSeeder::class,
                 UserSeeder::class,
                 FacultySeeder::class,
+                RoomSeeder::class,
                 ScheduleSeeder::class,
                 HolidaySeeder::class,
                 SystemSettingSeeder::class,

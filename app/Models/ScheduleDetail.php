@@ -24,6 +24,7 @@ class ScheduleDetail extends Model
         'course_title',
         'course_code',
         'room_code',
+        'room_id',
         'subject_desc',
         'hours_required',
     ];
@@ -50,5 +51,10 @@ class ScheduleDetail extends Model
     public function attendanceRecords(): HasMany
     {
         return $this->hasMany(AttendanceRecord::class);
+    }
+
+    public function room(): BelongsTo
+    {
+        return $this->belongsTo(Room::class);
     }
 }

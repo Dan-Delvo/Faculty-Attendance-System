@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Faculty;
+use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
 use App\Models\User;
@@ -72,6 +73,9 @@ class ScheduleSeeder extends Seeder
                         $hours = 1;
                     }
 
+                    $roomCode = $entry['room_code'] ?? null;
+                    $roomId = $roomCode ? Room::where('room_code', $roomCode)->value('id') : null;
+
                     $detail = ScheduleDetail::firstOrCreate(
                         [
                             'schedule_id' => $schedule->id,
@@ -86,7 +90,8 @@ class ScheduleSeeder extends Seeder
                             'section_name'   => isset($entry['section_name']) ? (string) $entry['section_name'] : null,
                             'course_title'   => $entry['course_title'] ?? null,
                             'course_code'    => $entry['course_code'] ?? null,
-                            'room_code'      => $entry['room_code'] ?? null,
+                            'room_code'      => $roomCode,
+                            'room_id'        => $roomId,
                             'subject_desc'   => $entry['course_title'] ?? null,
                             'hours_required' => $hours,
                         ]
