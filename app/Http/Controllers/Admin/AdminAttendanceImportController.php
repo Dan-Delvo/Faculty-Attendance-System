@@ -34,6 +34,9 @@ class AdminAttendanceImportController extends Controller
     /** Buffer (in minutes) around a schedule window when matching biometric logs. */
     private const LOG_WINDOW_BUFFER_MINUTES = 120;
 
+    /** Supported guidance shown when a log datetime cannot be parsed. */
+    private const LOG_DATETIME_FORMAT_GUIDANCE = 'Use an Excel date/time value or YYYY-MM-DD HH:MM[:SS].';
+
     public function index(Request $request)
     {
         $perPage = (int) $request->query('per_page', 10);
@@ -102,7 +105,7 @@ class AdminAttendanceImportController extends Controller
                 $parsedDateTime = $this->parseDateTime($row['log_datetime']);
                 if (! $parsedDateTime) {
                     $failedRecords++;
-                    $errors[] = "Line {$row['line']}: invalid log_datetime format '{$row['log_datetime']}'. Use YYYY-MM-DD HH:MM:SS.";
+                    $errors[] = "Line {$row['line']}: invalid log_datetime format '{$row['log_datetime']}'. " . self::LOG_DATETIME_FORMAT_GUIDANCE;
                     continue;
                 }
 
@@ -258,7 +261,7 @@ class AdminAttendanceImportController extends Controller
         $parsedDateTime = $this->parseDateTime($validated['log_datetime']);
         if (! $parsedDateTime) {
             throw ValidationException::withMessages([
-                'log_datetime' => 'Invalid log date/time format. Use YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS.',
+                'log_datetime' => 'Invalid log date/time format. ' . self::LOG_DATETIME_FORMAT_GUIDANCE,
             ]);
         }
 
@@ -975,23 +978,36 @@ class AdminAttendanceImportController extends Controller
 
         $sheet->setCellValue('A1', 'Attendance Log Import Template');
         $sheet->setCellValue('A2', 'Purpose: Use this sheet to bulk import biometric attendance logs for faculty.');
-        $sheet->setCellValue('A3', 'Fill one log entry per row starting at row 10. Do not change the column names in row 9.');
+        $sheet->setCellValue('A3', 'Fill one log entry per row starting at row 10. Enter column B as an Excel date/time cell and do not change the column names in row 9.');
 
         $sheet->fromArray([
             ['Column', 'Purpose / Format'],
             ['biometric_id', 'Required. Faculty biometric ID. Must match an existing faculties.biometric_id value.'],
-            ['log_datetime', 'Required. Date and time of the log. Recommended format: YYYY-MM-DD HH:MM:SS.'],
+            ['log_datetime', 'Required. Date and time of the log. Use an Excel date/time cell. Example display: 3/1/2026 8:02.'],
             ['log_type', 'Required. Log type from the device (e.g., IN or OUT).'],
             ['device_id', 'Optional. Identifier of the biometric device used to record the log.'],
         ], null, 'A5');
 
         $sheet->fromArray([
             ['biometric_id', 'log_datetime', 'log_type', 'device_id'],
-            ['BIO-0001', '2026-03-01 08:02:15', 'IN', 'DEVICE-01'],
-            ['BIO-0001', '2026-03-01 17:11:54', 'OUT', 'DEVICE-01'],
-            ['BIO-0002', '2026-03-01 08:09:40', 'IN', 'DEVICE-02'],
-            ['BIO-0002', '2026-03-01 17:04:11', 'OUT', 'DEVICE-02'],
         ], null, 'A9');
+
+        $sampleRows = [
+            ['BIO-0001', Carbon::create(2026, 3, 1, 8, 2, 15), 'IN', 'DEVICE-01'],
+            ['BIO-0001', Carbon::create(2026, 3, 1, 17, 11, 54), 'OUT', 'DEVICE-01'],
+            ['BIO-0002', Carbon::create(2026, 3, 1, 8, 9, 40), 'IN', 'DEVICE-02'],
+            ['BIO-0002', Carbon::create(2026, 3, 1, 17, 4, 11), 'OUT', 'DEVICE-02'],
+        ];
+
+        foreach ($sampleRows as $index => [$biometricId, $logDateTime, $logType, $deviceId]) {
+            $rowNumber = 10 + $index;
+
+            $sheet->setCellValue("A{$rowNumber}", $biometricId);
+            $sheet->setCellValue("B{$rowNumber}", ExcelDate::PHPToExcel($logDateTime));
+            $sheet->getStyle("B{$rowNumber}")->getNumberFormat()->setFormatCode('m/d/yyyy h:mm');
+            $sheet->setCellValue("C{$rowNumber}", $logType);
+            $sheet->setCellValue("D{$rowNumber}", $deviceId);
+        }
 
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(9);
         $sheet->getStyle('A5:B5')->getFont()->setBold(true);
@@ -1183,7 +1199,7 @@ class AdminAttendanceImportController extends Controller
         }
 
         $sheet = $spreadsheet->getActiveSheet();
-        $sheetRows = $sheet->toArray(null, true, true, true);
+        $sheetRows = $sheet->toArray(null, true, false, true);
 
         if (empty($sheetRows)) {
             throw new RuntimeException('Invalid spreadsheet: missing header row.');
@@ -1339,38 +1355,82 @@ class AdminAttendanceImportController extends Controller
 
     private function parseDateTime(mixed $value): ?string
     {
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->format('Y-m-d H:i:s');
+        }
+
         if (is_numeric($value)) {
             try {
-                return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d H:i:s');
+                $parsed = ExcelDate::excelToDateTimeObject((float) $value);
+
+                if ((int) $parsed->format('u') >= 500000) {
+                    $parsed = $parsed->modify('+1 second');
+                }
+
+                return $parsed->format('Y-m-d H:i:s');
             } catch (\Throwable $e) {
                 return null;
             }
         }
 
-        $stringValue = trim((string) $value);
+        $stringValue = preg_replace('/\s+/', ' ', trim((string) $value));
         if ($stringValue === '') {
             return null;
         }
 
-        $formats = ['Y-m-d H:i:s', 'Y-m-d H:i'];
+        $candidateValues = array_values(array_unique(array_filter([
+            $stringValue,
+            $this->normalizeDateTimeString($stringValue),
+        ])));
 
-        foreach ($formats as $format) {
-            try {
-                $parsed = Carbon::createFromFormat($format, $stringValue);
+        $formats = [
+            'Y-m-d H:i:s',
+            'Y-m-d H:i',
+            'Y-m-d\TH:i:s',
+            'Y-m-d\TH:i',
+            'n/j/Y G:i:s',
+            'n/j/Y G:i',
+            'n/j/Y g:i:s A',
+            'n/j/Y g:i A',
+            'n/j/y G:i:s',
+            'n/j/y G:i',
+            'n/j/y g:i:s A',
+            'n/j/y g:i A',
+        ];
 
-                if ($parsed !== false) {
-                    return $parsed->format('Y-m-d H:i:s');
+        foreach ($candidateValues as $candidateValue) {
+            foreach ($formats as $format) {
+                try {
+                    $parsed = Carbon::createFromFormat($format, $candidateValue);
+
+                    if ($parsed !== false) {
+                        return $parsed->format('Y-m-d H:i:s');
+                    }
+                } catch (\Throwable $e) {
                 }
+            }
+
+            try {
+                return Carbon::parse($candidateValue)->format('Y-m-d H:i:s');
             } catch (\Throwable $e) {
             }
         }
 
-        try {
-            return Carbon::parse($stringValue)->format('Y-m-d H:i:s');
-        } catch (\Throwable $e) {
+        return null;
+    }
+
+    private function normalizeDateTimeString(string $value): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', trim($value));
+        $normalized = preg_replace('/(?<=\d)(am|pm)\b/i', ' $1', $normalized);
+        $normalized = preg_replace_callback('/\b(am|pm)\b/i', static fn (array $matches): string => strtoupper($matches[1]), $normalized);
+
+        if (preg_match('/\b(\d{1,2}):\d{2}(?::\d{2})?\s*(AM|PM)\b/', $normalized, $matches) === 1
+            && (int) $matches[1] > 12) {
+            $normalized = trim((string) preg_replace('/\s*(AM|PM)\b/', '', $normalized, 1));
         }
 
-        return null;
+        return $normalized;
     }
 
     private function isDuplicateKeyException(QueryException $exception): bool

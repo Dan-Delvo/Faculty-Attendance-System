@@ -8,7 +8,12 @@ use App\Models\Faculty;
 use App\Models\ImportBatch;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class AdminAttendanceImportManagementTest extends TestCase
@@ -147,6 +152,75 @@ class AdminAttendanceImportManagementTest extends TestCase
         Storage::assertExists($batch->file_path);
     }
 
+    public function test_admin_can_import_excel_standard_datetime_cells_from_xlsx(): void
+    {
+        Storage::fake('local');
+
+        $admin = $this->createAdminUser();
+        $faculty = $this->createFaculty('BIO-4001');
+        $upload = $this->makeSpreadsheetUpload([
+            ['BIO-4001', ExcelDate::PHPToExcel(new \DateTimeImmutable('2026-04-01 08:02:00')), 'IN', 'DEVICE-01'],
+        ], true);
+
+        $this->actingAs($admin, 'admin')
+            ->post(route('admin.attendance-imports.store'), [
+                'file' => $upload,
+            ])
+            ->assertRedirect(route('admin.attendance-imports.index'));
+
+        $this->assertDatabaseHas('biometric_logs', [
+            'biometric_id' => $faculty->biometric_id,
+            'log_datetime' => '2026-04-01 08:02:00',
+            'log_type' => 'IN',
+            'device_id' => 'DEVICE-01',
+        ]);
+    }
+
+    public function test_admin_can_import_excel_datetime_strings_with_meridiem_mismatch(): void
+    {
+        Storage::fake('local');
+
+        $admin = $this->createAdminUser();
+        $faculty = $this->createFaculty('BIO-5001');
+        $upload = $this->makeSpreadsheetUpload([
+            ['BIO-5001', '3/24/2026 15:31:15 PM', 'OUT', 'DEVICE-03'],
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->post(route('admin.attendance-imports.store'), [
+                'file' => $upload,
+            ])
+            ->assertRedirect(route('admin.attendance-imports.index'));
+
+        $this->assertDatabaseHas('biometric_logs', [
+            'biometric_id' => $faculty->biometric_id,
+            'log_datetime' => '2026-03-24 15:31:15',
+            'log_type' => 'OUT',
+            'device_id' => 'DEVICE-03',
+        ]);
+    }
+
+    public function test_downloaded_template_uses_excel_datetime_cells_for_sample_logs(): void
+    {
+        $admin = $this->createAdminUser();
+
+        $response = $this->actingAs($admin, 'admin')
+            ->get(route('admin.attendance-imports.template'));
+
+        $response->assertOk();
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'attendance-template-') . '.xlsx';
+        file_put_contents($tempPath, $response->getContent());
+        $spreadsheet = IOFactory::load($tempPath);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $this->assertSame('log_datetime', $sheet->getCell('B9')->getValue());
+        $this->assertIsNumeric($sheet->getCell('B10')->getValue());
+        $this->assertSame('m/d/yyyy h:mm', $sheet->getStyle('B10')->getNumberFormat()->getFormatCode());
+
+        $spreadsheet->disconnectWorksheets();
+    }
+
     private function createAdminUser(): User
     {
         return User::create([
@@ -176,5 +250,48 @@ class AdminAttendanceImportManagementTest extends TestCase
             'last_name' => 'Faculty',
             'is_active' => true,
         ]);
+    }
+
+    private function makeSpreadsheetUpload(array $rows, bool $formatDateColumnAsExcelDate = false): UploadedFile
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $sheet->fromArray([
+            ['Attendance Log Import Template'],
+            ['Purpose: Test spreadsheet upload.'],
+            ['Fill one log entry per row starting at row 10.'],
+            [],
+            ['Column', 'Purpose / Format'],
+            ['biometric_id', 'Required'],
+            ['log_datetime', 'Required'],
+            ['log_type', 'Required'],
+            ['biometric_id', 'log_datetime', 'log_type', 'device_id'],
+        ], null, 'A1');
+
+        foreach ($rows as $index => $row) {
+            $rowNumber = 10 + $index;
+            $sheet->setCellValue("A{$rowNumber}", $row[0]);
+            $sheet->setCellValue("B{$rowNumber}", $row[1]);
+
+            if ($formatDateColumnAsExcelDate) {
+                $sheet->getStyle("B{$rowNumber}")->getNumberFormat()->setFormatCode('m/d/yyyy h:mm');
+            }
+
+            $sheet->setCellValue("C{$rowNumber}", $row[2]);
+            $sheet->setCellValue("D{$rowNumber}", $row[3]);
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'attendance-import-test-') . '.xlsx';
+        (new Xlsx($spreadsheet))->save($tempPath);
+        $spreadsheet->disconnectWorksheets();
+
+        return new UploadedFile(
+            $tempPath,
+            'attendance-import.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true
+        );
     }
 }
