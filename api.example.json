@@ -1,76 +1,123 @@
 {
     "parttime_faculty_schedules": [
         {
-            "faculty_id": 1001,
-            "faculty_email": "faculty.alpha@example.test",
-            "last_name": "Navarro",
-            "first_name": "Adrian",
-            "middle_name": "M.",
+            "faculty_id": 101,
+            "faculty_email": "maria.delacruz@example.edu",
+            "last_name": "Dela Cruz",
+            "first_name": "Maria",
+            "middle_name": "S.",
             "suffix_name": null,
-            "faculty_code": "FA1001MOCK2026",
+            "faculty_code": "FA101TG2026",
             "faculty_type": "Part-Time",
-            "assigned_units": 9,
+            "assigned_units": 12,
             "schedules": [
                 {
-                    "day": "Tuesday",
-                    "start_time": "09:00:00",
-                    "end_time": "12:00:00",
-                    "room_code": "R201",
+                    "day": "Monday",
+                    "start_time": "08:00:00",
+                    "end_time": "11:00:00",
+                    "room_code": "B201",
+                    "program_code": "BSIT",
+                    "program_title": "Bachelor of Science in Information Technology",
+                    "year_level": 3,
+                    "section_name": "2",
+                    "course_details": {
+                        "course_assignment_id": 5001,
+                        "course_title": "Web Systems and Technologies",
+                        "course_code": "IT 321",
+                        "lec": 3,
+                        "lab": 0,
+                        "units": 3,
+                        "tuition_hours": 3
+                    }
+                },
+                {
+                    "day": "Wednesday",
+                    "start_time": "13:00:00",
+                    "end_time": "16:00:00",
+                    "room_code": "B204",
                     "program_code": "BSIT",
                     "program_title": "Bachelor of Science in Information Technology",
                     "year_level": 2,
                     "section_name": "1",
-                    "course_title": "Database Systems",
-                    "course_code": "IT 204"
+                    "course_details": {
+                        "course_assignment_id": 5002,
+                        "course_title": "Database Management Systems",
+                        "course_code": "IT 223",
+                        "lec": 3,
+                        "lab": 0,
+                        "units": 3,
+                        "tuition_hours": 3
+                    }
                 },
                 {
-                    "day": "Monday",
-                    "start_time": "13:00:00",
-                    "end_time": "16:00:00",
-                    "room_code": "LAB3",
+                    "day": "Friday",
+                    "start_time": "09:00:00",
+                    "end_time": "12:00:00",
+                    "room_code": "CLAB1",
                     "program_code": "BSCS",
                     "program_title": "Bachelor of Science in Computer Science",
-                    "year_level": 3,
-                    "section_name": "2",
-                    "course_title": "Software Engineering",
-                    "course_code": "CS 311"
-                },
-                {
-                    "day": "Wednesday",
-                    "start_time": "15:30:00",
-                    "end_time": "18:30:00",
-                    "room_code": "R105",
-                    "program_code": "BSBA-MM",
-                    "program_title": "Bachelor of Science in Business Administration - Major in Marketing Management",
-                    "year_level": 4,
-                    "section_name": "1",
-                    "course_title": "Strategic Management",
-                    "course_code": "BA 402"
+                    "year_level": 1,
+                    "section_name": "3",
+                    "course_details": {
+                        "course_assignment_id": 5003,
+                        "course_title": "Introduction to Computing",
+                        "course_code": "CS 101",
+                        "lec": 2,
+                        "lab": 1,
+                        "units": 3,
+                        "tuition_hours": 3
+                    }
                 }
             ]
         },
         {
-            "faculty_id": 1002,
-            "faculty_email": "faculty.beta@example.test",
-            "last_name": "Serrano",
-            "first_name": "Leah",
-            "middle_name": null,
-            "suffix_name": null,
-            "faculty_code": "FA1002MOCK2026",
+            "faculty_id": 102,
+            "faculty_email": "jose.santos@example.edu",
+            "last_name": "Santos",
+            "first_name": "Jose",
+            "middle_name": "L.",
+            "suffix_name": "III",
+            "faculty_code": "FA102TG2026",
             "faculty_type": "Part-Time",
-            "assigned_units": 3,
+            "assigned_units": 6,
             "schedules": [
                 {
-                    "day": "Saturday",
-                    "start_time": "07:30:00",
-                    "end_time": "12:30:00",
-                    "room_code": "R308",
-                    "program_code": "BSED",
-                    "program_title": "Bachelor of Secondary Education",
-                    "year_level": 1,
-                    "section_name": "1",
-                    "course_title": "Foundations of Education",
-                    "course_code": "ED 101"
+                    "day": "Tuesday",
+                    "start_time": "17:30:00",
+                    "end_time": "20:30:00",
+                    "room_code": "C102",
+                    "program_code": "BSED-ENG",
+                    "program_title": "Bachelor of Secondary Education Major in English",
+                    "year_level": 4,
+                    "section_name": "2",
+                    "course_details": {
+                        "course_assignment_id": 5004,
+                        "course_title": "Campus Journalism",
+                        "course_code": "ENG 412",
+                        "lec": 2,
+                        "lab": 1,
+                        "units": 3,
+                        "tuition_hours": 3
+                    }
+                },
+                {
+                    "day": "Thursday",
+                    "start_time": "17:30:00",
+                    "end_time": "20:30:00",
+                    "room_code": "C104",
+                    "program_code": "BSED-ENG",
+                    "program_title": "Bachelor of Secondary Education Major in English",
+                    "year_level": 4,
+                    "section_name": "2",
+                    "course_details": {
+                        "course_assignment_id": 5005,
+                        "course_title": "Language Education Research",
+                        "course_code": "ENG 413",
+                        "lec": 3,
+                        "lab": 0,
+                        "units": 3,
+                        "tuition_hours": 3
+                    }
                 }
             ]
         }
