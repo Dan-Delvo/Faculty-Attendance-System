@@ -27,7 +27,9 @@ class FacultySeeder extends Seeder
 
             foreach ($records as $item) {
                 $email = strtolower(trim((string) ($item['faculty_email'] ?? '')));
-                if ($email === '' || ! isset($userIds[$email])) {
+                $facultyCode = trim((string) ($item['faculty_code'] ?? ''));
+
+                if ($email === '' || $facultyCode === '' || ! isset($userIds[$email])) {
                     continue;
                 }
 
@@ -44,13 +46,13 @@ class FacultySeeder extends Seeder
 
                 $facultyTypeRaw = trim((string) ($item['faculty_type'] ?? ''));
 
-                Faculty::firstOrCreate(
-                    ['faculty_code' => (string) $item['faculty_code']],
+                Faculty::updateOrCreate(
+                    ['faculty_code' => $facultyCode],
                     [
-                        'external_faculty_id' => (int) ($item['faculty_id'] ?? 0),
+                        'external_faculty_id' => ($item['faculty_id'] ?? null) !== null ? (int) $item['faculty_id'] : null,
                         'user_id'         => $userIds[$email],
                         'department_id'   => $departmentId,
-                        'faculty_code'    => (string) $item['faculty_code'],
+                        'faculty_code'    => $facultyCode,
                         'biometric_id'    => 'BIOAPI' . str_pad((string) ($item['faculty_id'] ?? 0), 3, '0', STR_PAD_LEFT),
                         'first_name'      => (string) ($item['first_name'] ?? ''),
                         'middle_name'     => $item['middle_name'] ?: null,
