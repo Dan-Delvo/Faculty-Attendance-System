@@ -11,10 +11,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Check secret exists
+      - name: Validate PROD_ENV_FILE secret
         env:
           PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         run: |
@@ -23,29 +23,36 @@ jobs:
             exit 1
           fi
 
-      - name: Sync code to /opt/stacks/fasas
+      - name: Prepare deploy directory
         run: |
           mkdir -p /opt/stacks/fasas
-          rsync -a --delete --exclude ".git" ./ /opt/stacks/fasas/
 
-      - name: Write .env in deploy path
+      - name: Sync code to /opt/stacks/fasas
+        run: |
+          rsync -a --delete \
+            --no-perms --no-owner --no-group \
+            --omit-dir-times \
+            --exclude ".git" \
+            ./ /opt/stacks/fasas/
+
+      - name: Write .env
         env:
           PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         run: |
           printf "%s" "$PROD_ENV_FILE" > /opt/stacks/fasas/.env
 
-      - name: Deploy with Docker Compose
+      - name: Deploy containers
         run: |
-          docker compose -f /opt/stacks/fasas/docker-compose.yml up -d --build --remove-orphans
+          docker compose -f /opt/stacks/fasas/compose.yaml up -d --build --remove-orphans
 
-      - name: Run migrations + optimize
+      - name: Laravel post-deploy
         run: |
-          docker compose -f /opt/stacks/fasas/docker-compose.yml exec -T app php artisan migrate --force --no-interaction
-          docker compose -f /opt/stacks/fasas/docker-compose.yml exec -T app php artisan optimize:clear
-          docker compose -f /opt/stacks/fasas/docker-compose.yml exec -T app php artisan config:cache
-          docker compose -f /opt/stacks/fasas/docker-compose.yml exec -T app php artisan route:cache
-          docker compose -f /opt/stacks/fasas/docker-compose.yml exec -T app php artisan view:cache
-          docker compose -f /opt/stacks/fasas/docker-compose.yml exec -T app php artisan queue:restart
+          docker compose -f /opt/stacks/fasas/compose.yaml exec -T app php artisan migrate --force --no-interaction
+          docker compose -f /opt/stacks/fasas/compose.yaml exec -T app php artisan optimize:clear
+          docker compose -f /opt/stacks/fasas/compose.yaml exec -T app php artisan config:cache
+          docker compose -f /opt/stacks/fasas/compose.yaml exec -T app php artisan route:cache
+          docker compose -f /opt/stacks/fasas/compose.yaml exec -T app php artisan view:cache
+          docker compose -f /opt/stacks/fasas/compose.yaml exec -T app php artisan queue:restart
 
       - name: Health check
         run: |
