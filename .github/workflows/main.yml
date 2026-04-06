@@ -2,57 +2,35 @@ name: Deploy Faculty Attendance System
 
 on:
   push:
-    branches: [ main ] # Triggers whenever you push to the main branch
+    branches: [ main ]
 
 jobs:
   deploy:
-    runs-on: self-hosted  # This targets your ASUS TUF laptop runner
-
+    runs-on: self-hosted
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Build React/Inertia Assets
-      # This creates the /public/build folder needed by the container
-      - name: Install Node & Build Assets
+      - name: Sync Files to Server
         run: |
-          npm install
-          npm run build
-
-      # 2. Sync files to the Dockge Stack folder
-      - name: Sync to Dockge
-        run: |
-          # Define the target folder on your laptop
           TARGET="/opt/stacks/fas/"
-          
-          # Use rsync to move everything EXCEPT node_modules and .git
-          # This ensures the Dockerfile is moved to the server
-          sudo rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.env' ./ $TARGET
-          
-          # Fix permissions for the Laravel storage and cache
-          sudo chown -R 33:33 $TARGET/storage $TARGET/bootstrap/cache
-          sudo chmod -R 775 $TARGET/storage $TARGET/bootstrap/cache
+          sudo mkdir -p $TARGET
+          sudo rsync -av --delete --exclude='.git' --exclude='node_modules' ./ $TARGET
 
-      # 3. Rebuild and Start the Containers
-      - name: Docker Compose Up
+      - name: Docker Build and Up
         run: |
           cd /opt/stacks/fas
-          # We manually trigger the build first with a forced DNS
-          docker build --network=host -t fas-app:latest .
-          # Then let compose handle the start
-          docker compose up -d
+          # Build the new PHP 8.3 image
+          sudo docker compose build --no-cache
+          # Start the containers
+          sudo docker compose up -d
 
-      # 4. Clean up Laravel Cache inside the container
-      - name: Laravel Housekeeping
+      - name: Application Post-Deployment
         run: |
-          docker exec fas_app php artisan config:cache
-          docker exec fas_app php artisan route:cache
-
-      # 5. Notify via Telegram
-      - name: Notify Telegram
-        if: always()
-        run: |
-          STATUS="${{ job.status }}"
-          curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
-          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
-          -d text="🚀 FAS Deployment $STATUS! Your Faculty System is live at http://localhost:8002"
+          cd /opt/stacks/fas
+          # Install dependencies inside the container
+          sudo docker exec fas_app composer install --no-dev --optimize-autoloader
+          # Run migrations
+          sudo docker exec fas_app php artisan migrate --force
+          # Clear cache
+          sudo docker exec fas_app php artisan config:clear
