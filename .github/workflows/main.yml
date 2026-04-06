@@ -1,0 +1,58 @@
+name: Deploy Inertia Monolith to Laptop Server
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted  # Using your ASUS TUF GitHub Runner
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Build React/Inertia Assets locally on the runner
+      # This ensures public/build/manifest.json is fresh for the container
+      - name: Install Node & Build Assets
+        run: |
+          npm install
+          npm run build
+
+      # 2. Sync to Dockge Directory
+      - name: Sync to Dockge Stack
+        run: |
+          # Sync files to the Dockge folder, excluding heavy/unnecessary items
+          sudo rsync -av --delete --exclude='.git' --exclude='node_modules' ./ /opt/stacks/inertia-app/
+          
+          # Fix permissions for the web server user (ID 33 is usually www-data)
+          sudo chown -R 33:33 /opt/stacks/inertia-app/storage /opt/stacks/inertia-app/bootstrap/cache
+          sudo chmod -R 775 /opt/stacks/inertia-app/storage /opt/stacks/inertia-app/bootstrap/cache
+
+      # 3. Refresh the Dockge Stack
+      - name: Docker Compose Up
+        run: |
+          cd /opt/stacks/inertia-app
+          docker compose up -d --build
+
+      # 4. Clear Caches
+      - name: Laravel Housekeeping
+        run: |
+          docker exec inertia_app php artisan config:cache
+          docker exec inertia_app php artisan route:cache
+          docker exec inertia_app php artisan view:cache
+
+      # 5. Telegram Notifications
+      - name: Notify Telegram on Success
+        if: success()
+        run: |
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+          -d text="🚀 Deployment Successful! Inertia app is live at http://localhost:8002"
+
+      - name: Notify Telegram on Failure
+        if: failure()
+        run: |
+          curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+          -d text="❌ Deployment Failed! Check GitHub Actions logs for the ASUS TUF runner."
