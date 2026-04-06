@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('online_attendance', function (Blueprint $table) {
@@ -20,7 +19,7 @@ return new class extends Migration
             $table->time('time_out');
 
             $table->string('screenshot_in');   // storage path for proof of time-in
-            $table->string('screenshot_out');  // storage path for proof of time-out
+            $table->string('screenshot_out')->nullable();  // storage path for proof of time-out
 
             $table->text('remarks')->nullable();
 

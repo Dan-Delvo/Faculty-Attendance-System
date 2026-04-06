@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 class ScheduleChangeRequestSeeder extends Seeder
 {
     /**
-     * 2-3 schedule change requests per faculty, mixed statuses.
+     * 2-3 schedule change requests per faculty, all pending for testing.
      *
      * Totals: ~37 schedule_change_requests (15 faculties)
      */
@@ -37,14 +37,6 @@ class ScheduleChangeRequestSeeder extends Seeder
                 'Medical appointment conflicts with current schedule.',
                 'Overlap with graduate studies class on the same day.',
                 'Department activity scheduled during my class hours.',
-            ];
-
-            $reviewRemarks = [
-                'Approved. Room is available on the requested schedule.',
-                'Schedule conflict verified. Approved.',
-                'Rejected. The requested room is already occupied at that time.',
-                'Rejected. No available room on the requested day.',
-                'Approved per department head recommendation.',
             ];
 
             $requestIndex = 0;
@@ -82,9 +74,8 @@ class ScheduleChangeRequestSeeder extends Seeder
 
                     $room = $alternateRooms[$requestIndex % count($alternateRooms)];
 
-                    // Distribute statuses: first = pending, second = approved, third = rejected
-                    $statuses = ['pending', 'approved', 'rejected'];
-                    $status   = $statuses[$i % 3];
+                    // Keep all requests pending so admins can approve/reject during testing.
+                    $status = 'pending';
 
                     $effectiveDate = Carbon::create(2026, 2, 16)->addDays($i * 7);
 
@@ -101,12 +92,6 @@ class ScheduleChangeRequestSeeder extends Seeder
                         'created_at'           => $effectiveDate->copy()->subDays(5)->setTime(rand(8, 16), rand(0, 59)),
                         'updated_at'           => $effectiveDate->copy()->subDays(3)->setTime(rand(8, 16), rand(0, 59)),
                     ];
-
-                    if ($status !== 'pending') {
-                        $data['reviewed_by']     = $adminUser->id;
-                        $data['reviewed_at']     = $effectiveDate->copy()->subDays(3)->setTime(rand(8, 16), rand(0, 59));
-                        $data['review_remarks']  = $reviewRemarks[$requestIndex % count($reviewRemarks)];
-                    }
 
                     ScheduleChangeRequest::create($data);
                     $requestIndex++;

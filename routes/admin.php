@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AdminPasswordResetLinkController;
 use App\Http\Controllers\Admin\AdminScheduleController;
 use App\Http\Controllers\Admin\AdminScheduleChangeRequestController;
 use App\Http\Controllers\Admin\AdminOnlineRequestController;
+use App\Http\Controllers\Admin\AdminUndertimeJustificationController;
 use App\Http\Controllers\Admin\AdminSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -117,6 +118,19 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::patch('/online-requests/{onlineRequest}/reject', [AdminOnlineRequestController::class, 'reject'])
         ->name('admin.online-requests.reject');
 
+    // ── Undertime Justification Approvals ──────────────────────────────────
+    Route::get('/undertime-justifications', [AdminUndertimeJustificationController::class, 'index'])
+        ->name('admin.undertime-justifications.index');
+
+    Route::get('/api/undertime-justifications', [AdminUndertimeJustificationController::class, 'filter'])
+        ->name('admin.undertime-justifications.filter');
+
+    Route::patch('/undertime-justifications/{justification}/approve', [AdminUndertimeJustificationController::class, 'approve'])
+        ->name('admin.undertime-justifications.approve');
+
+    Route::patch('/undertime-justifications/{justification}/reject', [AdminUndertimeJustificationController::class, 'reject'])
+        ->name('admin.undertime-justifications.reject');
+
     // ── Holiday Management ─────────────────────────────────────────────────
     Route::get('/holidays/suggestions', [AdminHolidayController::class, 'searchSuggestions'])
         ->name('admin.holidays.suggestions');
@@ -143,8 +157,17 @@ Route::middleware(['auth.admin'])->prefix('admin')->group(function () {
     Route::get('/attendance-imports/{batch}/details', [AdminAttendanceImportController::class, 'details'])
         ->name('admin.attendance-imports.details');
 
+    Route::patch('/attendance-imports/{batch}/logs/{log}', [AdminAttendanceImportController::class, 'updateLog'])
+        ->name('admin.attendance-imports.logs.update');
+
+    Route::delete('/attendance-imports/{batch}/logs/{log}', [AdminAttendanceImportController::class, 'destroyLog'])
+        ->name('admin.attendance-imports.logs.destroy');
+
     Route::patch('/attendance-imports/{batch}/sync', [AdminAttendanceImportController::class, 'sync'])
         ->name('admin.attendance-imports.sync');
+
+    Route::delete('/attendance-imports/{batch}', [AdminAttendanceImportController::class, 'destroy'])
+        ->name('admin.attendance-imports.destroy');
 
     Route::get('/attendance-imports/template', [AdminAttendanceImportController::class, 'downloadTemplate'])
         ->name('admin.attendance-imports.template');

@@ -17,10 +17,10 @@ class AttendanceReconciliationService
     /**
      * Retrieve and calculate the attendance match for a specific date on the fly.
      *
-     * Priority chain for determining expected schedule:
-     *   1. Approved ScheduleChangeRequest (overrides the original schedule detail)
-     *   2. InternalSchedule (operational / biometric device times)
-     *   (Official ScheduleDetail is NOT used — only internal schedule times apply)
+    * Priority chain for determining expected schedule:
+    *   1. Approved ScheduleChangeRequest (overrides the original schedule detail)
+    *   2. InternalSchedule (operational / biometric device times)
+    *   3. Official ScheduleDetail fallback when no internal schedule exists
      *
      * Actual attendance sources:
      *   - BiometricLog (physical clock-in/out)
@@ -67,8 +67,8 @@ class AttendanceReconciliationService
 
         $activeScheduleIds = $faculty->schedules()
             ->where('status', 'active')
-            ->where('effective_from', '<=', $targetDate)
-            ->where('effective_until', '>=', $targetDate)
+            ->whereDate('effective_from', '<=', $targetDate->toDateString())
+            ->whereDate('effective_until', '>=', $targetDate->toDateString())
             ->pluck('id');
 
         // Collect the effective expected entries for today:
@@ -148,6 +148,7 @@ class AttendanceReconciliationService
 
         $lateMinutes = 0;
         $undertimeMinutes = 0;
+        $overtimeMinutes = 0;
         $totalHours = '0h 0m';
         $status = 'Absent';
 
@@ -163,6 +164,10 @@ class AttendanceReconciliationService
             if ($actualTimeOut->lessThan($expectedTimeOut)) {
                 $status = ($status === 'Late') ? 'Late & Early-Out' : 'Early-Out';
                 $undertimeMinutes = $actualTimeOut->diffInMinutes($expectedTimeOut);
+            }
+
+            if ($actualTimeOut->greaterThan($expectedTimeOut)) {
+                $overtimeMinutes = $expectedTimeOut->diffInMinutes($actualTimeOut);
             }
 
             $validStart = $actualTimeIn->greaterThan($expectedTimeIn) ? $actualTimeIn : $expectedTimeIn;
@@ -208,6 +213,7 @@ class AttendanceReconciliationService
             'total_hours' => $totalHours,
             'late_minutes' => $lateMinutes,
             'undertime_minutes' => $undertimeMinutes,
+            'overtime_minutes' => $overtimeMinutes,
             'raw_logs' => $logs->toArray(),
             'online_attendance' => $hasOnline,
             'schedule_source' => $scheduleSource,
@@ -226,7 +232,7 @@ class AttendanceReconciliationService
      *   1. Approved ScheduleChangeRequests that override a schedule detail
      *      (effective_date <= target date)
      *   2. InternalSchedule operational entries
-     *   (Official ScheduleDetail times are NOT used as fallback)
+    *   3. Official ScheduleDetail times as fallback if no internal operational row exists
      *
      * Returns an array of ['time_in' => 'H:i:s', 'time_out' => 'H:i:s', 'source' => string]
      */
@@ -278,18 +284,18 @@ class AttendanceReconciliationService
                 }
 
                 // Use the changed times
-                    $entries[] = [
-                        'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
-                        'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
-                        'source' => 'change_request',
-'subject_code' => $detail->course_code,
-                        'subject_desc' => $detail->subject_desc ?? null,
-                        'program_code' => $detail->program_code,
-                        'year_level' => $detail->year_level,
-                        'section_name' => $detail->section_name,
-                    ];
+                $entries[] = [
+                    'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
+                    'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
+                    'source' => 'change_request',
+                    'course_code' => $detail->course_code,
+                    'subject_desc' => $detail->subject_desc ?? null,
+                    'program_code' => $detail->program_code,
+                    'year_level' => $detail->year_level,
+                    'section_name' => $detail->section_name,
+                ];
             } else {
-                // No change request — use internal schedule only
+                // No change request — use internal schedule, fallback to official if needed
                 $entry = $this->getEntryFromInternal($faculty, $detail);
                 if ($entry) {
                     $entries[] = $entry;
@@ -313,7 +319,7 @@ class AttendanceReconciliationService
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
                     'source' => 'change_request',
-                    'subject_code' => $originalDetail->course_code,
+                    'course_code' => $originalDetail->course_code,
                     'subject_desc' => $originalDetail->subject_desc ?? null,
                     'program_code' => $originalDetail->program_code,
                     'year_level' => $originalDetail->year_level,
@@ -326,7 +332,7 @@ class AttendanceReconciliationService
     }
 
     /**
-     * Get entry from InternalSchedule only. Returns null if no operational internal schedule exists.
+     * Get entry from InternalSchedule. Fallback to official schedule detail when no internal row exists.
      */
     private function getEntryFromInternal(
         Faculty $faculty,
@@ -339,7 +345,23 @@ class AttendanceReconciliationService
             ->first();
 
         if (!$internal) {
-            return null;
+            $officialIn = Carbon::parse($detail->start_time)->format('H:i:s');
+            $officialOut = $detail->end_time
+                ? Carbon::parse($detail->end_time)->format('H:i:s')
+                : Carbon::parse($detail->start_time)
+                    ->addMinutes(max(60, (int) round(((float) ($detail->hours_required ?? 1)) * 60)))
+                    ->format('H:i:s');
+
+            return [
+                'time_in' => $officialIn,
+                'time_out' => $officialOut,
+                'source' => 'official',
+                'course_code' => $detail->course_code,
+                'subject_desc' => $detail->subject_desc ?? null,
+                'program_code' => $detail->program_code,
+                'year_level' => $detail->year_level,
+                'section_name' => $detail->section_name,
+            ];
         }
 
         return [
@@ -348,7 +370,7 @@ class AttendanceReconciliationService
                 ? Carbon::parse($internal->device_time_out)->format('H:i:s')
                 : Carbon::parse($internal->device_time_in)->addHours(3)->format('H:i:s'),
             'source' => 'internal',
-            'subject_code' => $detail->course_code,
+            'course_code' => $detail->course_code,
             'subject_desc' => $detail->subject_desc ?? null,
             'program_code' => $detail->program_code,
             'year_level' => $detail->year_level,
@@ -379,7 +401,7 @@ class AttendanceReconciliationService
                     'time_in' => Carbon::parse($change->requested_time_in)->format('H:i:s'),
                     'time_out' => Carbon::parse($change->requested_time_out)->format('H:i:s'),
                     'source' => 'change_request',
-                    'subject_code' => $originalDetail->course_code,
+                    'course_code' => $originalDetail->course_code,
                     'subject_desc' => $originalDetail->subject_desc ?? null,
                     'program_code' => $originalDetail->program_code,
                     'year_level' => $originalDetail->year_level,

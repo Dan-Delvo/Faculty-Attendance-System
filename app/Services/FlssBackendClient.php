@@ -38,9 +38,9 @@ class FlssBackendClient
             'X-HMAC-Nonce' => $nonce,
         ])->acceptJson();
 
-        if (config('services.flss_backend.skip_ssl_verification', false)) {
-            $request = $request->withOptions(['verify' => false]);
-        }
+        $request = $request->withOptions([
+            'verify' => $this->resolveSslVerificationOption(),
+        ]);
 
         if ($body !== '') {
             $request = $request->withBody($body, 'application/json');
@@ -71,6 +71,20 @@ class FlssBackendClient
         return $this->request('GET', $url, $query);
     }
 
+    /**
+     * Call the configured rooms endpoint.
+     */
+    public function getRooms(array $query = []): Response
+    {
+        $url = (string) config('services.flss_backend.rooms_url');
+
+        if ($url === '') {
+            throw new RuntimeException('FLSS rooms URL is not configured.');
+        }
+
+        return $this->request('GET', $url, $query);
+    }
+
     private function buildSignedUrl(string $url, array $query = []): string
     {
         if (empty($query)) {
@@ -79,5 +93,33 @@ class FlssBackendClient
 
         $separator = str_contains($url, '?') ? '&' : '?';
         return $url . $separator . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    private function resolveSslVerificationOption(): bool|string
+    {
+        if (config('services.flss_backend.skip_ssl_verification', false)) {
+            return false;
+        }
+
+        $configuredBundle = trim((string) config('services.flss_backend.ca_bundle', ''));
+        if ($configuredBundle === '') {
+            return true;
+        }
+
+        $bundlePath = $this->resolvePath($configuredBundle);
+        if (! is_file($bundlePath)) {
+            throw new RuntimeException("Configured FLSS CA bundle was not found at [{$bundlePath}].");
+        }
+
+        return $bundlePath;
+    }
+
+    private function resolvePath(string $path): string
+    {
+        if (preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) === 1 || str_starts_with($path, DIRECTORY_SEPARATOR)) {
+            return $path;
+        }
+
+        return base_path($path);
     }
 }

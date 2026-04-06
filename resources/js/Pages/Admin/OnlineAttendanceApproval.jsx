@@ -20,7 +20,25 @@ const CLASS_TYPE_BADGE = {
     asynchronous: 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/20 dark:text-purple-400',
 };
 
-function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand }) {
+const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-PH', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    } catch (e) {
+        return dateString;
+    }
+};
+
+function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand, onOpenScreenshot }) {
     const handleActionClick = (event, callback) => {
         event.stopPropagation();
         callback();
@@ -35,12 +53,28 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand }
             className="rounded-2xl border border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 shadow-sm hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
         >
             <div className="p-5 sm:p-6">
-                {/* Header Row */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex-1">
-                        <h3 className="text-base font-bold text-gray-900 dark:text-white leading-tight mb-1">
-                            {request.faculty_name}
-                        </h3>
+                {/* Header Row: 3 columns */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                            <h3 className="text-base font-bold text-gray-900 dark:text-white leading-tight">
+                                {request.faculty_name}
+                            </h3>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset capitalize ${STATUS_BADGE[request.status]}`}>
+                                    {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                                </span>
+                                <svg
+                                    className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={2}
+                                    stroke="currentColor"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            </div>
+                        </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                             {request.faculty_email}
                         </p>
@@ -62,19 +96,34 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand }
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-bold ring-1 ring-inset capitalize ${STATUS_BADGE[request.status]}`}>
-                            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                        </span>
-                        <svg
-                            className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={2}
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                        </svg>
+                    <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-100 dark:border-blue-800/40">
+                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-2">Screenshot - Time In</p>
+                        {request.screenshot_in ? (
+                            <button
+                                type="button"
+                                onClick={(event) => handleActionClick(event, () => onOpenScreenshot(request.screenshot_in, 'Time In Screenshot'))}
+                                className="group relative w-full h-24 rounded-lg overflow-hidden border border-blue-200 dark:border-blue-700/50 bg-white dark:bg-gray-800"
+                            >
+                                <img src={request.screenshot_in} alt="Time In" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                            </button>
+                        ) : (
+                            <p className="text-xs text-gray-400">No screenshot</p>
+                        )}
+                    </div>
+
+                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-4 border border-emerald-100 dark:border-emerald-800/40">
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-2">Screenshot - Time Out</p>
+                        {request.screenshot_out ? (
+                            <button
+                                type="button"
+                                onClick={(event) => handleActionClick(event, () => onOpenScreenshot(request.screenshot_out, 'Time Out Screenshot'))}
+                                className="group relative w-full h-24 rounded-lg overflow-hidden border border-emerald-200 dark:border-emerald-700/50 bg-white dark:bg-gray-800"
+                            >
+                                <img src={request.screenshot_out} alt="Time Out" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                            </button>
+                        ) : (
+                            <p className="text-xs text-gray-400">No screenshot</p>
+                        )}
                     </div>
                 </div>
 
@@ -110,31 +159,17 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand }
                 {/* Expanded Details */}
                 <div className={`grid transition-all duration-300 ease-out ${isExpanded ? 'grid-rows-[1fr] mt-4' : 'grid-rows-[0fr]'}`}>
                     <div className="overflow-hidden space-y-4">
-                        {/* Screenshots */}
-                        {(request.screenshot_in || request.screenshot_out) && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {request.screenshot_in && (
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
-                                            Time In Proof
-                                        </p>
-                                        <div className="relative h-40 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
-                                            <img src={request.screenshot_in} alt="Time In" className="w-full h-full object-cover" />
-                                        </div>
-                                    </div>
-                                )}
-                                {request.screenshot_out && (
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
-                                            Time Out Proof
-                                        </p>
-                                        <div className="relative h-40 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700">
-                                            <img src={request.screenshot_out} alt="Time Out" className="w-full h-full object-cover" />
-                                        </div>
-                                    </div>
-                                )}
+                        {/* Date & Time */}
+                        <div className="grid grid-cols-1 gap-4">
+                            <div className="rounded-xl bg-gray-50 dark:bg-gray-700/30 p-4 border border-gray-100 dark:border-gray-700/50">
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Date & Time</p>
+                                <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                    <p><span className="font-semibold">Date:</span> {request.attendance_date}</p>
+                                    <p><span className="font-semibold">Time In:</span> {request.time_in}</p>
+                                    <p><span className="font-semibold">Time Out:</span> {request.time_out}</p>
+                                </div>
                             </div>
-                        )}
+                        </div>
 
                         {/* Remarks */}
                         {request.remarks && (
@@ -156,7 +191,7 @@ function ApprovalCard({ request, onApprove, onReject, isExpanded, toggleExpand }
                                 </p>
                                 <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
                                     <p><span className="font-semibold">Reviewed by:</span> {request.reviewed_by}</p>
-                                    <p><span className="font-semibold">Date:</span> {request.reviewed_at}</p>
+                                    <p><span className="font-semibold">Date:</span> {formatDateTime(request.reviewed_at)}</p>
                                     {request.review_remarks && (
                                         <div className="mt-2">
                                             <p className="font-semibold text-gray-600 dark:text-gray-400">Admin Notes:</p>
@@ -208,6 +243,9 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
 
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
+    const [showScreenshotModal, setShowScreenshotModal] = useState(false);
+    const [screenshotUrl, setScreenshotUrl] = useState('');
+    const [screenshotLabel, setScreenshotLabel] = useState('');
     const [selectedRequest, setSelectedRequest] = useState(null);
 
     const approveForm = useForm({ review_remarks: '' });
@@ -322,6 +360,12 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
         });
     };
 
+    const openScreenshot = (url, label) => {
+        setScreenshotUrl(url);
+        setScreenshotLabel(label);
+        setShowScreenshotModal(true);
+    };
+
     return (
         <AuthenticatedLayout>
             <Head title="Online Class Requests — Admin" />
@@ -421,6 +465,7 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                             toggleExpand={() => toggleExpand(req.id)}
                             onApprove={() => openApprove(req)}
                             onReject={() => openReject(req)}
+                            onOpenScreenshot={openScreenshot}
                         />
                     ))}
 
@@ -595,6 +640,28 @@ export default function OnlineAttendanceApproval({ requests: initialRequests, fi
                         </DangerButton>
                     </div>
                 </form>
+            </Modal>
+
+            {/* SCREENSHOT VIEWER MODAL */}
+            <Modal show={showScreenshotModal} onClose={() => setShowScreenshotModal(false)} maxWidth="3xl">
+                <div className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">{screenshotLabel}</h3>
+                        <button
+                            onClick={() => setShowScreenshotModal(false)}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                        >
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <img
+                        src={screenshotUrl}
+                        alt={screenshotLabel}
+                        className="w-full rounded-xl object-contain max-h-[70vh]"
+                    />
+                </div>
             </Modal>
 
             <ScrollToTop />

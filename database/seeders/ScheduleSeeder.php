@@ -3,7 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Faculty;
-use App\Models\InternalSchedule;
+use App\Models\Room;
 use App\Models\Schedule;
 use App\Models\ScheduleDetail;
 use App\Models\User;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 class ScheduleSeeder extends Seeder
 {
     /**
-     * Seeds schedules from the external API and mirrors entries to internal schedules.
+     * Seeds official schedules from the external API only.
      */
     public function run(): void
     {
@@ -23,6 +23,9 @@ class ScheduleSeeder extends Seeder
             $records = $this->fetchFacultySchedulesFromApi();
 
             $adminUser = User::where('username', 'admin')->first();
+
+            /** @var array<string, int> $roomCodeToId */
+            $roomCodeToId = Room::pluck('id', 'room_code')->all();
 
             foreach ($records as $item) {
                 $externalFacultyId = (int) ($item['faculty_id'] ?? 0);
@@ -42,7 +45,7 @@ class ScheduleSeeder extends Seeder
 
                 $scheduleCode = 'SCH-API-' . $externalFacultyId . '-2026';
 
-                $schedule = Schedule::firstOrCreate(
+                $schedule = Schedule::updateOrCreate(
                     ['schedule_code' => $scheduleCode],
                     [
                         'faculty_id'          => $faculty->id,
@@ -59,23 +62,31 @@ class ScheduleSeeder extends Seeder
                     ]
                 );
 
-                $internalWindowsByDay = [];
-
                 foreach (($item['schedules'] ?? []) as $entry) {
+                    if (! is_array($entry)) {
+                        continue;
+                    }
+
                     $startTime = (string) ($entry['start_time'] ?? '08:00:00');
                     $endTime = (string) ($entry['end_time'] ?? '11:00:00');
                     $timeInTs = '2026-01-01 ' . $startTime;
                     $timeOutTs = '2026-01-01 ' . $endTime;
                     $dayOfWeek = (string) ($entry['day'] ?? 'Monday');
+                    $courseDetails = data_get($entry, 'course_details');
+                    $courseDetails = is_array($courseDetails) ? $courseDetails : [];
 
-                    $hours = 1;
-                    try {
-                        $hours = max(1, (int) round(abs(strtotime($endTime) - strtotime($startTime)) / 3600));
-                    } catch (\Throwable $e) {
-                        $hours = 1;
-                    }
+                    $courseTitle = $this->nullableString(
+                        $courseDetails['course_title'] ?? $entry['course_title'] ?? null
+                    );
+                    $courseCode = $this->nullableString(
+                        $courseDetails['course_code'] ?? $entry['course_code'] ?? null
+                    );
+                    $hours = $this->resolveHoursRequired($entry, $courseDetails, $startTime, $endTime);
 
-                    $detail = ScheduleDetail::firstOrCreate(
+                    $roomCode = $this->nullableString($entry['room_code'] ?? null);
+                    $roomId = $roomCode ? ($roomCodeToId[$roomCode] ?? null) : null;
+
+                    ScheduleDetail::updateOrCreate(
                         [
                             'schedule_id' => $schedule->id,
                             'day'        => $dayOfWeek,
@@ -83,50 +94,16 @@ class ScheduleSeeder extends Seeder
                             'end_time'   => $timeOutTs,
                         ],
                         [
-                            'program_code'   => $entry['program_code'] ?? null,
-                            'program_title'  => $entry['program_title'] ?? null,
+                            'program_code'   => $this->nullableString($entry['program_code'] ?? null),
+                            'program_title'  => $this->nullableString($entry['program_title'] ?? null),
                             'year_level'     => isset($entry['year_level']) ? (int) $entry['year_level'] : null,
-                            'section_name'   => isset($entry['section_name']) ? (string) $entry['section_name'] : null,
-                            'course_title'   => $entry['course_title'] ?? null,
-                            'course_code'    => $entry['course_code'] ?? null,
-                            'room_code'      => $entry['room_code'] ?? null,
-                            'subject_desc'   => $entry['course_title'] ?? null,
+                            'section_name'   => $this->nullableString($entry['section_name'] ?? null),
+                            'course_title'   => $courseTitle,
+                            'course_code'    => $courseCode,
+                            'room_code'      => $roomCode,
+                            'room_id'        => $roomId,
+                            'subject_desc'   => $courseTitle,
                             'hours_required' => $hours,
-                        ]
-                    );
-
-                    $window = $internalWindowsByDay[$dayOfWeek] ?? [
-                        'time_in' => $startTime,
-                        'time_out' => $endTime,
-                        'required_hours' => 0,
-                    ];
-
-                    if (strtotime($startTime) < strtotime($window['time_in'])) {
-                        $window['time_in'] = $startTime;
-                    }
-
-                    if (strtotime($endTime) > strtotime($window['time_out'])) {
-                        $window['time_out'] = $endTime;
-                    }
-
-                    $window['required_hours'] += (int) $detail->hours_required;
-                    $internalWindowsByDay[$dayOfWeek] = $window;
-                }
-
-                foreach ($internalWindowsByDay as $dayOfWeek => $window) {
-                    InternalSchedule::updateOrCreate(
-                        [
-                            'schedule_id' => $schedule->id,
-                            'faculty_id' => $faculty->id,
-                            'day_of_week' => $dayOfWeek,
-                        ],
-                        [
-                            'device_time_in' => '2026-01-01 ' . $window['time_in'],
-                            'device_time_out' => '2026-01-01 ' . $window['time_out'],
-                            'is_operational' => true,
-                            'required_hours' => max(1, (int) $window['required_hours']),
-                            'sync_status' => 'synced',
-                            'synced_at' => now(),
                         ]
                     );
                 }
@@ -171,5 +148,40 @@ class ScheduleSeeder extends Seeder
         }
 
         return array_values(array_filter($records, fn ($record) => is_array($record)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     * @param  array<string, mixed>  $courseDetails
+     */
+    private function resolveHoursRequired(array $entry, array $courseDetails, string $startTime, string $endTime): float
+    {
+        $tuitionHours = $courseDetails['tuition_hours'] ?? $entry['tuition_hours'] ?? null;
+
+        if (is_numeric($tuitionHours)) {
+            return max(0.5, (float) $tuitionHours);
+        }
+
+        $startTimestamp = strtotime($startTime);
+        $endTimestamp = strtotime($endTime);
+
+        if ($startTimestamp === false || $endTimestamp === false) {
+            return 1.0;
+        }
+
+        $durationHours = abs($endTimestamp - $startTimestamp) / 3600;
+
+        return max(0.5, round($durationHours, 2));
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = trim((string) $value);
+
+        return $normalized === '' ? null : $normalized;
     }
 }

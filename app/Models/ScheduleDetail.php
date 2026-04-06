@@ -24,6 +24,7 @@ class ScheduleDetail extends Model
         'course_title',
         'course_code',
         'room_code',
+        'room_id',
         'subject_desc',
         'hours_required',
     ];
@@ -34,7 +35,7 @@ class ScheduleDetail extends Model
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'year_level' => 'integer',
-            'hours_required' => 'integer',
+            'hours_required' => 'decimal:2',
         ];
     }
 
@@ -50,5 +51,10 @@ class ScheduleDetail extends Model
     public function attendanceRecords(): HasMany
     {
         return $this->hasMany(AttendanceRecord::class);
+    }
+
+    public function room(): BelongsTo
+    {
+        return $this->belongsTo(Room::class);
     }
 }

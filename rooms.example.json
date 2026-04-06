@@ -1,0 +1,24 @@
+{
+    "rooms": [
+        {
+            "room_id": 5,
+            "room_code": "A202",
+            "building_name": "Building A"
+        },
+        {
+            "room_id": 4,
+            "room_code": "A203",
+            "building_name": "Building A"
+        },
+        {
+            "room_id": 1,
+            "room_code": "A204",
+            "building_name": "Building A"
+        },
+        {
+            "room_id": 2,
+            "room_code": "A205 - Aboitiz Lab",
+            "building_name": "Building A"
+        }
+    ]
+}

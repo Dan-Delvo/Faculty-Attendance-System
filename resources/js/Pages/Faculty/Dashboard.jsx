@@ -57,12 +57,14 @@ function statusStyle(status = '') {
         return 'text-orange-700 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/40 ring-orange-500/20';
     if (s === 'absent')
         return 'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/40 ring-red-600/20';
-    if (s === 'holiday')
+    if (s === 'holiday' || s === 'holiday present')
         return 'text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/40 ring-blue-600/20';
     if (s.includes('missing') || s.includes('check'))
         return 'text-rose-700 bg-rose-100 dark:text-rose-400 dark:bg-rose-900/40 ring-rose-600/20';
     if (s === 'overtime')
         return 'text-indigo-700 bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/40 ring-indigo-600/20';
+    if (s.includes('undertime') && s.includes('overtime'))
+        return 'text-purple-700 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/40 ring-purple-600/20';
     // default
     return 'text-gray-700 bg-gray-100 dark:text-gray-300 dark:bg-gray-800 ring-gray-500/20';
 }

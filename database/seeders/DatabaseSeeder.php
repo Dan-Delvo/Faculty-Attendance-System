@@ -25,6 +25,8 @@ class DatabaseSeeder extends Seeder
      * 11. LeaveApplicationSeeder – 15 leave applications
      * 12. ScheduleChangeRequestSeeder – ~37 schedule change requests (2-3 per faculty)
      * 13. OnlineAttendanceSeeder – ~37 online attendance requests (2-3 per faculty)
+     * 14. AttendanceAdjustmentSeeder – 5 attendance adjustments
+     * 15. AuditLogSeeder – 7 audit log entries
      */
     public function run(): void
     {
@@ -34,15 +36,19 @@ class DatabaseSeeder extends Seeder
                 DepartmentSeeder::class,
                 UserSeeder::class,
                 FacultySeeder::class,
+                RoomSeeder::class,
                 ScheduleSeeder::class,
                 HolidaySeeder::class,
                 SystemSettingSeeder::class,
                 ImportBatchSeeder::class,
                 BiometricLogSeeder::class,
                 AttendanceSeeder::class,
+                AttendanceJustificationSeeder::class,
                 LeaveApplicationSeeder::class,
                 ScheduleChangeRequestSeeder::class,
                 OnlineAttendanceSeeder::class,
+                AttendanceAdjustmentSeeder::class,
+                AuditLogSeeder::class,
             ]);
         });
     }

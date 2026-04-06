@@ -42,6 +42,35 @@ const toMinutes = (timeValue) => {
     return (hourPart * 60) + minutePart;
 };
 
+const formatTimeToAmPm = (timeValue) => {
+    if (!timeValue || typeof timeValue !== 'string') {
+        return timeValue;
+    }
+
+    const normalized = timeValue.trim();
+
+    if (/\b(AM|PM)\b/i.test(normalized)) {
+        return normalized.toUpperCase();
+    }
+
+    const match = normalized.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+        return normalized;
+    }
+
+    const hours24 = Number(match[1]);
+    const minutes = match[2];
+
+    if (Number.isNaN(hours24) || hours24 < 0 || hours24 > 23) {
+        return normalized;
+    }
+
+    const period = hours24 >= 12 ? 'PM' : 'AM';
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+
+    return `${String(hours12).padStart(2, '0')}:${minutes} ${period}`;
+};
+
 /* ──────────────────────────────────────────────
    Status badge component
    ────────────────────────────────────────────── */
@@ -85,6 +114,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
     const [semesterFilter, setSemesterFilter] = useState(filters.semester);
     const [yearFilter, setYearFilter] = useState(filters.academic_year);
     const [deptFilter, setDeptFilter] = useState(filters.department);
+    const [showAll, setShowAll] = useState(Boolean(filters.all));
 
     // ── Search suggestions ──
     const [suggestions, setSuggestions] = useState([]);
@@ -130,15 +160,17 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                     semester: semesterFilter,
                     academic_year: yearFilter,
                     department: deptFilter,
+                    ...(showAll ? { all: 1 } : {}),
                 },
                 { preserveState: true, preserveScroll: true, replace: true },
             );
         },
-        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter],
+        [perPage, search, statusFilter, typeFilter, semesterFilter, yearFilter, deptFilter, showAll],
     );
 
     const handleFilter = () => {
         setCurrentPage(1);
+        setShowAll(false);
         fetchSchedules(1);
     };
 
@@ -162,6 +194,7 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                 semester: semesterFilter,
                 academic_year: yearFilter,
                 department: deptFilter,
+                ...(showAll ? { all: 1 } : {}),
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -175,7 +208,8 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
         setYearFilter('');
         setDeptFilter('');
         setCurrentPage(1);
-        router.get(route('admin.schedules.index'), {}, { preserveState: true, preserveScroll: true, replace: true });
+        setShowAll(true);
+        router.get(route('admin.schedules.index'), { all: 1 }, { preserveState: true, preserveScroll: true, replace: true });
     };
 
     // ── Search Suggestions (AJAX) ──
@@ -262,6 +296,38 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
 
     const minAllowedMinutes = toMinutes(ALLOWED_TIME_MIN);
     const maxAllowedMinutes = toMinutes(ALLOWED_TIME_MAX);
+    const officialDetails = selectedSchedule?.details ?? [];
+    const internalEntries = selectedSchedule?.internal_schedule ?? [];
+    const approvedRequests = selectedSchedule?.approved_change_requests ?? [];
+
+    const approvedByDetailId = new Map(
+        approvedRequests
+            .filter((req) => req && req.schedule_detail_id)
+            .map((req) => [req.schedule_detail_id, req]),
+    );
+
+    const detailUsesInternal = (detail) => {
+        if (!detail?.id) return false;
+        return approvedByDetailId.has(detail.id);
+    };
+
+    const findInternalLink = (entry) => {
+        if (!entry?.day || !entry.start_time || !entry.end_time) return null;
+        const entryStart = toMinutes(entry.start_time);
+        const entryEnd = toMinutes(entry.end_time);
+        if (entryStart === null || entryEnd === null) return null;
+
+        return (
+            approvedRequests.find((req) => {
+                if (!req?.requested_day || !req.requested_time_in || !req.requested_time_out) return false;
+                if (req.requested_day !== entry.day) return false;
+                const reqStart = toMinutes(req.requested_time_in);
+                const reqEnd = toMinutes(req.requested_time_out);
+                if (reqStart === null || reqEnd === null) return false;
+                return reqStart === entryStart && reqEnd === entryEnd;
+            }) || null
+        );
+    };
 
     const validateDetailTimeRanges = () => {
         const localErrors = {};
@@ -759,18 +825,72 @@ export default function SchedulesIndex({ schedules, faculties, departments, filt
                                 </div>
                             )}
 
-                            <div>
-                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Class Schedule</p>
-                                <div className="space-y-2">
-                                    {selectedSchedule.details.map((d, i) => (
-                                        <div key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
-                                            <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">{d.day.substring(0, 3)}</span>
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">{d.start_time} – {d.end_time}</span>
-                                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{d.course_code || '—'}</span>
-                                            <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{d.subject_desc || '—'}</span>
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">{d.room_code || 'TBA'}</span>
-                                        </div>
-                                    ))}
+                            <div className="space-y-5">
+                                <div>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Official Schedule</p>
+                                    <div className="space-y-2">
+                                        {officialDetails.length > 0 ? (
+                                            officialDetails.map((d, i) => (
+                                                <ViewScheduleEntryRow
+                                                    key={i}
+                                                    day={d.day}
+                                                    startTime={d.start_time}
+                                                    endTime={d.end_time}
+                                                    courseCode={d.course_code}
+                                                    subjectDesc={d.subject_desc}
+                                                    roomCode={d.room_code}
+                                                    badges={detailUsesInternal(d) ? [{
+                                                        label: 'Uses Internal',
+                                                        className: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400',
+                                                    }] : []}
+                                                />
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No official schedule entries.</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Internal Schedule</p>
+                                    <div className="space-y-2">
+                                        {internalEntries.length > 0 ? (
+                                            internalEntries.map((entry, i) => {
+                                                const linked = findInternalLink(entry);
+                                                return (
+                                                    <ViewScheduleEntryRow
+                                                        key={entry.id ?? i}
+                                                        day={entry.day}
+                                                        startTime={entry.start_time ?? '--:--'}
+                                                        endTime={entry.end_time ?? '--:--'}
+                                                        courseCode={linked?.course_code ?? '—'}
+                                                        subjectDesc={linked?.subject_desc ?? 'No linked official schedule'}
+                                                        roomCode={linked?.requested_room || 'TBA'}
+                                                        tone="internal"
+                                                        badges={[
+                                                            {
+                                                                label: entry.is_operational ? 'Operational' : 'Non-Operational',
+                                                                className: entry.is_operational
+                                                                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                                                    : 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400',
+                                                            },
+                                                            ...(entry.required_hours !== null && entry.required_hours !== undefined
+                                                                ? [{
+                                                                    label: `${Number(entry.required_hours)} hr${Number(entry.required_hours) === 1 ? '' : 's'}`,
+                                                                    className: 'bg-white/80 text-gray-600 ring-gray-300/60 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-600/50',
+                                                                }]
+                                                                : []),
+                                                        ]}
+                                                        meta={linked
+                                                            ? `Original: ${linked.original_day?.substring(0, 3) ?? '—'} ${formatTimeToAmPm(linked.original_start_time ?? '--:--')}–${formatTimeToAmPm(linked.original_end_time ?? '--:--')}`
+                                                            : 'No linked official schedule'}
+                                                    />
+                                                );
+                                            })
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No internal schedule entries.</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -905,7 +1025,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     };
 
     const toTimeString = (minutesValue) => {
-        const clampedMinutes = Math.min(minutesValue, maxAllowedMinutes);
+        const clampedMinutes = Math.min(Math.round(minutesValue), maxAllowedMinutes);
         const hours = Math.floor(clampedMinutes / 60);
         const minutes = clampedMinutes % 60;
 
@@ -921,7 +1041,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
         }
 
         const totalMinutes = timeOutMinutes - timeInMinutes;
-        const roundedHours = Math.round(totalMinutes / 60);
+        const roundedHours = Math.round((totalMinutes / 60) * 100) / 100;
 
         return Math.max(1, Math.min(12, roundedHours));
     };
@@ -965,7 +1085,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
     const handleHoursChange = (index, hoursValue) => {
         const parsedHours = Number(hoursValue);
         const clampedHours = Number.isFinite(parsedHours)
-            ? Math.max(1, Math.min(12, parsedHours))
+            ? Math.max(1, Math.min(12, Math.round(parsedHours * 100) / 100))
             : 1;
 
         updateDetail(index, 'hours_required', clampedHours);
@@ -1177,6 +1297,7 @@ function ScheduleForm({ form, setForm, errors, setErrors, faculties, addDetailRo
                                         onChange={(e) => handleHoursChange(index, e.target.value)}
                                         min="1"
                                         max="12"
+                                        step="0.5"
                                         className="form-input-sm"
                                     />
                                     {errors[`details.${index}.hours_required`] && <p className="text-xs text-red-500 mt-0.5">{errors[`details.${index}.hours_required`]}</p>}
@@ -1248,6 +1369,57 @@ function InfoField({ label, value }) {
         <div>
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{label}</p>
             <p className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white">{value ?? '—'}</p>
+        </div>
+    );
+}
+
+function ViewScheduleEntryRow({
+    day,
+    startTime,
+    endTime,
+    courseCode,
+    subjectDesc,
+    roomCode,
+    badges = [],
+    meta = null,
+    tone = 'official',
+}) {
+    const toneClasses = tone === 'internal'
+        ? 'border border-amber-100/70 dark:border-amber-800/40 bg-amber-50/40 dark:bg-amber-900/10'
+        : 'border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/40';
+
+    return (
+        <div className={`rounded-xl px-4 py-3 ${toneClasses}`}>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="font-bold text-sm text-gray-900 dark:text-white min-w-[80px]">
+                    {day?.substring(0, 3) ?? '—'}
+                </span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {formatTimeToAmPm(startTime ?? '--:--')} – {formatTimeToAmPm(endTime ?? '--:--')}
+                </span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {courseCode || '—'}
+                </span>
+                <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">
+                    {subjectDesc || '—'}
+                </span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {roomCode || 'TBA'}
+                </span>
+                {badges.map((badge, index) => (
+                    <span
+                        key={`${badge.label}-${index}`}
+                        className={`text-[10px] font-bold uppercase tracking-wider rounded-md px-1.5 py-0.5 ring-1 ring-inset ${badge.className}`}
+                    >
+                        {badge.label}
+                    </span>
+                ))}
+            </div>
+            {meta && (
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {meta}
+                </p>
+            )}
         </div>
     );
 }
