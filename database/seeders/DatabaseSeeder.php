@@ -2,24 +2,54 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
+     *
+     * Execution order respects foreign-key dependencies:
+     *
+     *  1. RolePermissionSeeder   – Spatie roles & permissions
+     *  2. DepartmentSeeder       – 5 departments
+     *  3. UserSeeder             – 2 admin/HR users + 15 faculty users (roles assigned)
+     *  4. FacultySeeder          – 15 faculty records (3 per department)
+     *  5. ScheduleSeeder         – 15 schedules · 45 schedule_details · 45 internal_schedules
+     *  6. HolidaySeeder          – Philippine public holidays 2026
+     *  7. SystemSettingSeeder    – 10 application settings
+     *  8. ImportBatchSeeder      – 3 biometric import batches
+     *  9. BiometricLogSeeder     – 540 raw biometric entries (18 weeks × 15 faculty × 2 logs)
+     * 10. AttendanceSeeder       – 270 attendance records + 75 DTR summaries
+     * 11. LeaveApplicationSeeder – 15 leave applications
+     * 12. ScheduleChangeRequestSeeder – ~37 schedule change requests (2-3 per faculty)
+     * 13. OnlineAttendanceSeeder – ~37 online attendance requests (2-3 per faculty)
+     * 14. AttendanceAdjustmentSeeder – 5 attendance adjustments
+     * 15. AuditLogSeeder – 7 audit log entries
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        DB::transaction(function () {
+            $this->call([
+                RolePermissionSeeder::class,
+                DepartmentSeeder::class,
+                UserSeeder::class,
+                FacultySeeder::class,
+                RoomSeeder::class,
+                ScheduleSeeder::class,
+                HolidaySeeder::class,
+                SystemSettingSeeder::class,
+                ImportBatchSeeder::class,
+                BiometricLogSeeder::class,
+                AttendanceSeeder::class,
+                AttendanceJustificationSeeder::class,
+                LeaveApplicationSeeder::class,
+                ScheduleChangeRequestSeeder::class,
+                OnlineAttendanceSeeder::class,
+                AttendanceAdjustmentSeeder::class,
+                AuditLogSeeder::class,
+            ]);
+        });
     }
 }

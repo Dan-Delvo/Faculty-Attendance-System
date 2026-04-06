@@ -52,10 +52,29 @@ return [
 
     'channels' => [
 
+        // The Stack: Writes to BOTH channels simultaneously
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            'channels' => ['standard_log', 'error_log'],
             'ignore_exceptions' => false,
+        ],
+
+        // 1. Standard Log: Info + Warning + Error (Context)
+        // Retention: 2 Months
+        'standard_log' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/laravel.log'),
+            'level' => 'info', // Captures Info and everything above it
+            'days' => 60,
+        ],
+
+        // 2. Error Log: Error + Critical (Long Term Archive)
+        // Retention: 6 Months
+        'error_log' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/laravel-error.log'),
+            'level' => 'error', // Only captures Error, Critical, Alert, Emergency
+            'days' => 180,
         ],
 
         'single' => [

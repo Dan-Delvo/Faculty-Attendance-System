@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    'flss_backend' => [
+        'key' => env('FLSS_KEY'),
+        'faculty_schedules_url' => env(
+            'FLSS_FACULTY_SCHEDULES_URL',
+            'https://flss-backend-api-d9eecxcnhpccdpdk.southeastasia-01.azurewebsites.net/api/v1/faculty-schedules'
+        ),
+        'rooms_url' => env(
+            'FLSS_FACULTY_ROOMS_URL',
+            'https://flss-backend-api-d9eecxcnhpccdpdk.southeastasia-01.azurewebsites.net/api/v1/rooms'
+        ),
+        'ca_bundle' => env('FLSS_CA_BUNDLE', env('SSL_CERT_FILE')),
+        'skip_ssl_verification' => env('FLSS_SKIP_SSL_VERIFICATION', false),
+    ],
+
 ];
