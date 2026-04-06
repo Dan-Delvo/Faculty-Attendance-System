@@ -10,20 +10,9 @@ jobs:
     runs-on: [self-hosted, linux]
     timeout-minutes: 30
 
-    defaults:
-      run:
-        shell: bash
-        working-directory: /opt/stacks/fasas
-
     steps:
-      - name: Ensure deploy directory exists
-        run: |
-          test -d /opt/stacks/fasas
-
-      - name: Checkout to deploy directory
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          path: /opt/stacks/fasas
 
       - name: Check secret exists
         env:
@@ -33,13 +22,17 @@ jobs:
             echo "Missing PROD_ENV_FILE secret"
             exit 1
           fi
-          echo "Secret detected"
 
-      - name: Write .env
+      - name: Sync code to /opt/stacks/fasas
+        run: |
+          mkdir -p /opt/stacks/fasas
+          rsync -a --delete --exclude ".git" ./ /opt/stacks/fasas/
+
+      - name: Write .env in deploy path
         env:
           PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
         run: |
-          printf "%s" "$PROD_ENV_FILE" > .env
+          printf "%s" "$PROD_ENV_FILE" > /opt/stacks/fasas/.env
 
       - name: Deploy with Docker Compose
         run: |
