@@ -37,8 +37,10 @@ jobs:
       - name: Docker Compose Up
         run: |
           cd /opt/stacks/fas
-          # Use -f to tell Docker the exact filename
-          docker compose -f compose.yaml up -d --build
+          # We manually trigger the build first with a forced DNS
+          docker build --network=host -t fas-app:latest .
+          # Then let compose handle the start
+          docker compose up -d
 
       # 4. Clean up Laravel Cache inside the container
       - name: Laravel Housekeeping
