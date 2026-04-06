@@ -1,36 +1,40 @@
-name: Deploy Faculty Attendance System
+name: Main Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Sync Files to Server
+      - name: Ensure .env exists (from secret)
         run: |
-          TARGET="/opt/stacks/fas/"
-          sudo mkdir -p $TARGET
-          sudo rsync -av --delete --exclude='.git' --exclude='node_modules' ./ $TARGET
+          if [ -z "${{ secrets.PROD_ENV_FILE }}" ]; then
+            echo "Missing PROD_ENV_FILE secret"
+            exit 1
+          fi
+          printf "%s" "${{ secrets.PROD_ENV_FILE }}" > .env
 
-      - name: Docker Build and Up
+      - name: Deploy with Docker Compose
         run: |
-          cd /opt/stacks/fas
-          # Build the new PHP 8.3 image
-          sudo docker compose build --no-cache
-          # Start the containers
-          sudo docker compose up -d
+          docker compose up -d --build --remove-orphans
 
-      - name: Application Post-Deployment
+      - name: Run migrations + optimize
         run: |
-          cd /opt/stacks/fas
-          # Install dependencies inside the container
-          sudo docker exec fas_app composer install --no-dev --optimize-autoloader
-          # Run migrations
-          sudo docker exec fas_app php artisan migrate --force
-          # Clear cache
-          sudo docker exec fas_app php artisan config:clear
+          docker compose exec -T app php artisan migrate --force --no-interaction
+          docker compose exec -T app php artisan optimize:clear
+          docker compose exec -T app php artisan config:cache
+          docker compose exec -T app php artisan route:cache
+          docker compose exec -T app php artisan view:cache
+          docker compose exec -T app php artisan queue:restart
+
+      - name: Health check
+        run: |
+          curl --fail --silent http://127.0.0.1:8002/up > /dev/null
