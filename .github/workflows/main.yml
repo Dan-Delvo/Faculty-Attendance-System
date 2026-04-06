@@ -37,8 +37,8 @@ jobs:
       - name: Docker Compose Up
         run: |
           cd /opt/stacks/fas
-          # --build is critical to find the new Dockerfile and update the image
-          docker compose up -d --build
+          # Use -f to tell Docker the exact filename
+          docker compose -f compose.yaml up -d --build
 
       # 4. Clean up Laravel Cache inside the container
       - name: Laravel Housekeeping
